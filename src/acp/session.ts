@@ -1,0 +1,330 @@
+import type {
+  ContentBlock,
+  PermissionOption,
+  PromptResponse,
+  RequestPermissionRequest,
+  RequestPermissionResponse,
+  SessionConfigOption,
+  SessionUpdate,
+  ToolCallContent,
+  ToolCallStatus,
+  ToolCallUpdate,
+  ToolKind,
+} from "@agentclientprotocol/sdk/unstable";
+
+/** The agent settings a client can change, named by ACP's config-option categories. */
+export type OptionCategory = "model" | "thought_level" | "mode";
+
+export interface Choice {
+  value: string;
+  name: string;
+  description: string | undefined;
+}
+
+/** Immutable snapshot of one tool call the agent made. A new snapshot replaces it on every update. */
+export interface ToolView {
+  readonly id: string;
+  readonly kind: ToolKind;
+  readonly title: string;
+  readonly paths: readonly string[];
+  readonly status: ToolCallStatus;
+  readonly content: readonly ToolCallContent[];
+  readonly rawOutput: unknown;
+  readonly decision: "allowed" | "declined" | undefined;
+  /** No further updates will arrive: the tool finished or its turn ended. */
+  readonly settled: boolean;
+}
+
+export type TurnEvent =
+  | { type: "text"; text: string }
+  | { type: "thought"; text: string }
+  | { type: "tool"; tool: ToolView }
+  | { type: "end"; stopReason: PromptResponse["stopReason"]; usage: PromptResponse["usage"] }
+  | { type: "failed"; message: string };
+
+/** The requests a session sends to its agent. */
+export interface AgentPort {
+  prompt(sessionId: string, prompt: ContentBlock[]): Promise<PromptResponse>;
+  cancel(sessionId: string): Promise<void>;
+  setConfigOption(
+    sessionId: string,
+    configId: string,
+    value: string,
+  ): Promise<SessionConfigOption[]>;
+}
+
+export interface SessionHooks {
+  /** Resolves with the option the user picked, or undefined when nobody decided. */
+  askPermission(
+    tool: ToolView,
+    options: PermissionOption[],
+    signal: AbortSignal,
+  ): Promise<PermissionOption | undefined>;
+  /** The session's settings, usage or title changed. */
+  changed(): void;
+}
+
+/** Ordered events of one prompt turn, read by a single consumer. */
+export class Turn {
+  #queue: TurnEvent[] = [];
+  #wake: (() => void) | undefined;
+
+  push(event: TurnEvent) {
+    this.#queue.push(event);
+    this.#wake?.();
+    this.#wake = undefined;
+  }
+
+  /** The next event. With a signal, resolves with undefined once it aborts and nothing is queued. */
+  next(): Promise<TurnEvent>;
+  next(signal: AbortSignal | undefined): Promise<TurnEvent | undefined>;
+  async next(signal?: AbortSignal): Promise<TurnEvent | undefined> {
+    for (;;) {
+      const event = this.#queue.shift();
+      if (event || signal?.aborted) return event;
+      // oxlint-disable-next-line no-await-in-loop -- waits for the next event; nothing to run in parallel
+      await new Promise<void>((resolve) => {
+        const wake = () => {
+          signal?.removeEventListener("abort", wake);
+          resolve();
+        };
+        this.#wake = wake;
+        signal?.addEventListener("abort", wake, { once: true });
+      });
+    }
+  }
+
+  /** Takes the next event only when it is a tool call that has already arrived. */
+  takeTool(): ToolView | undefined {
+    const head = this.#queue[0];
+    if (head?.type !== "tool") return undefined;
+    this.#queue.shift();
+    return head.tool;
+  }
+}
+
+type SelectOption = Extract<SessionConfigOption, { type: "select" }>;
+
+function describeFailure(error: unknown): string {
+  const text = error instanceof Error ? error.message : "The agent ended the request.";
+  const detail =
+    error instanceof Error && "data" in error && typeof error.data === "object" && error.data
+      ? (error.data as { details?: unknown }).details
+      : undefined;
+  return [text, typeof detail === "string" ? detail : ""].filter(Boolean).join(": ").slice(0, 500);
+}
+
+/** One agent conversation: its settings, context usage, tool calls and the turn in progress. */
+export class AcpSession {
+  readonly id: string;
+  readonly tier: string | undefined;
+  /** The workspace directory the session was opened in. */
+  readonly cwd: string;
+  /** Model ids the agent lists with the thinking level spelled out, such as `gemini-x-high`. */
+  readonly variants: readonly string[];
+  title: string | undefined;
+  /** Prompt turns started so far. */
+  turns = 0;
+  #options: SessionConfigOption[];
+  #usage: { used: number; size: number } | undefined;
+  #tools = new Map<string, ToolView>();
+  #watchers = new Map<string, Set<(tool: ToolView) => void>>();
+  #turn: Turn | undefined;
+  #dialogs = new AbortController();
+  #port: AgentPort;
+  #hooks: SessionHooks;
+
+  constructor(
+    id: string,
+    initial: {
+      options: SessionConfigOption[];
+      tier: string | undefined;
+      variants: string[];
+      cwd: string;
+    },
+    port: AgentPort,
+    hooks: SessionHooks,
+  ) {
+    this.id = id;
+    this.tier = initial.tier;
+    this.variants = initial.variants;
+    this.cwd = initial.cwd;
+    this.#options = initial.options;
+    this.#port = port;
+    this.#hooks = hooks;
+  }
+
+  get usage() {
+    return this.#usage;
+  }
+
+  get turn() {
+    return this.#turn;
+  }
+
+  #option(category: OptionCategory): SelectOption | undefined {
+    return this.#options.find(
+      (o): o is SelectOption => o.type === "select" && (o.category ?? o.id) === category,
+    );
+  }
+
+  current(category: OptionCategory): string | undefined {
+    return this.#option(category)?.currentValue;
+  }
+
+  choices(category: OptionCategory): Choice[] {
+    const option = this.#option(category);
+    if (!option) return [];
+    return option.options
+      .flatMap((entry) => ("options" in entry ? entry.options : [entry]))
+      .map((o) => ({ value: o.value, name: o.name, description: o.description ?? undefined }));
+  }
+
+  async select(
+    category: OptionCategory,
+    value: string,
+  ): Promise<"set" | "unchanged" | "unavailable"> {
+    const option = this.#option(category);
+    if (!option || !this.choices(category).some((c) => c.value === value)) return "unavailable";
+    if (option.currentValue === value) return "unchanged";
+    this.#options = await this.#port.setConfigOption(this.id, option.id, value);
+    this.#hooks.changed();
+    return this.current(category) === value ? "set" : "unavailable";
+  }
+
+  startTurn(prompt: ContentBlock[]): Turn {
+    const turn = new Turn();
+    this.turns += 1;
+    this.#turn = turn;
+    this.#settleTools();
+    this.#tools.clear();
+    const dialogs = new AbortController();
+    this.#dialogs = dialogs;
+    const finish = (event: TurnEvent) => {
+      // A permission question outlives its turn only by mistake; it must not be answerable later.
+      dialogs.abort();
+      if (this.#turn === turn || this.#turn === undefined) this.#settleTools();
+      turn.push(event);
+    };
+    this.#port.prompt(this.id, prompt).then(
+      (reply) => finish({ type: "end", stopReason: reply.stopReason, usage: reply.usage }),
+      (error: unknown) => finish({ type: "failed", message: describeFailure(error) }),
+    );
+    return turn;
+  }
+
+  /** Asks the agent to stop the turn in progress. The turn still ends with its own event. */
+  async cancelTurn(): Promise<void> {
+    if (!this.#turn) return;
+    this.#dialogs.abort();
+    await this.#port.cancel(this.id);
+  }
+
+  /** Marks a turn as fully consumed so the next prompt can start. */
+  endTurn(turn: Turn | undefined) {
+    if (turn && this.#turn === turn) this.#turn = undefined;
+  }
+
+  /** Resolves with the tool's final state, or undefined when the agent never made that call. */
+  watchTool(
+    id: string,
+    signal: AbortSignal | undefined,
+    onChange: (tool: ToolView) => void,
+  ): Promise<ToolView | undefined> {
+    const current = this.#tools.get(id);
+    if (!current || current.settled || signal?.aborted) return Promise.resolve(current);
+    return new Promise((resolve) => {
+      const watchers = this.#watchers.get(id) ?? new Set();
+      this.#watchers.set(id, watchers);
+      const done = (tool: ToolView | undefined) => {
+        watchers.delete(watch);
+        signal?.removeEventListener("abort", abort);
+        resolve(tool);
+      };
+      const watch = (tool: ToolView) => {
+        if (tool.settled) done(tool);
+        else onChange(tool);
+      };
+      const abort = () => done(this.#tools.get(id));
+      watchers.add(watch);
+      signal?.addEventListener("abort", abort, { once: true });
+    });
+  }
+
+  receive(update: SessionUpdate) {
+    const kind = update.sessionUpdate;
+    if (
+      update.sessionUpdate === "agent_message_chunk" ||
+      update.sessionUpdate === "agent_thought_chunk"
+    ) {
+      if (update.content.type !== "text") return;
+      const type = kind === "agent_message_chunk" ? "text" : "thought";
+      this.#turn?.push({ type, text: update.content.text });
+    } else if (
+      update.sessionUpdate === "tool_call" ||
+      update.sessionUpdate === "tool_call_update"
+    ) {
+      this.#mergeTool(update);
+    } else if (update.sessionUpdate === "usage_update") {
+      this.#usage = { used: update.used, size: update.size };
+      this.#hooks.changed();
+    } else if (update.sessionUpdate === "config_option_update") {
+      this.#options = update.configOptions;
+      this.#hooks.changed();
+    } else if (update.sessionUpdate === "session_info_update") {
+      if (update.title) this.title = update.title;
+      this.#hooks.changed();
+    }
+  }
+
+  async permission(request: RequestPermissionRequest): Promise<RequestPermissionResponse> {
+    const tool = this.#mergeTool(request.toolCall);
+    const { signal } = this.#dialogs;
+    const choice = await this.#hooks
+      .askPermission(tool, request.options, signal)
+      .catch(() => undefined);
+    if (signal.aborted) return { outcome: { outcome: "cancelled" } };
+    const picked =
+      choice !== undefined && request.options.includes(choice)
+        ? choice
+        : request.options.find((o) => o.kind === "reject_once");
+    const latest = this.#tools.get(tool.id) ?? tool;
+    this.#publish({
+      ...latest,
+      decision: picked?.kind.startsWith("allow") ? "allowed" : "declined",
+    });
+    return picked
+      ? { outcome: { outcome: "selected", optionId: picked.optionId } }
+      : { outcome: { outcome: "cancelled" } };
+  }
+
+  #mergeTool(patch: ToolCallUpdate): ToolView {
+    const previous = this.#tools.get(patch.toolCallId);
+    const status = patch.status ?? previous?.status ?? "pending";
+    const tool: ToolView = {
+      id: patch.toolCallId,
+      kind: patch.kind ?? previous?.kind ?? "other",
+      title: patch.title ?? previous?.title ?? "",
+      paths: patch.locations?.map((l) => l.path) ?? previous?.paths ?? [],
+      status,
+      content: patch.content ?? previous?.content ?? [],
+      rawOutput: patch.rawOutput ?? previous?.rawOutput,
+      decision: previous?.decision,
+      settled: status === "completed" || status === "failed",
+    };
+    this.#publish(tool);
+    if (!previous) this.#turn?.push({ type: "tool", tool });
+    return tool;
+  }
+
+  #settleTools() {
+    for (const tool of this.#tools.values()) {
+      if (!tool.settled) this.#publish({ ...tool, settled: true });
+    }
+  }
+
+  #publish(tool: ToolView) {
+    this.#tools.set(tool.id, tool);
+    for (const watch of this.#watchers.get(tool.id) ?? []) watch(tool);
+  }
+}

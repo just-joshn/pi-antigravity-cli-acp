@@ -1,0 +1,69 @@
+import type { Theme } from "@earendil-works/pi-coding-agent";
+
+import type { ToolDetails } from "./tool.ts";
+
+type Paint = Pick<Theme, "fg" | "bold">;
+
+const COLLAPSED_LINES = 8;
+const LABELS: Record<string, string> = {
+  execute: "$",
+  switch_mode: "mode",
+  other: "tool",
+};
+
+/** Lines that differ between two texts once their common start and end are set aside. */
+export function changedLines(oldText: string, newText: string) {
+  const before = oldText === "" ? [] : oldText.replace(/\n$/, "").split("\n");
+  const after = newText === "" ? [] : newText.replace(/\n$/, "").split("\n");
+  let start = 0;
+  while (start < before.length && start < after.length && before[start] === after[start]) start++;
+  let end = 0;
+  while (
+    end < before.length - start &&
+    end < after.length - start &&
+    before[before.length - 1 - end] === after[after.length - 1 - end]
+  )
+    end++;
+  return {
+    removed: before.slice(start, before.length - end),
+    added: after.slice(start, after.length - end),
+  };
+}
+
+/** Header of a mirrored tool call: what the agent is doing. */
+export function callLine(args: { kind: string; title: string }, theme: Paint): string {
+  const label = LABELS[args.kind] ?? args.kind;
+  return `${theme.fg("toolTitle", theme.bold(label))} ${theme.fg("accent", args.title)}`;
+}
+
+/** Body of a mirrored tool call: its progress, diff or output. */
+export function resultLines(
+  details: ToolDetails,
+  view: { expanded: boolean; isPartial: boolean },
+  theme: Paint,
+): string[] {
+  if (view.isPartial)
+    return [theme.fg("muted", details.status === "pending" ? "waiting for approval…" : "running…")];
+  if (details.declined) return [theme.fg("warning", "declined")];
+  const failed = details.status === "failed";
+  const lines: string[] = [];
+  for (const diff of details.diffs) {
+    const { added, removed } = changedLines(diff.oldText, diff.newText);
+    lines.push(
+      `${theme.fg("muted", diff.path)} ${theme.fg("toolDiffAdded", `+${added.length}`)} ${theme.fg("toolDiffRemoved", `-${removed.length}`)}`,
+    );
+    if (!view.expanded) continue;
+    lines.push(...removed.map((line) => theme.fg("toolDiffRemoved", `- ${line}`)));
+    lines.push(...added.map((line) => theme.fg("toolDiffAdded", `+ ${line}`)));
+  }
+  const output = details.output.trimEnd() === "" ? [] : details.output.trimEnd().split("\n");
+  const shown = view.expanded ? output : output.slice(0, COLLAPSED_LINES);
+  lines.push(...shown.map((line) => theme.fg(failed ? "error" : "toolOutput", line)));
+  if (output.length > shown.length)
+    lines.push(theme.fg("muted", `… ${output.length - shown.length} more lines`));
+  if (lines.length > 0) return lines;
+  if (failed) return [theme.fg("error", "failed")];
+  return [
+    details.status === "completed" ? theme.fg("muted", "done") : theme.fg("warning", "stopped"),
+  ];
+}
