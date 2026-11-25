@@ -206,6 +206,8 @@ test("rewinding Pi's conversation starts a new agent session with the visible hi
   const log = await stop();
   expect(log.sessions.length).toBe(2);
   expect(JSON.stringify(log.prompts.at(-1))).toMatch(/third/);
+  expect(log.loads, "the rewound-from session went past this point").toStrictEqual([]);
+  expect(log.closes.length, "the replaced session is freed").toBe(1);
 });
 
 test("Pi's manual compaction is declined with a notice", async () => {

@@ -26,9 +26,13 @@ const HISTORY_LIMIT = 24_000;
 export interface StreamHost {
   /** Whether Pi is running a turn of the session this extension serves. */
   conversing(piSessionId: string | undefined): boolean;
-  open(signal: AbortSignal | undefined): Promise<Conversation>;
-  /** Replaces the agent session with a new one. */
-  restart(signal: AbortSignal | undefined): Promise<Conversation>;
+  /**
+   * The agent session in use, opening one if needed. `anchor` is where Pi's transcript last left an
+   * agent session; the host reopens that session when it is still at that position.
+   */
+  open(signal: AbortSignal | undefined, anchor: string | undefined): Promise<Conversation>;
+  /** Replaces the agent session, reopening the one at `anchor` when it can. */
+  restart(signal: AbortSignal | undefined, anchor: string | undefined): Promise<Conversation>;
   /** Gives up on an agent that would not stop, so it cannot keep working unseen. */
   abandon(): void;
   /** How long to wait for the agent to confirm a cancelled turn. */
@@ -51,15 +55,7 @@ export interface TurnPlan {
  * provider wrote carries the session's position as its `responseId`; everything after it is new.
  */
 export function planTurn(messages: Message[], anchor: string | undefined): TurnPlan {
-  let ours = messages.length - 1;
-  let seen: string | undefined;
-  for (; ours >= 0; ours--) {
-    const message = messages[ours];
-    if (message?.role === "assistant" && message.provider === PROVIDER && message.responseId) {
-      seen = message.responseId;
-      break;
-    }
-  }
+  const { index: ours, anchor: seen } = lastAnchor(messages);
   const diverged = seen !== anchor;
   let cut = messages.length;
   while (cut > 0 && messages[cut - 1]?.role === "user") cut--;
@@ -74,6 +70,16 @@ export function planTurn(messages: Message[], anchor: string | undefined): TurnP
     .slice(diverged ? 0 : ours + 1, cut)
     .filter((m) => m.role !== "system" && !(m.role === "toolResult" && answered.has(m.toolCallId)));
   return { diverged, missed, prompt };
+}
+
+/** The last assistant message this provider wrote, and the agent session position it carries. */
+export function lastAnchor(messages: Message[]): { index: number; anchor: string | undefined } {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index];
+    if (message?.role === "assistant" && message.provider === PROVIDER && message.responseId)
+      return { index, anchor: message.responseId };
+  }
+  return { index: -1, anchor: undefined };
 }
 
 function plainText(content: string | { type: string; text?: string }[]): string {
@@ -327,7 +333,8 @@ class Reply {
     const { signal, sessionId } = this.#options;
     signal?.throwIfAborted();
     if (!this.#host.conversing(sessionId)) throw new AcpError(OUTSIDE_CONVERSATION);
-    let conversation = await this.#host.open(signal);
+    const seen = lastAnchor(this.#context.messages).anchor;
+    let conversation = await this.#host.open(signal, seen);
     this.#conversation = conversation;
     const plan = planTurn(this.#context.messages, conversation.anchor);
     const continuing = !plan.diverged && plan.prompt.length === 0;
@@ -349,12 +356,13 @@ class Reply {
   /** Ends whatever the agent was doing and sends the new message, in a new session if the transcript diverged. */
   async #prompt(current: Conversation, first: TurnPlan): Promise<Conversation> {
     const { signal } = this.#options;
+    const seen = lastAnchor(this.#context.messages).anchor;
     let conversation = current;
     if (!(await haltTurn(conversation.session, this.#host.cancelGraceMs))) {
       this.#host.abandon();
-      conversation = await this.#host.open(signal);
+      conversation = await this.#host.open(signal, seen);
     } else if (first.diverged && conversation.session.turns > 0)
-      conversation = await this.#host.restart(signal);
+      conversation = await this.#host.restart(signal, seen);
     this.#conversation = conversation;
     const plan = planTurn(this.#context.messages, conversation.anchor);
     const prompt = promptBlocks(plan, conversation.accepts);

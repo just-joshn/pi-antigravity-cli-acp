@@ -79,6 +79,8 @@ export interface StartOptions {
   plain?: boolean;
   /** Reuse the scratch HOME of an earlier start, with its saved Pi and agent sessions. */
   home?: string;
+  /** Start the scripted agent without session/load and session/close. */
+  restore?: boolean;
 }
 
 /** A scratch HOME whose PATH holds only the scripted `agy`, away from any editor-installed agent. */
@@ -97,6 +99,7 @@ async function scratchHome(options: StartOptions) {
   vi.stubEnv("PI_CODING_AGENT_DIR", agentDir);
   vi.stubEnv("FAKE_AGY_LOG", logFile);
   vi.stubEnv("FAKE_AGY_PLAIN", options.plain ? "1" : "0");
+  vi.stubEnv("FAKE_AGY_RESTORE", options.restore === false ? "0" : "1");
   vi.stubEnv("FAKE_AGY_STORE", join(dir, "agy-sessions.json"));
   onTestFinished(() => {
     vi.unstubAllEnvs();

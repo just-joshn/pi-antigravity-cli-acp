@@ -140,6 +140,8 @@ export class AcpSession {
       tier: string | undefined;
       variants: string[];
       cwd: string;
+      /** Prompt turns the session already had, when it was reopened. */
+      turns: number;
     },
     port: AgentPort,
     hooks: SessionHooks,
@@ -148,6 +150,7 @@ export class AcpSession {
     this.tier = initial.tier;
     this.variants = initial.variants;
     this.cwd = initial.cwd;
+    this.#turns = initial.turns;
     this.#options = initial.options;
     this.#port = port;
     this.#hooks = hooks;

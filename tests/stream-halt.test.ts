@@ -8,7 +8,7 @@ const hooks: SessionHooks = {
   askPermission: () => Promise.resolve(undefined),
   changed: () => {},
 };
-const initial = { options: [], tier: undefined, variants: [], cwd: "/work" };
+const initial = { options: [], tier: undefined, variants: [], cwd: "/work", turns: 0 };
 /** An agent that never answers a prompt and whose connection is gone. */
 const gone: AgentPort = {
   prompt: () => new Promise(() => {}),

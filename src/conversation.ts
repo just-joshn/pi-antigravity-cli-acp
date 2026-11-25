@@ -2,6 +2,12 @@ import type { ContentBlock } from "@agentclientprotocol/sdk/unstable";
 
 import type { AcpSession, ToolView, Turn } from "./session.ts";
 
+/** Where a saved assistant message left an agent session: `<session id>/<turns>.<segment>`. */
+export function parseAnchor(anchor: string): { sessionId: string; turns: number } | undefined {
+  const match = /^(.+)\/(\d+)\.\d+$/.exec(anchor);
+  return match?.[1] && match[2] ? { sessionId: match[1], turns: Number(match[2]) } : undefined;
+}
+
 /** One agent session as this Pi session sees it. */
 export class Conversation {
   readonly session: AcpSession;
@@ -12,9 +18,11 @@ export class Conversation {
   /** Mirrored Pi tool call id to the agent's tool call id. */
   #toolIds = new Map<string, string>();
 
-  constructor(session: AcpSession, accepts: Conversation["accepts"]) {
+  /** `anchor` is set when the session was reopened at that position of Pi's transcript. */
+  constructor(session: AcpSession, accepts: Conversation["accepts"], anchor?: string) {
     this.session = session;
     this.accepts = accepts;
+    this.#anchor = anchor;
   }
 
   /** `responseId` of the last assistant message built from this session. */

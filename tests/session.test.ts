@@ -8,7 +8,7 @@ const port: AgentPort = {
   cancel: () => Promise.resolve(),
   setConfigOption: () => Promise.resolve([]),
 };
-const initial = { options: [], tier: undefined, variants: [], cwd: "/work" };
+const initial = { options: [], tier: undefined, variants: [], cwd: "/work", turns: 0 };
 const allow: PermissionOption = { kind: "allow_once", optionId: "allow", name: "Allow" };
 const deny: PermissionOption = { kind: "reject_once", optionId: "deny", name: "Deny" };
 

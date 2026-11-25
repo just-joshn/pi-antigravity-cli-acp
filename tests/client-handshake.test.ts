@@ -9,7 +9,7 @@ import {
 import { expect, onTestFinished, test } from "vitest";
 
 import { AcpClient, AcpError } from "../src/client.ts";
-import { identity } from "./support/harness.ts";
+import { connect, identity } from "./support/harness.ts";
 
 type Builder = ReturnType<typeof agent>;
 
@@ -168,4 +168,57 @@ test("a tier or per-level model list of the wrong shape is ignored", async () =>
     [undefined, []],
     [undefined, ["g-high"]],
   ]);
+});
+
+test("a loaded session counts the prompt turns the agent replays, however many blocks each had", async () => {
+  const history = {
+    saved: [
+      [
+        { type: "resource_link" as const, uri: "file:///a", name: "a" },
+        { type: "text" as const, text: "one" },
+      ],
+      [{ type: "text" as const, text: "two" }],
+    ],
+  };
+  const { client, log, close } = await connect({ script: () => [], history });
+  onTestFinished(close);
+  const session = await client.loadSession("saved", "/work");
+  expect.assert(session);
+  expect([session.id, session.turns, session.usage]).toStrictEqual([
+    "saved",
+    2,
+    { used: 0, size: 1_000_000 },
+  ]);
+  expect(await client.loadSession("missing", "/work")).toBeUndefined();
+  await client.closeSession("saved");
+  expect([log.loads, log.closes]).toStrictEqual([["saved", "missing"], ["saved"]]);
+});
+
+test("an agent without session/load or session/close is not asked for either", async () => {
+  const { client, log, close } = await connect({
+    script: () => [],
+    restore: false,
+    history: { a: [] },
+  });
+  onTestFinished(close);
+  expect(client.offers).toStrictEqual({ load: false, close: false });
+  expect(await client.loadSession("a", "/work")).toBeUndefined();
+  await client.closeSession("a");
+  expect([log.loads, log.closes]).toStrictEqual([[], []]);
+});
+
+test("a load that fails for another reason says so", async () => {
+  const client = await meet((b) =>
+    b
+      .onRequest(methods.agent.initialize, () => ({
+        ...hello,
+        agentCapabilities: { loadSession: true },
+      }))
+      .onRequest(methods.agent.session.load, () => {
+        throw RequestError.internalError(undefined, "disk full");
+      }),
+  );
+  await expect(client.loadSession("a", "/work")).rejects.toThrow(
+    "Antigravity could not reopen the saved session: Internal error",
+  );
 });

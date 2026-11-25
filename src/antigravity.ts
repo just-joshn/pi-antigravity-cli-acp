@@ -3,7 +3,7 @@ import { type ExtensionAPI, type ExtensionContext, VERSION } from "@earendil-wor
 import { type AgentChoice, launch, resolveAgent, type RunningAgent } from "./agent.ts";
 import { type Catalog, learn, piModels, PROVIDER, readCatalog, writeCatalog } from "./catalog.ts";
 import { AcpClient } from "./client.ts";
-import { Conversation } from "./conversation.ts";
+import { Conversation, parseAnchor } from "./conversation.ts";
 import type { SessionHooks } from "./session.ts";
 import { createStream, haltTurn } from "./stream.ts";
 import { choiceLabels, TOOL_NAME, toolArguments } from "./tool.ts";
@@ -38,11 +38,18 @@ export class Antigravity {
       this.#running &&
       piSessionId !== undefined &&
       piSessionId === this.#pane?.sessionManager.getSessionId(),
-    open: () => this.open(),
-    restart: () => {
+    open: (_signal, anchor) => this.open(anchor),
+    restart: async (_signal, anchor) => {
+      const replaced = this.#live?.session.id;
       this.#opening = undefined;
       this.#live = undefined;
-      return this.open();
+      // Pi rewound inside the session being replaced, which went on past that point.
+      const reopen = anchor?.startsWith(`${replaced}/`) ? undefined : anchor;
+      const [conversation] = await Promise.all([
+        this.open(reopen),
+        replaced === undefined ? undefined : this.#close(replaced),
+      ]);
+      return conversation;
     },
     abandon: () => this.#forget(),
     noteTool: (tool) => {
@@ -138,8 +145,9 @@ export class Antigravity {
     this.#showStatus();
   }
 
-  open(): Promise<Conversation> {
-    this.#opening ??= this.#start().catch((error: unknown) => {
+  /** The agent session in use; the first call reopens the one at `anchor` when it is still there. */
+  open(anchor?: string): Promise<Conversation> {
+    this.#opening ??= this.#start(anchor).catch((error: unknown) => {
       this.#forget();
       throw error;
     });
@@ -217,10 +225,32 @@ export class Antigravity {
     return connected;
   }
 
-  async #start(): Promise<Conversation> {
+  /** Asks the agent to free a session nobody will prompt again; the agent keeps it saved. */
+  async #close(sessionId: string) {
+    const connected = await this.#client;
+    // Freeing memory is a courtesy: a session the agent keeps open costs nothing visible.
+    await connected?.closeSession(sessionId).catch(() => {});
+  }
+
+  /** Reopens the agent session Pi's transcript left off in, if the agent is still at that point. */
+  async #reopen(connected: AcpClient, anchor: string, cwd: string) {
+    const at = parseAnchor(anchor);
+    const session = at && (await connected.loadSession(at.sessionId, cwd));
+    if (!session) return undefined;
+    if (session.turns === at.turns) return new Conversation(session, connected.accepts, anchor);
+    // The agent has prompts this transcript never saw; continuing would mix the two conversations.
+    await this.#close(session.id);
+    return undefined;
+  }
+
+  async #start(anchor: string | undefined): Promise<Conversation> {
     this.#client ??= this.#connect();
     const connected = await this.#client;
-    const session = await connected.newSession(this.#pane?.cwd ?? process.cwd());
+    const cwd = this.#pane?.cwd ?? process.cwd();
+    const conversation =
+      (anchor && (await this.#reopen(connected, anchor, cwd))) ||
+      new Conversation(await connected.newSession(cwd), connected.accepts);
+    const { session } = conversation;
     const wanted = this.#wantedMode;
     if (wanted !== undefined && (await session.select("mode", wanted)) === "unavailable") {
       const offered = session.choices("mode").map((mode) => mode.value);
@@ -230,7 +260,7 @@ export class Antigravity {
       );
       this.#wantedMode = undefined;
     }
-    this.#live = new Conversation(session, connected.accepts);
+    this.#live = conversation;
     this.#absorb(this.#live);
     this.#showStatus();
     return this.#live;
