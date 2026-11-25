@@ -54,6 +54,7 @@ export function fakeUi(answers: (string | undefined)[] = []) {
   const notes: string[] = [];
   const dialogs: { title: string; options: string[] }[] = [];
   const status = new Map<string, string | undefined>();
+  const widgets: [key: string, lines: unknown][] = [];
   const ui: Partial<ExtensionUIContext> = {
     select(title, options) {
       dialogs.push({ title, options });
@@ -65,8 +66,11 @@ export function fakeUi(answers: (string | undefined)[] = []) {
     setStatus(key, text) {
       status.set(key, text);
     },
+    setWidget(key: string, content: unknown) {
+      widgets.push([key, content]);
+    },
   };
-  return { ui, notes, dialogs, status };
+  return { ui, notes, dialogs, status, widgets };
 }
 
 export interface StartOptions {

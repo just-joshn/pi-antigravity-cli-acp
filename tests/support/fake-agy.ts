@@ -6,6 +6,12 @@ import { type ContentBlock, ndJsonStream } from "@agentclientprotocol/sdk/unstab
 
 import { serveAgent, type Step } from "./fake-agent.ts";
 
+const entry = (content: string, status: "pending" | "in_progress" | "completed") => ({
+  content,
+  status,
+  priority: "medium" as const,
+});
+
 function script(prompt: ContentBlock[]): Step[] {
   const text = prompt.map((block) => (block.type === "text" ? block.text : "")).join(" ");
   if (text.includes("edit")) {
@@ -30,6 +36,14 @@ function script(prompt: ContentBlock[]): Step[] {
         },
       },
       { say: "It says alpha." },
+    ];
+  }
+  if (text.includes("plan")) {
+    return [
+      { plan: [entry("Look around", "in_progress"), entry("Write it", "pending")] },
+      { plan: [entry("Look around", "completed"), entry("Write it", "in_progress")] },
+      { plan: [entry("Look around", "completed"), entry("Write it", "completed")] },
+      { say: "Planned and done." },
     ];
   }
   if (text.includes("name")) return [{ title: "Named" }, { say: "Named it." }];

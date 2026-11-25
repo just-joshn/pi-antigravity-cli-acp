@@ -2,6 +2,7 @@ import type {
   AvailableCommand,
   ContentBlock,
   PermissionOption,
+  PlanEntry,
   PromptResponse,
   RequestPermissionRequest,
   RequestPermissionResponse,
@@ -140,6 +141,7 @@ export class AcpSession {
   #options: SessionConfigOption[];
   #usage: { used: number; size: number } | undefined;
   #commands: readonly AgentCommand[] = [];
+  #plan: readonly PlanEntry[] = [];
   #tools = new Map<string, ToolView>();
   #watchers = new Map<string, Set<(tool: ToolView) => void>>();
   #turn: Turn | undefined;
@@ -181,6 +183,11 @@ export class AcpSession {
   /** The commands the agent last listed for this session. */
   get commands() {
     return this.#commands;
+  }
+
+  /** The agent's latest plan for the work in progress, in order. */
+  get plan() {
+    return this.#plan;
   }
 
   get title() {
@@ -300,6 +307,9 @@ export class AcpSession {
       this.#hooks.changed();
     } else if (update.sessionUpdate === "config_option_update") {
       this.#options = update.configOptions;
+      this.#hooks.changed();
+    } else if (update.sessionUpdate === "plan") {
+      this.#plan = update.entries;
       this.#hooks.changed();
     } else if (update.sessionUpdate === "available_commands_update") {
       this.#commands = update.availableCommands.map(agentCommand);

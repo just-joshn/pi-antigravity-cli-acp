@@ -9,6 +9,7 @@ import {
   type NewSessionRequest,
   type NewSessionResponse,
   type PermissionOption,
+  type PlanEntry,
   RequestError,
   type RequestPermissionOutcome,
   type SessionConfigOption,
@@ -28,6 +29,7 @@ export type Step =
   | { ask: string; options?: PermissionOption[]; allowed?: Step[]; declined?: Step[] }
   | { usage: [used: number, size: number] }
   | { title: string }
+  | { plan: PlanEntry[] }
   | { read: string }
   | { write: [path: string, content: string] }
   | { hold: "cancel" | Promise<unknown> }
@@ -185,6 +187,7 @@ async function perform(pb: Playback, step: Step): Promise<StopReason | undefined
   else if ("think" in step) await say(pb, "agent_thought_chunk", step.think);
   else if ("tool" in step) await send(pb, { sessionUpdate: "tool_call", ...step.tool });
   else if ("update" in step) await send(pb, { sessionUpdate: "tool_call_update", ...step.update });
+  else if ("plan" in step) await send(pb, { sessionUpdate: "plan", entries: step.plan });
   else if ("title" in step)
     await send(pb, { sessionUpdate: "session_info_update", title: step.title });
   else if ("usage" in step) {

@@ -9,6 +9,8 @@ import { createStream, haltTurn } from "./stream.ts";
 import { choiceLabels, TOOL_NAME, toolArguments } from "./tool.ts";
 
 const STATUS = "antigravity";
+const PLAN = "antigravity-plan";
+const MARK = { completed: "[x]", in_progress: "[>]", pending: "[ ]" } as const;
 const CHOICES: readonly string[] = ["auto", "cli", "registry"] satisfies AgentChoice[];
 
 function isChoice(value: unknown): value is AgentChoice {
@@ -31,6 +33,8 @@ export class Antigravity {
   #client: Promise<AcpClient> | undefined;
   #opening: Promise<Conversation> | undefined;
   #live: Conversation | undefined;
+  /** The plan widget's lines as last shown, to skip redrawing an unchanged plan. */
+  #shownPlan = "null";
   /** The previous permission dialog; the agent can ask about several tool calls at once. */
   #asking: Promise<unknown> = Promise.resolve();
   #stream = createStream({
@@ -170,6 +174,20 @@ export class Antigravity {
     if (!pane?.hasUI) return;
     const mode = this.#live?.session.current("mode") ?? this.#wantedMode;
     pane.ui.setStatus(STATUS, selected(pane) && mode ? `agy mode: ${mode}` : undefined);
+    this.#showPlan(pane);
+  }
+
+  /** Shows the agent's plan above the editor until every step is done. */
+  #showPlan(pane: ExtensionContext) {
+    const plan = selected(pane) ? (this.#live?.session.plan ?? []) : [];
+    const working = plan.some((entry) => entry.status !== "completed");
+    const lines = working
+      ? ["Antigravity plan", ...plan.map((entry) => `${MARK[entry.status]} ${entry.content}`)]
+      : undefined;
+    const shown = JSON.stringify(lines ?? null);
+    if (shown === this.#shownPlan) return;
+    this.#shownPlan = shown;
+    pane.ui.setWidget(PLAN, lines);
   }
 
   /** Keeps the mirror tool declared only while an Antigravity model is selected. */
