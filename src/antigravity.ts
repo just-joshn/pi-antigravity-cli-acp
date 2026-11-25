@@ -163,7 +163,7 @@ export class Antigravity {
   /** The agent session in use; the first call reopens the one at `anchor` when it is still there. */
   open(anchor?: string): Promise<Conversation> {
     this.#opening ??= this.#start(anchor).catch((error: unknown) => {
-      this.#forget();
+      this.#lose();
       throw error;
     });
     return this.#opening;
@@ -232,6 +232,7 @@ export class Antigravity {
   };
 
   #forget() {
+    this.#live?.session.dispose();
     this.#agent?.stop();
     this.#agent = undefined;
     this.#client = undefined;

@@ -2,6 +2,7 @@ import type { PermissionOption } from "@agentclientprotocol/sdk/unstable";
 import { expect, test } from "vitest";
 
 import { AcpSession, type AgentPort } from "../src/session.ts";
+import { resolvable } from "./support/harness.ts";
 
 const port: AgentPort = {
   prompt: () => new Promise(() => {}),
@@ -40,4 +41,62 @@ test("a permission question with no options, or no deny option, is cancelled unl
   expect(await ask(answering(undefined), [allow])).toStrictEqual({
     outcome: { outcome: "cancelled" },
   });
+});
+
+test("a permission request cannot finish its tool call before the user answers", async () => {
+  const answer = resolvable<PermissionOption | undefined>();
+  const session = new AcpSession("s", initial, port, {
+    askPermission: () => answer.promise,
+    changed: () => {},
+  });
+  session.receive({
+    sessionUpdate: "tool_call",
+    toolCallId: "t",
+    title: "Edit",
+    status: "pending",
+  });
+  let finished = false;
+  void session
+    .watchTool("t", undefined, () => {})
+    .then(
+      () => {
+        finished = true;
+      },
+      () => {},
+    );
+  const asked = session.permission({
+    sessionId: "s",
+    toolCall: { toolCallId: "t", status: "completed" },
+    options: [allow, deny],
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(finished, "the tool call is still open while the dialog is").toBe(false);
+  answer.resolve(allow);
+  expect(await asked).toStrictEqual({ outcome: { outcome: "selected", optionId: "allow" } });
+});
+
+test("an agent's plan, commands and title are capped", () => {
+  const session = answering(undefined);
+  const long = "x".repeat(10_000);
+  session.receive({
+    sessionUpdate: "plan",
+    entries: Array.from({ length: 500 }, () => ({
+      content: long,
+      priority: "low",
+      status: "pending",
+    })),
+  });
+  session.receive({
+    sessionUpdate: "available_commands_update",
+    availableCommands: Array.from({ length: 1000 }, (_, i) => ({
+      name: `c${i}`,
+      description: long,
+    })),
+  });
+  session.receive({ sessionUpdate: "session_info_update", title: long });
+  expect(session.plan.length).toBe(100);
+  expect(session.plan[0]?.content.length).toBe(500);
+  expect(session.commands?.length).toBe(200);
+  expect(session.commands?.[0]?.description.length).toBe(500);
+  expect(session.title?.length).toBe(200);
 });

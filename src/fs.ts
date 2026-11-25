@@ -1,5 +1,6 @@
-import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, sep } from "node:path";
+import { constants } from "node:fs";
+import { mkdir, open, readFile, realpath, stat } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 
 import {
   type ReadTextFileRequest,
@@ -8,8 +9,21 @@ import {
   type WriteTextFileRequest,
 } from "@agentclientprotocol/sdk/unstable";
 
+/** Largest file the agent may read through Pi. */
+const READ_LIMIT = 16 * 1024 * 1024;
+
 function requireAbsolute(path: string) {
   if (!isAbsolute(path)) throw RequestError.invalidParams(undefined, "path must be absolute");
+}
+
+/** Refuses devices, pipes and huge files, which would never finish loading or exhaust memory. */
+async function requireReadable(path: string) {
+  // A path that cannot be examined is reported by the read itself.
+  const info = await stat(path).catch(() => undefined);
+  if (info && !info.isFile() && !info.isDirectory())
+    throw RequestError.invalidParams(undefined, `${path} is not a regular file`);
+  if (info && info.size > READ_LIMIT)
+    throw RequestError.invalidParams(undefined, `${path} is larger than 16 MB`);
 }
 
 /** Serves ACP `fs/read_text_file`: the whole file, or `limit` lines from 1-based `line`. */
@@ -19,6 +33,7 @@ export async function readTextFile({
   limit,
 }: ReadTextFileRequest): Promise<ReadTextFileResponse> {
   requireAbsolute(path);
+  await requireReadable(path);
   const text = await readFile(path, "utf8").catch((error: unknown) => {
     const code = error instanceof Error && "code" in error ? String(error.code) : "unknown";
     if (code === "ENOENT") throw RequestError.resourceNotFound(path);
@@ -58,14 +73,36 @@ export async function writeTextFile(
   workspace: string | undefined,
 ) {
   requireAbsolute(path);
-  const inside =
-    workspace === undefined ? ".." : relative(await canonical(workspace), await canonical(path));
-  if (inside === "" || inside.startsWith("..") || isAbsolute(inside))
-    throw RequestError.invalidParams(
-      undefined,
-      "this client writes files only inside the session's workspace",
-    );
+  if (workspace === undefined) throw outsideWorkspace();
+  const root = await canonical(workspace);
+  requireInside(root, await canonical(path));
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, content, "utf8");
+  // The agent can change the tree meanwhile: check the real parent again, and never follow a link
+  // at the file itself.
+  const target = join(await realpath(dirname(path)), basename(path));
+  requireInside(root, target);
+  const flags = constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW;
+  const file = await open(target, flags).catch((error: unknown) => {
+    const code = error instanceof Error && "code" in error ? String(error.code) : "unknown";
+    if (code === "ELOOP") throw outsideWorkspace();
+    throw RequestError.internalError(undefined, `${path} could not be written (${code})`);
+  });
+  try {
+    await file.writeFile(content, "utf8");
+  } finally {
+    await file.close();
+  }
   return {};
+}
+
+function outsideWorkspace() {
+  return RequestError.invalidParams(
+    undefined,
+    "this client writes files only inside the session's workspace",
+  );
+}
+
+function requireInside(root: string, path: string) {
+  const inside = relative(root, path);
+  if (inside === "" || inside.startsWith("..") || isAbsolute(inside)) throw outsideWorkspace();
 }

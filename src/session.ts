@@ -28,8 +28,14 @@ export interface AgentCommand {
 }
 
 function agentCommand(command: AvailableCommand): AgentCommand {
-  return { name: command.name, description: command.description, hint: command.input?.hint };
+  const hint = command.input?.hint.slice(0, TEXT_LIMIT);
+  return { name: command.name, description: command.description.slice(0, TEXT_LIMIT), hint };
 }
+
+const PLAN_LIMIT = 100;
+const COMMAND_LIMIT = 200;
+const TEXT_LIMIT = 500;
+const TITLE_LIMIT = 200;
 
 export interface Choice {
   value: string;
@@ -250,6 +256,11 @@ export class AcpSession {
     return turn;
   }
 
+  /** Closes open permission dialogs; the session is being dropped. */
+  dispose() {
+    this.#dialogs.abort();
+  }
+
   /** Asks the agent to stop the turn in progress. The turn still ends with its own event. */
   async cancelTurn(): Promise<void> {
     if (!this.#turn) return;
@@ -275,6 +286,7 @@ export class AcpSession {
       this.#watchers.set(id, watchers);
       const done = (tool: ToolView | undefined) => {
         watchers.delete(watch);
+        if (watchers.size === 0) this.#watchers.delete(id);
         signal?.removeEventListener("abort", abort);
         resolve(tool);
       };
@@ -309,19 +321,24 @@ export class AcpSession {
       this.#options = update.configOptions;
       this.#hooks.changed();
     } else if (update.sessionUpdate === "plan") {
-      this.#plan = update.entries;
+      this.#plan = update.entries.slice(0, PLAN_LIMIT).map((entry) => ({
+        content: entry.content.slice(0, TEXT_LIMIT),
+        priority: entry.priority,
+        status: entry.status,
+      }));
       this.#hooks.changed();
     } else if (update.sessionUpdate === "available_commands_update") {
-      this.#commands = update.availableCommands.map(agentCommand);
+      this.#commands = update.availableCommands.slice(0, COMMAND_LIMIT).map(agentCommand);
       this.#hooks.changed();
     } else if (update.sessionUpdate === "session_info_update") {
-      if (update.title) this.#title = update.title;
+      if (update.title) this.#title = update.title.slice(0, TITLE_LIMIT);
       this.#hooks.changed();
     }
   }
 
   async permission(request: RequestPermissionRequest): Promise<RequestPermissionResponse> {
-    const tool = this.#mergeTool(request.toolCall);
+    // The answer decides the tool call's fate; a status sent with the question cannot.
+    const tool = this.#mergeTool({ ...request.toolCall, status: null });
     const { signal } = this.#dialogs;
     const choice = await this.#hooks
       .askPermission(tool, request.options, signal)

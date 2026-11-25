@@ -260,7 +260,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 
 - **Applies:** yes for agents that use them; `agy acp` reads and writes files itself, the registry agent uses the client.
 - **ACP:** `fs/read_text_file`, `fs/write_text_file`.
-- **Implementation:** reads by absolute path; writes only inside the session's directory after resolving links.
+- **Implementation:** reads by absolute path, refusing devices, pipes and files over 16 MB; writes only inside the session's directory, checked after resolving links and again for the real parent after creating it, without following a link at the file.
 - **Verification:** `tests/fs.test.ts`, `tests/client.test.ts`.
 - **Status:** implemented_unverified: `python3 tests/live-acp.py registry` was not run on this branch.
 

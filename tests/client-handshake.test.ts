@@ -245,3 +245,26 @@ test("updates held for a session that failed to load do not reach it when it loa
   const session = await client.loadSession("a", "/work");
   expect(session?.title).toBeUndefined();
 });
+
+test("updates for many unknown sessions cannot crowd out a new session's own", async () => {
+  const client = await meet((b) =>
+    b
+      .onRequest(methods.agent.initialize, () => hello)
+      .onRequest(methods.agent.session.new, async ({ client: agentSide }) => {
+        const flood = Array.from({ length: 100 }, (_, i) =>
+          agentSide.notify(methods.client.session.update, {
+            sessionId: `junk${i}`,
+            update: { sessionUpdate: "usage_update", used: 1, size: 2 },
+          }),
+        );
+        await Promise.all(flood);
+        await agentSide.notify(methods.client.session.update, {
+          sessionId: "real",
+          update: { sessionUpdate: "usage_update", used: 5, size: 10 },
+        });
+        return { sessionId: "real" };
+      }),
+  );
+  const session = await client.newSession("/work");
+  expect(session.usage).toStrictEqual({ used: 5, size: 10 });
+});

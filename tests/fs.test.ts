@@ -1,4 +1,13 @@
-import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  truncate,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -86,4 +95,13 @@ test("a file that cannot be read is named in the error with the reason", async (
   );
   expect.assert(failure instanceof RequestError);
   expect(failure.message).toContain(`${dir} could not be read (EISDIR)`);
+});
+
+test("reading refuses devices and files over 16 MB instead of loading them", async () => {
+  const dir = await scratch();
+  const big = join(dir, "big.txt");
+  await writeFile(big, "");
+  await truncate(big, 16 * 1024 * 1024 + 1);
+  expect(await read(big)).toBe(RequestError.invalidParams().code);
+  expect(await read("/dev/zero")).toBe(RequestError.invalidParams().code);
 });

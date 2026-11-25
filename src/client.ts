@@ -31,6 +31,8 @@ export interface ClientIdentity {
 const AUTH_REQUIRED = -32000;
 const RESOURCE_NOT_FOUND = -32002;
 const EARLY_UPDATE_LIMIT = 64;
+/** Sessions whose early updates are kept at once; the oldest is dropped for a new one. */
+const EARLY_SESSION_LIMIT = 16;
 
 /** Prompt turns an agent replays while it loads a saved session; each starts with the user speaking. */
 interface Replay {
@@ -52,12 +54,14 @@ function hold(inbox: Inbox, sessionId: string, update: SessionUpdate) {
     replay.userSpeaking = true;
     return;
   }
-  if (replay && /^(agent_|tool_call|plan)/.test(kind)) {
-    replay.userSpeaking = false;
-    return;
-  }
+  if (replay) replay.userSpeaking = false;
+  if (replay && /^(agent_|tool_call|plan)/.test(kind)) return;
   const held = inbox.early.get(sessionId) ?? [];
-  if (held.length < EARLY_UPDATE_LIMIT) inbox.early.set(sessionId, [...held, update]);
+  if (held.length >= EARLY_UPDATE_LIMIT) return;
+  inbox.early.delete(sessionId);
+  inbox.early.set(sessionId, [...held, update]);
+  const oldest = inbox.early.keys().next();
+  if (inbox.early.size > EARLY_SESSION_LIMIT && !oldest.done) inbox.early.delete(oldest.value);
 }
 
 function tierName(meta: unknown): string | undefined {

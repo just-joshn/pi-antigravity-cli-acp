@@ -132,9 +132,12 @@ export function launch(agent: AgentCommand, cwd: string, env: Env = process.env)
   const child = spawn(agent.command, agent.args, { cwd, env, stdio: ["pipe", "pipe", "ignore"] });
   // A failed spawn also closes the pipes, which ends the ACP connection with an error.
   child.once("error", () => {});
+  let stopping = false;
   return {
     stream: ndJsonStream(Writable.toWeb(child.stdin), Readable.toWeb(child.stdout)),
     stop() {
+      if (stopping) return;
+      stopping = true;
       child.stdin.end();
       if (child.exitCode !== null || child.signalCode !== null) return;
       child.kill();

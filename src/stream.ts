@@ -170,11 +170,13 @@ export function haltTurn(session: AcpSession, graceMs = CANCEL_GRACE_MS): Promis
   const running = halting.get(turn);
   if (running) return running;
   const stop = (async () => {
+    const giveUp = new AbortController();
     const ended = (async () => {
       await session.cancelTurn();
       for (;;) {
         // oxlint-disable-next-line no-await-in-loop -- drains events in order until the turn ends
-        const event = await turn.next();
+        const event = await turn.next(giveUp.signal);
+        if (!event) return false;
         if (event.type === "end" || event.type === "failed") return true;
       }
     })().catch(() => false);
@@ -184,6 +186,7 @@ export function haltTurn(session: AcpSession, graceMs = CANCEL_GRACE_MS): Promis
     });
     const confirmed = await Promise.race([ended, grace]);
     clearTimeout(timer);
+    giveUp.abort();
     session.endTurn(turn);
     return confirmed;
   })();
