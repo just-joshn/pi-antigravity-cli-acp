@@ -1,5 +1,5 @@
 /** A scripted ACP agent on stdio, started by tests in place of the real `agy acp`. */
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { Readable, Writable } from "node:stream";
 
 import { type ContentBlock, ndJsonStream } from "@agentclientprotocol/sdk/unstable";
@@ -37,11 +37,26 @@ function script(prompt: ContentBlock[]): Step[] {
   return [{ think: "hm" }, { usage: [2048, 1_000_000] }, { say: `echo: ${text}` }];
 }
 
+/** Saved conversations, kept in a file across agent processes as `agy` keeps them. */
+const store = process.env["FAKE_AGY_STORE"];
+const saved: unknown = store
+  ? JSON.parse(readFileSync(store, { encoding: "utf8", flag: "a+" }) || "{}")
+  : {};
+const history: Record<string, ContentBlock[][]> = {};
+if (typeof saved === "object" && saved !== null) Object.assign(history, saved);
+
 const { log } = serveAgent(
   ndJsonStream(Writable.toWeb(process.stdout), Readable.toWeb(process.stdin)),
-  { script, plain: process.env["FAKE_AGY_PLAIN"] === "1" },
+  {
+    script,
+    plain: process.env["FAKE_AGY_PLAIN"] === "1",
+    restore: process.env["FAKE_AGY_RESTORE"] !== "0",
+    history,
+    idPrefix: `p${process.pid}-`,
+  },
 );
 const save = () => {
+  if (store) writeFileSync(store, JSON.stringify(history));
   const file = process.env["FAKE_AGY_LOG"];
   if (!file) return;
   const record = JSON.stringify({ ...log, argv: process.argv.slice(2), cwd: process.cwd() });

@@ -8,6 +8,7 @@ import {
   type NewSessionRequest,
   type NewSessionResponse,
   type PermissionOption,
+  RequestError,
   type RequestPermissionOutcome,
   type SessionConfigOption,
   type SessionUpdate,
@@ -52,6 +53,12 @@ export interface FakeAgentOptions {
   embeddedContext?: boolean;
   /** Report no quota tier, no settings and no context usage when a session starts. */
   plain?: boolean;
+  /** Offer session/load and session/close, as `agy` does. */
+  restore?: boolean;
+  /** Saved conversations by session id, each a list of prompts; kept across agent processes. */
+  history?: Record<string, ContentBlock[][]>;
+  /** Prefix for new session ids, so ids from different agent processes do not collide. */
+  idPrefix?: string;
 }
 
 export interface AgentLog {
@@ -61,6 +68,8 @@ export interface AgentLog {
   config: [configId: string, value: string][];
   cancels: number;
   outcomes: RequestPermissionOutcome[];
+  loads: string[];
+  closes: string[];
 }
 
 export const allow: PermissionOption = { kind: "allow_once", optionId: "allow", name: "Allow" };
@@ -236,10 +245,38 @@ async function openSession(
   return reply;
 }
 
+/** Replays a saved conversation the way `agy` does on session/load: each prompt, then a reply. */
+async function replay(client: AgentContext, sessionId: string, prompts: ContentBlock[][]) {
+  for (const prompt of prompts) {
+    for (const content of prompt)
+      await client.notify(methods.client.session.update, {
+        sessionId,
+        update: { sessionUpdate: "user_message_chunk", content },
+      });
+    await client.notify(methods.client.session.update, {
+      sessionId,
+      update: {
+        sessionUpdate: "agent_message_chunk",
+        content: { type: "text", text: "(earlier)" },
+      },
+    });
+  }
+}
+
 /** Serves a scripted ACP agent on `stream` and records what the client sent. */
 export function serveAgent(stream: Stream, options: FakeAgentOptions) {
   const offer = offerOf(options);
-  const log: AgentLog = { sessions: [], prompts: [], config: [], cancels: 0, outcomes: [] };
+  const log: AgentLog = {
+    sessions: [],
+    prompts: [],
+    config: [],
+    cancels: 0,
+    outcomes: [],
+    loads: [],
+    closes: [],
+  };
+  const history = options.history ?? {};
+  const restore = options.restore ?? true;
   const sessions = new Map<string, SessionState>();
   let cancel: (() => void) | undefined;
   let count = 0;
@@ -252,13 +289,30 @@ export function serveAgent(stream: Stream, options: FakeAgentOptions) {
       return {
         protocolVersion: 1,
         agentInfo: { name: "fake-agent", title: "Fake Agent", version: "0.0.1" },
-        agentCapabilities: { promptCapabilities: { image, embeddedContext } },
+        agentCapabilities: {
+          promptCapabilities: { image, embeddedContext },
+          ...(restore ? { loadSession: true, sessionCapabilities: { close: {} } } : {}),
+        },
         authMethods: [],
       };
     })
     .onRequest(methods.agent.session.new, ({ params, client }) => {
       log.sessions.push(params);
-      return openSession(offer, options, sessions, `s${log.sessions.length}`, client);
+      const sessionId = `${options.idPrefix ?? ""}s${log.sessions.length}`;
+      history[sessionId] = [];
+      return openSession(offer, options, sessions, sessionId, client);
+    })
+    .onRequest(methods.agent.session.load, async ({ params, client }) => {
+      log.loads.push(params.sessionId);
+      const prompts = history[params.sessionId];
+      if (!prompts) throw RequestError.resourceNotFound(params.sessionId);
+      await replay(client, params.sessionId, prompts);
+      return openSession(offer, options, sessions, params.sessionId, client);
+    })
+    .onRequest(methods.agent.session.close, ({ params }) => {
+      log.closes.push(params.sessionId);
+      sessions.delete(params.sessionId);
+      return {};
     })
     .onRequest(methods.agent.session.setConfigOption, ({ params }) => {
       const current = sessions.get(params.sessionId);
@@ -274,6 +328,7 @@ export function serveAgent(stream: Stream, options: FakeAgentOptions) {
     })
     .onRequest(methods.agent.session.prompt, async ({ params, client }) => {
       log.prompts.push(params.prompt);
+      history[params.sessionId]?.push(params.prompt);
       const cancelled = new Promise<void>((resolve) => {
         cancel = resolve;
       });
