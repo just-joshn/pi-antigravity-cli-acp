@@ -73,10 +73,10 @@ One Pi session drives one agent session. A follow-up sends only your new message
 
 ```sh
 bun install --frozen-lockfile
-bun run typecheck:provider
-bun run lint
-bun run test
+bun run check
 ```
+
+`check` runs the formatter check, oxlint, `tsc` and the vitest suite with its per-file 80% coverage gate.
 
 The tests run without a Google account: a scripted ACP agent stands in for `agy`, both in memory and as a process on `PATH` under a real Pi session.
 
