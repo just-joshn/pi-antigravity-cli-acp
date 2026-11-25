@@ -1,8 +1,8 @@
-import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import test from "node:test";
+
+import { expect, onTestFinished, test } from "vitest";
 
 import type { TurnEvent } from "../src/session.ts";
 import { allow, deny, type Step } from "./support/fake-agent.ts";
@@ -35,57 +35,51 @@ async function collect(turn: { next(): Promise<TurnEvent> }) {
   }
 }
 
-await test("the client introduces itself as Pi and offers file access but no terminal", async (t) => {
+test("the client introduces itself as Pi and offers file access but no terminal", async () => {
   const { log, close } = await connect({ script: () => [] });
-  t.after(close);
-  assert.deepEqual(log.initialize?.clientInfo, identity);
-  assert.deepEqual(log.initialize?.clientCapabilities?.fs, {
+  onTestFinished(close);
+  expect(log.initialize?.clientInfo).toStrictEqual(identity);
+  expect(log.initialize?.clientCapabilities?.fs).toStrictEqual({
     readTextFile: true,
     writeTextFile: true,
   });
-  assert.equal(log.initialize?.clientCapabilities?.terminal, false);
+  expect(log.initialize?.clientCapabilities?.terminal).toBe(false);
 });
 
-await test("a session reports the agent's choices, quota tier and early context usage", async (t) => {
+test("a session reports the agent's choices, quota tier and early context usage", async () => {
   const { client, log, close } = await connect({ script: () => [], effortId: "thinking_level" });
-  t.after(close);
+  onTestFinished(close);
   const session = await client.newSession("/work");
-  assert.equal(log.sessions[0]?.cwd, "/work");
-  assert.deepEqual(log.sessions[0]?.mcpServers, []);
-  assert.deepEqual(
-    session.choices("model").map((c) => c.value),
-    ["gemini-a", "gemini-b"],
-  );
-  assert.equal(session.current("thought_level"), "high");
-  assert.deepEqual(
-    session.choices("mode").map((c) => c.value),
-    ["default", "auto"],
-  );
-  assert.equal(session.tier, "Test Tier");
-  assert.deepEqual(session.usage, { used: 0, size: 1_000_000 });
+  expect(log.sessions[0]?.cwd).toBe("/work");
+  expect(log.sessions[0]?.mcpServers).toStrictEqual([]);
+  expect(session.choices("model").map((c) => c.value)).toStrictEqual(["gemini-a", "gemini-b"]);
+  expect(session.current("thought_level")).toBe("high");
+  expect(session.choices("mode").map((c) => c.value)).toStrictEqual(["default", "auto"]);
+  expect(session.tier).toBe("Test Tier");
+  expect(session.usage).toStrictEqual({ used: 0, size: 1_000_000 });
 });
 
-await test("choosing a model, effort or mode is confirmed by the agent; unknown values are refused", async (t) => {
+test("choosing a model, effort or mode is confirmed by the agent; unknown values are refused", async () => {
   let changes = 0;
   const { client, log, close } = await connect({ script: () => [] }, { changed: () => changes++ });
-  t.after(close);
+  onTestFinished(close);
   const session = await client.newSession("/work");
-  assert.equal(await session.select("model", "gemini-a"), "unchanged");
-  assert.equal(await session.select("model", "gemini-b"), "set");
-  assert.equal(await session.select("thought_level", "xhigh"), "set");
-  assert.equal(await session.select("thought_level", "medium"), "unavailable");
-  assert.equal(await session.select("mode", "auto"), "set");
-  assert.equal(await session.select("mode", "yolo"), "unavailable");
-  assert.deepEqual(log.config, [
+  expect(await session.select("model", "gemini-a")).toBe("unchanged");
+  expect(await session.select("model", "gemini-b")).toBe("set");
+  expect(await session.select("thought_level", "xhigh")).toBe("set");
+  expect(await session.select("thought_level", "medium")).toBe("unavailable");
+  expect(await session.select("mode", "auto")).toBe("set");
+  expect(await session.select("mode", "yolo")).toBe("unavailable");
+  expect(log.config).toStrictEqual([
     ["model", "gemini-b"],
     ["thought_level", "xhigh"],
     ["mode", "auto"],
   ]);
-  assert.equal(session.current("mode"), "auto");
-  assert.ok(changes >= 3);
+  expect(session.current("mode")).toBe("auto");
+  expect(changes).toBeGreaterThanOrEqual(3);
 });
 
-await test("a turn delivers thoughts, text, tool calls and the final usage in order", async (t) => {
+test("a turn delivers thoughts, text, tool calls and the final usage in order", async () => {
   const steps: Step[] = [
     { think: "plan" },
     { say: "Reading. " },
@@ -95,35 +89,35 @@ await test("a turn delivers thoughts, text, tool calls and the final usage in or
     { say: "Done." },
   ];
   const { client, log, close } = await connect({ script: () => steps });
-  t.after(close);
+  onTestFinished(close);
   const session = await client.newSession("/work");
   const turn = session.startTurn([{ type: "text", text: "hello" }]);
   const events = await collect(turn);
-  assert.deepEqual(log.prompts, [[{ type: "text", text: "hello" }]]);
-  assert.deepEqual(
-    events.map((e) => e.type),
-    ["thought", "text", "tool", "text", "end"],
-  );
+  expect(log.prompts).toStrictEqual([[{ type: "text", text: "hello" }]]);
+  expect(events.map((e) => e.type)).toStrictEqual(["thought", "text", "tool", "text", "end"]);
   const last = events.at(-1);
-  assert.ok(last?.type === "end");
-  assert.equal(last.stopReason, "end_turn");
-  assert.equal(last.usage?.inputTokens, 60);
-  assert.deepEqual(session.usage, { used: 1234, size: 1_000_000 });
+  expect.assert(last?.type === "end");
+  expect(last.stopReason).toBe("end_turn");
+  expect(last.usage?.inputTokens).toBe(60);
+  expect(session.usage).toStrictEqual({ used: 1234, size: 1_000_000 });
   const tool = await session.watchTool("t1", undefined, () => {});
-  assert.deepEqual(
-    {
-      kind: tool?.kind,
-      title: tool?.title,
-      status: tool?.status,
-      rawOutput: tool?.rawOutput,
-      settled: tool?.settled,
-    },
-    { kind: "read", title: "File a.txt", status: "completed", rawOutput: "alpha", settled: true },
-  );
-  assert.equal(session.turns, 1);
+  expect({
+    kind: tool?.kind,
+    title: tool?.title,
+    status: tool?.status,
+    rawOutput: tool?.rawOutput,
+    settled: tool?.settled,
+  }).toStrictEqual({
+    kind: "read",
+    title: "File a.txt",
+    status: "completed",
+    rawOutput: "alpha",
+    settled: true,
+  });
+  expect(session.turns).toBe(1);
 });
 
-await test("watching a running tool reports progress and resolves when it finishes or its turn ends", async (t) => {
+test("watching a running tool reports progress and resolves when it finishes or its turn ends", async () => {
   const gate = deferred();
   const steps: Step[] = [
     { tool: readCall },
@@ -139,23 +133,26 @@ await test("watching a running tool reports progress and resolves when it finish
     },
   ];
   const { client, close } = await connect({ script: () => steps });
-  t.after(close);
+  onTestFinished(close);
   const session = await client.newSession("/work");
   const turn = session.startTurn([{ type: "text", text: "go" }]);
-  assert.equal((await turn.next()).type, "tool");
-  assert.equal((await eventually(() => turn.takeTool())).id, "t2");
-  assert.equal(turn.takeTool(), undefined);
+  expect((await turn.next()).type).toBe("tool");
+  expect((await eventually(() => turn.takeTool())).id).toBe("t2");
+  expect(turn.takeTool()).toBe(undefined);
   const titles: string[] = [];
   const first = session.watchTool("t1", undefined, (tool) => titles.push(tool.title));
   const second = session.watchTool("t2", undefined, () => {});
   gate.resolve();
-  assert.equal((await first)?.status, "failed");
-  assert.deepEqual(titles, ["File b.txt"]);
-  assert.deepEqual(await second.then((tool) => [tool?.status, tool?.settled]), ["pending", true]);
-  assert.equal(await session.watchTool("missing", undefined, () => {}), undefined);
+  expect((await first)?.status).toBe("failed");
+  expect(titles).toStrictEqual(["File b.txt"]);
+  expect(await second.then((tool) => [tool?.status, tool?.settled])).toStrictEqual([
+    "pending",
+    true,
+  ]);
+  expect(await session.watchTool("missing", undefined, () => {})).toBe(undefined);
 });
 
-await test("permission: the user's choice is passed on; no decision means the agent's deny option, never allow", async (t) => {
+test("permission: the user's choice is passed on; no decision means the agent's deny option, never allow", async () => {
   const asked: string[] = [];
   const answers = [allow, undefined, undefined];
   const steps: Step[] = [
@@ -174,32 +171,33 @@ await test("permission: the user's choice is passed on; no decision means the ag
       },
     },
   );
-  t.after(close);
+  onTestFinished(close);
   const session = await client.newSession("/work");
   const events = await collect(session.startTurn([{ type: "text", text: "edit" }]));
-  assert.deepEqual(asked, [
+  expect(asked).toStrictEqual([
     "t1:allow_once+reject_once",
     "t2:allow_once+reject_once",
     "t3:allow_once",
   ]);
-  assert.deepEqual(log.outcomes, [
+  expect(log.outcomes).toStrictEqual([
     { outcome: "selected", optionId: "allow" },
     { outcome: "selected", optionId: "deny" },
     { outcome: "cancelled" },
   ]);
   const last = events.at(-1);
-  assert.ok(last?.type === "end");
-  assert.equal(last.stopReason, "cancelled");
+  expect.assert(last?.type === "end");
+  expect(last.stopReason).toBe("cancelled");
   const decisions = await Promise.all(
     ["t1", "t2", "t3"].map((id) => session.watchTool(id, undefined, () => {})),
   );
-  assert.deepEqual(
-    decisions.map((tool) => tool?.decision),
-    ["allowed", "declined", "declined"],
-  );
+  expect(decisions.map((tool) => tool?.decision)).toStrictEqual([
+    "allowed",
+    "declined",
+    "declined",
+  ]);
 });
 
-await test("cancelling a turn tells the agent and withdraws an open permission question", async (t) => {
+test("cancelling a turn tells the agent and withdraws an open permission question", async () => {
   let dismissed = false;
   const { client, log, close } = await connect(
     {
@@ -216,37 +214,37 @@ await test("cancelling a turn tells the agent and withdraws an open permission q
         }),
     },
   );
-  t.after(close);
+  onTestFinished(close);
   const session = await client.newSession("/work");
   const first = session.startTurn([{ type: "text", text: "one" }]);
-  assert.equal((await first.next()).type, "tool");
+  expect((await first.next()).type).toBe("tool");
   await session.cancelTurn();
   const end = await first.next();
-  assert.equal(end.type === "end" && end.stopReason, "cancelled");
-  assert.ok(dismissed);
-  assert.deepEqual(log.outcomes, [{ outcome: "cancelled" }]);
+  expect(end.type === "end" && end.stopReason).toBe("cancelled");
+  expect(dismissed).toBe(true);
+  expect(log.outcomes).toStrictEqual([{ outcome: "cancelled" }]);
   session.endTurn(first);
   const second = session.startTurn([{ type: "text", text: "two" }]);
   await session.cancelTurn();
-  assert.equal((await second.next()).type, "end");
-  assert.equal(log.cancels, 2);
+  expect((await second.next()).type).toBe("end");
+  expect(log.cancels).toBe(2);
 });
 
-await test("an agent error ends the turn with its message", async (t) => {
+test("an agent error ends the turn with its message", async () => {
   const { client, close } = await connect({
     script: () => [{ say: "partial" }, { fail: "quota exhausted" }],
   });
-  t.after(close);
+  onTestFinished(close);
   const session = await client.newSession("/work");
   const events = await collect(session.startTurn([{ type: "text", text: "hi" }]));
   const last = events.at(-1);
-  assert.ok(last?.type === "failed");
-  assert.match(last.message, /quota exhausted/);
+  expect.assert(last?.type === "failed");
+  expect(last.message).toMatch(/quota exhausted/);
 });
 
-await test("the agent reads and writes text files through the client", async (t) => {
+test("the agent reads and writes text files through the client", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pi-acp-fs-"));
-  t.after(() => rm(dir, { recursive: true, force: true }));
+  onTestFinished(() => rm(dir, { recursive: true, force: true }));
   await writeFile(join(dir, "notes.txt"), "alpha\nbravo\n");
   const created = join(dir, "new", "made.txt");
   const { client, close } = await connect({
@@ -255,19 +253,19 @@ await test("the agent reads and writes text files through the client", async (t)
         ? [{ read: join(dir, "notes.txt") }, { write: [created, "charlie\n"] }]
         : [{ read: join(dir, "absent.txt") }],
   });
-  t.after(close);
+  onTestFinished(close);
   const session = await client.newSession(dir);
   const events = await collect(session.startTurn([{ type: "text", text: "files" }]));
-  assert.deepEqual(events[0], { type: "text", text: "alpha\nbravo\n" });
-  assert.equal(await readFile(created, "utf8"), "charlie\n");
+  expect(events[0]).toStrictEqual({ type: "text", text: "alpha\nbravo\n" });
+  expect(await readFile(created, "utf8")).toBe("charlie\n");
   session.endTurn(session.turn);
   const failed = await collect(session.startTurn([{ type: "text", text: "missing" }]));
-  assert.equal(failed.at(-1)?.type, "failed");
+  expect(failed.at(-1)?.type).toBe("failed");
 });
 
-await test("Pi writes files for the agent only inside the session's workspace", async (t) => {
+test("Pi writes files for the agent only inside the session's workspace", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-acp-fs-")));
-  t.after(() => rm(dir, { recursive: true, force: true }));
+  onTestFinished(() => rm(dir, { recursive: true, force: true }));
   const work = join(dir, "work");
   await mkdir(work);
   const outside = join(dir, "outside.txt");
@@ -277,15 +275,15 @@ await test("Pi writes files for the agent only inside the session's workspace", 
         ? [{ write: [join(work, "..", "outside.txt"), "x"] }]
         : [{ write: [join(work, "deep", "inside.txt"), "y"] }, { say: "written" }],
   });
-  t.after(close);
+  onTestFinished(close);
   const session = await client.newSession(work);
   const refused = await collect(session.startTurn([{ type: "text", text: "escape" }]));
   const last = refused.at(-1);
-  assert.ok(last?.type === "failed");
-  assert.match(last.message, /workspace/);
-  await assert.rejects(readFile(outside, "utf8"));
+  expect.assert(last?.type === "failed");
+  expect(last.message).toMatch(/workspace/);
+  await expect(readFile(outside, "utf8")).rejects.toThrow();
   session.endTurn(session.turn);
   const allowed = await collect(session.startTurn([{ type: "text", text: "inside" }]));
-  assert.equal(allowed.at(-1)?.type, "end");
-  assert.equal(await readFile(join(work, "deep", "inside.txt"), "utf8"), "y");
+  expect(allowed.at(-1)?.type).toBe("end");
+  expect(await readFile(join(work, "deep", "inside.txt"), "utf8")).toBe("y");
 });
