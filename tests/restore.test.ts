@@ -3,6 +3,8 @@ import { join } from "node:path";
 
 import { expect, test } from "vitest";
 
+import { isRecord } from "../src/guards.ts";
+import { NOT_RESENT } from "../src/stream.ts";
 import { said, start } from "./support/pi.ts";
 
 /** Runs one Pi session that talks to the agent, then quits Pi, as a user would. */
@@ -91,4 +93,31 @@ test("after Pi reloads its extensions, the agent conversation continues in a new
   expect(after).toBe(`${agentSession}/2.1`);
   expect(log.loads, "the reloaded extension started its own agent").toStrictEqual([agentSession]);
   expect(log.prompts.map(texts)).toStrictEqual([["again"]]);
+});
+
+test("when the agent process dies mid-turn, the message is not sent again and the next one works", async () => {
+  const { session, stop, assistants, home } = await start({
+    settings: { retry: { baseDelayMs: 1 } },
+  });
+  await session.prompt("hello");
+  await session.prompt("crash now");
+  const failed = assistants().at(-1);
+  expect(failed?.stopReason).toBe("error");
+  expect(failed?.errorMessage).toBe(NOT_RESENT);
+  await session.prompt("after");
+  expect(said(assistants().at(-1))).toMatch(/after$/);
+  const log = await stop();
+  const saved: unknown = JSON.parse(await readFile(join(home, "agy-sessions.json"), "utf8"));
+  expect.assert(typeof saved === "object" && saved !== null);
+  const prompts = Object.values(saved).flat();
+  const crashes = prompts.filter(
+    (prompt) =>
+      Array.isArray(prompt) &&
+      prompt.some((block) => isRecord(block) && block["text"] === "crash now"),
+  );
+  expect(crashes.length, "the agent got the crashing message once").toBe(1);
+  // The dead agent saved the crashing prompt, which Pi's transcript never answered.
+  expect(log.closes.length, "the reopened session went past Pi's transcript").toBe(1);
+  expect(log.sessions.length).toBe(1);
+  expect(log.prompts.map(texts)).toStrictEqual([["[resource]", "after"]]);
 });

@@ -173,6 +173,8 @@ export async function start(options: StartOptions = {}) {
   const stop = async (): Promise<ProcessLog> => {
     if (!stopped) {
       stopped = true;
+      // Agent processes the session replaced wrote here when they exited; read the last one's.
+      await rm(logFile, { force: true });
       await session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
       session.dispose();
     }

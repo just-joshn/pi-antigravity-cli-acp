@@ -1,7 +1,8 @@
+import { type AssistantMessage, isRetryableAssistantError } from "@earendil-works/pi-ai";
 import { expect, test } from "vitest";
 
 import { AcpSession, type AgentPort, type SessionHooks } from "../src/session.ts";
-import { haltTurn } from "../src/stream.ts";
+import { haltTurn, NOT_RESENT } from "../src/stream.ts";
 import { resolvable } from "./support/harness.ts";
 
 const hooks: SessionHooks = {
@@ -76,4 +77,29 @@ test("an open permission dialog is withdrawn when its turn ends", async () => {
   expect(withdrawn, "the dialog is dismissed when its turn ends").toBe(true);
   answer.resolve(undefined);
   expect(await decision).toStrictEqual({ outcome: { outcome: "cancelled" } });
+});
+
+test("the message shown instead of a repeat is one Pi does not retry on its own", () => {
+  const message: AssistantMessage = {
+    role: "assistant",
+    content: [],
+    api: "antigravity-acp",
+    provider: "antigravity",
+    model: "default",
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+    stopReason: "error",
+    timestamp: 1,
+  };
+  expect(isRetryableAssistantError({ ...message, errorMessage: NOT_RESENT })).toBe(false);
+  expect(
+    isRetryableAssistantError({ ...message, errorMessage: "stopped (ACP connection closed)" }),
+    "the classifier this guards against",
+  ).toBe(true);
 });

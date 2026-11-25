@@ -23,6 +23,13 @@ const CANCEL_GRACE_MS = 5000;
 const TOOL_BATCH_MS = 25;
 const HISTORY_LIMIT = 24_000;
 
+/**
+ * Shown instead of sending a message again whose earlier attempt failed after reaching the agent.
+ * Pi retries some errors on its own; this text must not look like one of them.
+ */
+export const NOT_RESENT =
+  "Antigravity stopped before it finished this message, so what it did is unknown. It was not sent again; check the workspace, then send it again if needed.";
+
 export interface StreamHost {
   /** Whether Pi is running a turn of the session this extension serves. */
   conversing(piSessionId: string | undefined): boolean;
@@ -297,6 +304,9 @@ const OUTSIDE_CONVERSATION =
 class Reply {
   readonly draft: Draft;
   #host: StreamHost;
+  /** User messages whose turn failed after reaching the agent, by `messageKey`. */
+  #unfinished: Set<string>;
+  #sent: UserMessage[] = [];
   #model: Model<string>;
   #context: TranscriptContext;
   #options: Request;
@@ -307,8 +317,10 @@ class Reply {
     model: Model<string>,
     context: TranscriptContext,
     options: Request,
+    unfinished: Set<string>,
   ) {
     this.draft = new Draft(model);
+    this.#unfinished = unfinished;
     this.#host = host;
     this.#model = model;
     this.#context = context;
@@ -333,6 +345,10 @@ class Reply {
     const { signal, sessionId } = this.#options;
     signal?.throwIfAborted();
     if (!this.#host.conversing(sessionId)) throw new AcpError(OUTSIDE_CONVERSATION);
+    // An automatic retry would give the agent the same message twice, repeating whatever it did.
+    const pending = planTurn(this.#context.messages, undefined).prompt;
+    if (pending.some((message) => this.#unfinished.has(messageKey(message))))
+      throw new AcpError(NOT_RESENT);
     const seen = lastAnchor(this.#context.messages).anchor;
     let conversation = await this.#host.open(signal, seen);
     this.#conversation = conversation;
@@ -369,6 +385,7 @@ class Reply {
     const effort = await applyChoices(conversation.session, this.#model, this.#options.reasoning);
     if (effort !== undefined) this.draft.message.providerThinkingLevel = effort;
     signal?.throwIfAborted();
+    this.#sent = plan.prompt;
     conversation.startTurn(prompt);
     return conversation;
   }
@@ -425,6 +442,7 @@ class Reply {
       this.#stamp(conversation);
       if (!(await haltTurn(conversation.session, this.#host.cancelGraceMs))) this.#host.abandon();
     }
+    if (!aborted) for (const sent of this.#sent) this.#unfinished.add(messageKey(sent));
     const { message } = this.draft;
     message.stopReason = aborted ? "aborted" : "error";
     message.errorMessage = aborted
@@ -436,7 +454,13 @@ class Reply {
   }
 }
 
+/** Identifies a user message across the copies Pi makes of its transcript. */
+function messageKey(message: UserMessage): string {
+  return `${message.timestamp}:${JSON.stringify(message.content)}`;
+}
+
 export function createStream(host: StreamHost) {
+  const unfinished = new Set<string>();
   return (model: Model<string>, context: TranscriptContext, options: Request = {}) =>
-    new Reply(host, model, context, options).start();
+    new Reply(host, model, context, options, unfinished).start();
 }

@@ -46,6 +46,11 @@ function script(prompt: ContentBlock[]): Step[] {
       { say: "Planned and done." },
     ];
   }
+  if (text.includes("crash")) {
+    // oxlint-disable-next-line unicorn/no-process-exit -- simulates the agent process dying mid-turn
+    setImmediate(() => process.exit(3));
+    return [{ say: "Working." }, { hold: new Promise(() => {}) }];
+  }
   if (text.includes("name")) return [{ title: "Named" }, { say: "Named it." }];
   if (text.includes("wait")) return [{ say: "Waiting." }, { hold: "cancel" }];
   return [{ think: "hm" }, { usage: [2048, 1_000_000] }, { say: `echo: ${text}` }];
