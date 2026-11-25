@@ -21,6 +21,8 @@ Zed (8aeb64f) advertises to agents: `fs` read and write, `terminal`, `auth.termi
 
 `verified` needs an automated test **and** a run against the real `agy`. A capability tested only with the scripted agent is `implemented_unverified`. Live testing stopped partway through this work because the account's quota ran out ("Individual quota reached … Resets in 123h"), which left several items unverified.
 
+The last live run (`python3 tests/live-acp.py`, all 12 steps passed) was at commit `fedbeb9`. The fixes after it, from three review passes, are covered by the automated tests only; rerun the live check once quota allows.
+
 | Status                 | Count |
 | ---------------------- | ----- |
 | verified               | 15    |

@@ -80,7 +80,7 @@ Everything else, such as models, quota, MCP servers and rules, is configured in 
 
 ## Compatibility
 
-Tested with Pi 1.6.1, `agy` 1.5.17 and the registry agent 1.5.2 on macOS, using ACP protocol version 1 through `@agentclientprotocol/sdk` 2.12.0. The agent is started as a subprocess without a shell, and paths are handled with Node's platform functions; Linux and Windows have not been tested.
+Live-tested on macOS with Pi 1.6.1 and `agy` 1.5.17, using ACP protocol version 1 through `@agentclientprotocol/sdk` 2.12.0. The registry agent (`--agy-agent registry`) is covered by the automated tests but has not been run live against this version. The agent is started as a subprocess without a shell, and paths are handled with Node's platform functions; Linux and Windows have not been tested.
 
 ## Troubleshooting
 
