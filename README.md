@@ -11,7 +11,7 @@ Pi sends the agent your words and nothing else: no Pi system prompt, no Pi tool 
 
    ```sh
    bun install
-   pi -e ./index.ts --model antigravity/default
+   pi -e ./src/index.ts --model antigravity/default
    ```
 
 3. Say hello. `antigravity/default` uses whichever model the agent is set to.
@@ -19,7 +19,7 @@ Pi sends the agent your words and nothing else: no Pi system prompt, no Pi tool 
 After the first reply, `/model` lists the agent's own models under `antigravity`, for example `gemini-4-hydrogen` and `gemini-3.8-flash`. Pi remembers the list, so later runs can start on one directly:
 
 ```sh
-pi -e ./index.ts --model antigravity/gemini-3.8-flash
+pi -e ./src/index.ts --model antigravity/gemini-3.8-flash
 ```
 
 To have the models in every project, install the checkout once with `pi install "$PWD"` and keep it at that path.

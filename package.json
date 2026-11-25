@@ -12,7 +12,7 @@
     "src"
   ],
   "type": "module",
-  "module": "index.ts",
+  "module": "src/index.ts",
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"

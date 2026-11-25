@@ -1,7 +1,7 @@
 import type { AnyMessage } from "@agentclientprotocol/sdk/unstable";
 
-import { AcpClient } from "../../src/acp/client.ts";
-import type { SessionHooks } from "../../src/acp/session.ts";
+import { AcpClient } from "../../src/client.ts";
+import type { SessionHooks } from "../../src/session.ts";
 import { type FakeAgentOptions, serveAgent } from "./fake-agent.ts";
 
 export const identity = { name: "pi", title: "Pi", version: "9.9.9" };

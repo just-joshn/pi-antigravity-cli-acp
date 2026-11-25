@@ -12,9 +12,9 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 
-import { emptyCatalog, piModels, PROVIDER } from "../src/acp/catalog.ts";
-import antigravityAcp from "../src/acp/extension.ts";
-import { TOOL_NAME } from "../src/acp/tool.ts";
+import { emptyCatalog, piModels, PROVIDER } from "../src/catalog.ts";
+import antigravityAcp from "../src/index.ts";
+import { TOOL_NAME } from "../src/tool.ts";
 import type { AgentLog } from "./support/fake-agent.ts";
 
 const fakeAgy = join(import.meta.dirname, "support", "fake-agy.ts");

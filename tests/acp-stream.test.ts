@@ -10,14 +10,9 @@ import {
   normalizeContext,
 } from "@earendil-works/pi-ai";
 
-import { type Catalog, piModels, PROVIDER } from "../src/acp/catalog.ts";
-import {
-  type Conversation,
-  createStream,
-  newConversation,
-  watchMirror,
-} from "../src/acp/stream.ts";
-import { runMirror, TOOL_NAME } from "../src/acp/tool.ts";
+import { type Catalog, piModels, PROVIDER } from "../src/catalog.ts";
+import { type Conversation, createStream, newConversation, watchMirror } from "../src/stream.ts";
+import { runMirror, TOOL_NAME } from "../src/tool.ts";
 import { allow, defaultModels, type FakeAgentOptions, type Step } from "./support/fake-agent.ts";
 import { connect, deferred } from "./support/harness.ts";
 

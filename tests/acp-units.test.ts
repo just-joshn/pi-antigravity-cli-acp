@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
 
-import { findRegistryAgent, registryRoot, resolveAgent } from "../src/acp/agent.ts";
+import { findRegistryAgent, registryRoot, resolveAgent } from "../src/agent.ts";
 import {
   effortFor,
   emptyCatalog,
@@ -12,13 +12,13 @@ import {
   piModels,
   readCatalog,
   writeCatalog,
-} from "../src/acp/catalog.ts";
-import { AcpError } from "../src/acp/client.ts";
-import { callLine, changedLines, resultLines } from "../src/acp/render.ts";
-import type { ToolView } from "../src/acp/session.ts";
-import { AcpSession, type AgentPort } from "../src/acp/session.ts";
-import { haltTurn, planTurn, renderHistory } from "../src/acp/stream.ts";
-import { choiceLabels, toolArguments, toolResult } from "../src/acp/tool.ts";
+} from "../src/catalog.ts";
+import { AcpError } from "../src/client.ts";
+import { callLine, changedLines, resultLines } from "../src/render.ts";
+import type { ToolView } from "../src/session.ts";
+import { AcpSession, type AgentPort } from "../src/session.ts";
+import { haltTurn, planTurn, renderHistory } from "../src/stream.ts";
+import { choiceLabels, toolArguments, toolResult } from "../src/tool.ts";
 import { connect, resolvable } from "./support/harness.ts";
 
 async function scratch(t: TestContext) {

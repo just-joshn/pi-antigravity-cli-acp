@@ -20,7 +20,7 @@ import threading
 import time
 from pathlib import Path
 
-ENTRY = Path(__file__).resolve().parents[1] / "index.ts"
+ENTRY = Path(__file__).resolve().parents[1] / "src" / "index.ts"
 PROVIDER = "antigravity"
 TOOL = "antigravity_tool"
 AGENT = sys.argv[1] if len(sys.argv) > 1 else "cli"

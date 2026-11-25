@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import type { TurnEvent } from "../src/acp/session.ts";
+import type { TurnEvent } from "../src/session.ts";
 import { allow, deny, type Step } from "./support/fake-agent.ts";
 import { connect, deferred, identity } from "./support/harness.ts";
 
