@@ -195,6 +195,7 @@ export class AcpClient {
   async loadSession(sessionId: string, cwd: string): Promise<AcpSession | undefined> {
     if (!this.offers.load) return undefined;
     const replay = { turns: 0, userSpeaking: false };
+    this.#inbox.early.delete(sessionId);
     this.#inbox.replays.set(sessionId, replay);
     try {
       const loaded = await this.#connection.agent.request(methods.agent.session.load, {
@@ -204,6 +205,7 @@ export class AcpClient {
       });
       return this.#adopt(sessionId, loaded, cwd, replay.turns);
     } catch (error) {
+      this.#inbox.early.delete(sessionId);
       if (error instanceof RequestError && error.code === RESOURCE_NOT_FOUND) return undefined;
       return explain("reopen the saved session")(error);
     } finally {
@@ -214,6 +216,7 @@ export class AcpClient {
   /** Lets the agent free a session this client no longer uses. */
   async closeSession(sessionId: string): Promise<void> {
     this.#sessions.delete(sessionId);
+    this.#inbox.early.delete(sessionId);
     if (!this.offers.close) return;
     await this.#connection.agent
       .request(methods.agent.session.close, { sessionId })

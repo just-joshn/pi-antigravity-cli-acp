@@ -4,6 +4,8 @@ import type { Antigravity } from "./antigravity.ts";
 import { AcpError, reasonOf } from "./client.ts";
 
 const USAGE = "Usage: /agy status, /agy mode [id], or /agy <agent command> [input]";
+/** /agy's own subcommands; an agent command with one of these names is typed directly instead. */
+const OWN = new Set(["status", "mode"]);
 
 /** Sets the agent's permission mode, asking the user to pick one when `requested` is undefined. */
 async function chooseMode(link: Antigravity, requested: string | undefined, ctx: ExtensionContext) {
@@ -78,11 +80,13 @@ function completions(link: Antigravity, prefix: string) {
   const own = ["status", "mode", ...link.modes.map((mode) => `mode ${mode.value}`)].map(
     (value) => ({ value, label: value }),
   );
-  const agents = link.commands.map((command) => ({
-    value: command.name,
-    label: command.name,
-    description: command.hint ? `${command.description} (${command.hint})` : command.description,
-  }));
+  const agents = link.commands
+    .filter((command) => !OWN.has(command.name))
+    .map((command) => ({
+      value: command.name,
+      label: command.name,
+      description: command.hint ? `${command.description} (${command.hint})` : command.description,
+    }));
   const matches = [...own, ...agents].filter((option) => option.value.startsWith(prefix));
   return matches.length ? matches : null;
 }

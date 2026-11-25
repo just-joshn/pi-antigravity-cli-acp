@@ -4,7 +4,7 @@ import { Readable, Writable } from "node:stream";
 
 import { type ContentBlock, ndJsonStream } from "@agentclientprotocol/sdk/unstable";
 
-import { serveAgent, type Step } from "./fake-agent.ts";
+import { defaultCommands, serveAgent, type Step } from "./fake-agent.ts";
 
 const entry = (content: string, status: "pending" | "in_progress" | "completed") => ({
   content,
@@ -14,6 +14,11 @@ const entry = (content: string, status: "pending" | "in_progress" | "completed")
 
 function script(prompt: ContentBlock[]): Step[] {
   const text = prompt.map((block) => (block.type === "text" ? block.text : "")).join(" ");
+  if (text.includes("die planning")) {
+    // oxlint-disable-next-line unicorn/no-process-exit -- the agent dies with a plan in progress
+    setTimeout(() => process.exit(3), 50);
+    return [{ plan: [entry("Look around", "in_progress")] }, { hold: new Promise(() => {}) }];
+  }
   if (text.includes("edit")) {
     return [
       { tool: { toolCallId: "e1", kind: "edit", title: "File notes.txt", status: "pending" } },
@@ -68,6 +73,7 @@ const { log } = serveAgent(
   ndJsonStream(Writable.toWeb(process.stdout), Readable.toWeb(process.stdin)),
   {
     script,
+    commands: [...defaultCommands, { name: "status", description: "The agent's own status." }],
     plain: process.env["FAKE_AGY_PLAIN"] === "1",
     restore: process.env["FAKE_AGY_RESTORE"] !== "0",
     history,

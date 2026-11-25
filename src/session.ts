@@ -140,7 +140,7 @@ export class AcpSession {
   #turns = 0;
   #options: SessionConfigOption[];
   #usage: { used: number; size: number } | undefined;
-  #commands: readonly AgentCommand[] = [];
+  #commands: readonly AgentCommand[] | undefined;
   #plan: readonly PlanEntry[] = [];
   #tools = new Map<string, ToolView>();
   #watchers = new Map<string, Set<(tool: ToolView) => void>>();
@@ -180,7 +180,7 @@ export class AcpSession {
     return this.#turn;
   }
 
-  /** The commands the agent last listed for this session. */
+  /** The commands the agent last listed for this session; undefined until it lists them. */
   get commands() {
     return this.#commands;
   }

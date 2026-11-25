@@ -151,6 +151,10 @@ test("saved agent commands that are missing or malformed are dropped, not the ca
   expect(await commands([{ name: "goal", description: "d", hint: 3 }])).toStrictEqual([
     { name: "goal", description: "d", hint: undefined },
   ]);
+  expect(
+    await commands([null, { name: "", description: "d" }, { name: "ok", description: "d" }]),
+    "a bad entry drops only itself",
+  ).toStrictEqual([{ name: "ok", description: "d", hint: undefined }]);
 });
 
 test("a saved catalog with no models or modes is valid, and its context window must be positive", async () => {
@@ -170,4 +174,14 @@ test("a saved catalog with no models or modes is valid, and its context window m
     commands: [],
     contextWindow: 1,
   });
+});
+
+test("a session that has not listed its commands keeps the saved ones; an empty list replaces them", async () => {
+  const saved = { ...emptyCatalog, commands: [{ name: "old", description: "d", hint: undefined }] };
+  const { client, close } = await connect({ script: () => [], plain: true });
+  onTestFinished(close);
+  const quiet = await client.newSession("/work");
+  expect(learn(saved, quiet).commands).toStrictEqual(saved.commands);
+  quiet.receive({ sessionUpdate: "available_commands_update", availableCommands: [] });
+  expect(learn(saved, quiet).commands).toStrictEqual([]);
 });

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type { ContentBlock } from "@agentclientprotocol/sdk/unstable";
 import {
   type AssistantMessage,
@@ -351,6 +353,7 @@ class Reply {
       throw new AcpError(NOT_RESENT);
     const seen = lastAnchor(this.#context.messages).anchor;
     let conversation = await this.#host.open(signal, seen);
+    signal?.throwIfAborted();
     this.#conversation = conversation;
     const plan = planTurn(this.#context.messages, conversation.anchor);
     const continuing = !plan.diverged && plan.prompt.length === 0;
@@ -454,9 +457,10 @@ class Reply {
   }
 }
 
-/** Identifies a user message across the copies Pi makes of its transcript. */
+/** Identifies a user message across the copies Pi makes of its transcript, in constant space. */
 function messageKey(message: UserMessage): string {
-  return `${message.timestamp}:${JSON.stringify(message.content)}`;
+  const content = createHash("sha256").update(JSON.stringify(message.content)).digest("hex");
+  return `${message.timestamp}:${content}`;
 }
 
 export function createStream(host: StreamHost) {

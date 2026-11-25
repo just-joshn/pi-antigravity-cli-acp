@@ -222,3 +222,26 @@ test("a load that fails for another reason says so", async () => {
     "Antigravity could not reopen the saved session: Internal error",
   );
 });
+
+test("updates held for a session that failed to load do not reach it when it loads later", async () => {
+  let loads = 0;
+  const client = await meet((b) =>
+    b
+      .onRequest(methods.agent.initialize, () => ({
+        ...hello,
+        agentCapabilities: { loadSession: true },
+      }))
+      .onRequest(methods.agent.session.load, async ({ params, client: agentSide }) => {
+        loads += 1;
+        if (loads > 1) return {};
+        await agentSide.notify(methods.client.session.update, {
+          sessionId: params.sessionId,
+          update: { sessionUpdate: "session_info_update", title: "Stale" },
+        });
+        throw RequestError.resourceNotFound(params.sessionId);
+      }),
+  );
+  expect(await client.loadSession("a", "/work")).toBeUndefined();
+  const session = await client.loadSession("a", "/work");
+  expect(session?.title).toBeUndefined();
+});

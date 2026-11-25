@@ -48,14 +48,15 @@ export class Antigravity {
       this.#opening = undefined;
       this.#live = undefined;
       // Pi rewound inside the session being replaced, which went on past that point.
-      const reopen = anchor?.startsWith(`${replaced}/`) ? undefined : anchor;
+      const reopen =
+        anchor !== undefined && parseAnchor(anchor)?.sessionId === replaced ? undefined : anchor;
       const [conversation] = await Promise.all([
         this.open(reopen),
         replaced === undefined ? undefined : this.#close(replaced),
       ]);
       return conversation;
     },
-    abandon: () => this.#forget(),
+    abandon: () => this.#lose(),
     noteTool: (tool) => {
       const { kind, title } = toolArguments(tool);
       this.#pane?.ui.notify(`Antigravity ${kind}: ${title}`, "info");
@@ -79,8 +80,7 @@ export class Antigravity {
 
   /** The agent's own slash commands, from the live session or the last one. */
   get commands() {
-    const live = this.#live?.session.commands ?? [];
-    return live.length ? live : this.#catalog.commands;
+    return this.#live?.session.commands ?? this.#catalog.commands;
   }
 
   /** Whether the model Pi uses now is one of this extension's. */
@@ -137,7 +137,7 @@ export class Antigravity {
     this.#pane = ctx;
     this.#running = false;
     // Pi can end a run while mirrored tools are still pending; the agent must not keep working unseen.
-    if (this.#live?.session.turn && !(await haltTurn(this.#live.session))) this.#forget();
+    if (this.#live?.session.turn && !(await haltTurn(this.#live.session))) this.#lose();
     this.publish();
   }
 
@@ -239,6 +239,12 @@ export class Antigravity {
     this.#live = undefined;
   }
 
+  /** Drops a dead or stuck agent and clears what Pi showed for it. */
+  #lose() {
+    this.#forget();
+    this.#showStatus();
+  }
+
   async #connect(): Promise<AcpClient> {
     const flag = this.#pi.getFlag("agy-agent");
     const cwd = this.#pane?.cwd ?? process.cwd();
@@ -248,7 +254,7 @@ export class Antigravity {
     const connected = await AcpClient.connect(started.stream, identity, this.#hooks);
     // When the agent exits, start over on the next message instead of talking to a dead process.
     const ended = () => {
-      if (this.#agent === started) this.#forget();
+      if (this.#agent === started) this.#lose();
     };
     void connected.closed.then(ended, ended);
     return connected;

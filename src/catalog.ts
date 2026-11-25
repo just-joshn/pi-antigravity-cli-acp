@@ -72,7 +72,7 @@ export function learn(catalog: Catalog, session: AcpSession): Catalog {
   return {
     models: models.length ? models : catalog.models,
     modes: modes.length ? modes : catalog.modes,
-    commands: session.commands.length ? session.commands : catalog.commands,
+    commands: session.commands ?? catalog.commands,
     contextWindow: session.usage?.size || catalog.contextWindow,
   };
 }
@@ -111,17 +111,15 @@ function strings(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
-/** Commands saved by an older version may be missing; any malformed entry drops the list. */
+/** Commands saved by an older version may be missing; a malformed entry is dropped. */
 function parseCommands(value: unknown): AgentCommand[] {
   if (!Array.isArray(value)) return [];
-  const commands: AgentCommand[] = [];
-  for (const command of value) {
+  return value.flatMap((command: unknown) => {
     if (!isRecord(command)) return [];
     const { name, description, hint } = command;
-    if (typeof name !== "string" || typeof description !== "string") return [];
-    commands.push({ name, description, hint: typeof hint === "string" ? hint : undefined });
-  }
-  return commands;
+    if (typeof name !== "string" || name === "" || typeof description !== "string") return [];
+    return [{ name, description, hint: typeof hint === "string" ? hint : undefined }];
+  });
 }
 
 function parseCatalog(value: unknown): Catalog | undefined {

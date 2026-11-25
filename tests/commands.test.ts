@@ -40,3 +40,12 @@ test("an agent command needs an antigravity model selected", async () => {
   );
   expect((await stop()).prompts.length).toBe(1);
 });
+
+test("an agent command named like an /agy subcommand is not offered under /agy", async () => {
+  const { session } = await start();
+  await session.prompt("hello");
+  const offered = await completions(session, "");
+  expect(
+    offered?.filter((option) => option.value === "status" || option.value === "mode").length,
+  ).toBe(2);
+});
