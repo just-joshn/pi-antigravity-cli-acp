@@ -9,7 +9,7 @@ import {
 import { expect, onTestFinished, test } from "vitest";
 
 import { AcpClient, AcpError } from "../src/client.ts";
-import { connect, identity } from "./support/harness.ts";
+import { connect, identity, quietHooks } from "./support/harness.ts";
 
 type Builder = ReturnType<typeof agent>;
 
@@ -25,7 +25,7 @@ async function meet(build: (builder: Builder) => Builder) {
   const client = await AcpClient.connect(
     { readable: toClient.readable, writable: toAgent.writable },
     identity,
-    { askPermission: () => Promise.resolve(undefined), changed: () => {} },
+    quietHooks,
   );
   onTestFinished(() => client.close());
   return client;

@@ -6,6 +6,13 @@ import { type FakeAgentOptions, serveAgent } from "./fake-agent.ts";
 
 export const identity = { name: "pi", title: "Pi", version: "9.9.9" };
 
+/** Hooks for a session nobody answers: permissions and questions are left undecided. */
+export const quietHooks: SessionHooks = {
+  askPermission: () => Promise.resolve(undefined),
+  elicit: () => Promise.resolve({ action: "cancel" }),
+  changed: () => {},
+};
+
 /** A promise the test settles by hand. */
 export function deferred() {
   const settle: { resolve?: () => void } = {};
@@ -32,7 +39,7 @@ export async function connect(options: FakeAgentOptions, hooks: Partial<SessionH
   const client = await AcpClient.connect(
     { readable: toClient.readable, writable: toAgent.writable },
     identity,
-    { askPermission: () => Promise.resolve(undefined), changed: () => {}, ...hooks },
+    { ...quietHooks, ...hooks },
   );
   return {
     client,

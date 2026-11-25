@@ -4,6 +4,7 @@ import { type AgentChoice, launch, resolveAgent, type RunningAgent } from "./age
 import { type Catalog, learn, piModels, PROVIDER, readCatalog, writeCatalog } from "./catalog.ts";
 import { AcpClient, SignInRequired, type Workspace } from "./client.ts";
 import { Conversation, parseAnchor } from "./conversation.ts";
+import { answerElicitation } from "./elicit.ts";
 import type { SessionHooks } from "./session.ts";
 import { signIn } from "./sign-in.ts";
 import { createStream, haltTurn } from "./stream.ts";
@@ -213,9 +214,16 @@ export class Antigravity {
     if (!this.#running) this.publish();
   }
 
+  /** Runs a dialog after the previous one closes; the agent can ask several things at once. */
+  #dialog<T>(show: () => Promise<T>): Promise<T> {
+    const shown = this.#asking.then(show);
+    this.#asking = shown.catch(() => {});
+    return shown;
+  }
+
   #hooks: SessionHooks = {
-    askPermission: (tool, options, signal) => {
-      const answer = this.#asking.then(async () => {
+    askPermission: (tool, options, signal) =>
+      this.#dialog(async () => {
         const pane = this.#pane;
         if (signal.aborted || !pane?.hasUI) return undefined;
         const labels = choiceLabels(options);
@@ -223,10 +231,13 @@ export class Antigravity {
         const question = `Antigravity asks permission · ${kind}: ${title}`;
         const picked = await pane.ui.select(question, labels, { signal });
         return picked === undefined ? undefined : options[labels.indexOf(picked)];
-      });
-      this.#asking = answer.catch(() => {});
-      return answer;
-    },
+      }),
+    elicit: (request, signal) =>
+      this.#dialog(async () => {
+        const pane = this.#pane;
+        if (!pane?.hasUI) return { action: "cancel" };
+        return answerElicitation(request, pane.ui, signal);
+      }),
     changed: () => {
       if (this.#live) this.#absorb(this.#live);
       this.#showStatus();

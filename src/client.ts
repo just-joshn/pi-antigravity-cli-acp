@@ -139,11 +139,23 @@ function serve(
   identity: ClientIdentity,
   sessions: ReadonlyMap<string, AcpSession>,
   inbox: Inbox,
+  hooks: SessionHooks,
 ): ClientConnection {
   return client({ name: identity.name })
     .onRequest(methods.client.session.requestPermission, ({ params }) => {
       const session = sessions.get(params.sessionId);
       return session ? session.permission(params) : { outcome: { outcome: "cancelled" } };
+    })
+    .onRequest(methods.client.elicitation.create, ({ params }) => {
+      if ("sessionId" in params) {
+        const session = sessions.get(String(params.sessionId));
+        return session ? session.elicit(params) : { action: "cancel" };
+      }
+      // A question outside any session, such as during sign-in; it cannot be interrupted.
+      return hooks.elicit(params, new AbortController().signal);
+    })
+    .onNotification(methods.client.elicitation.complete, () => {
+      // Only says the agent finished with a link it showed; nothing in Pi waits for that.
     })
     .onRequest(methods.client.fs.readTextFile, ({ params }) => readTextFile(params))
     .onRequest(methods.client.fs.writeTextFile, ({ params }) =>
@@ -210,11 +222,15 @@ export class AcpClient {
   ): Promise<AcpClient> {
     const sessions = new Map<string, AcpSession>();
     const inbox: Inbox = { early: new Map(), replays: new Map() };
-    const connection = serve(stream, identity, sessions, inbox);
+    const connection = serve(stream, identity, sessions, inbox, hooks);
     const introduction: InitializeRequest = {
       protocolVersion: PROTOCOL_VERSION,
       clientInfo: identity,
-      clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, terminal: false },
+      clientCapabilities: {
+        fs: { readTextFile: true, writeTextFile: true },
+        terminal: false,
+        elicitation: { form: {}, url: {} },
+      },
     };
     const hello = await connection.agent
       .request(methods.agent.initialize, introduction)

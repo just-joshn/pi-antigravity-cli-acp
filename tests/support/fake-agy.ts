@@ -12,25 +12,48 @@ const entry = (content: string, status: "pending" | "in_progress" | "completed")
   priority: "medium" as const,
 });
 
-function script(prompt: ContentBlock[]): Step[] {
-  const text = prompt.map((block) => (block.type === "text" ? block.text : "")).join(" ");
-  if (text.includes("die planning")) {
-    // oxlint-disable-next-line unicorn/no-process-exit -- the agent dies with a plan in progress
-    setTimeout(() => process.exit(3), 50);
-    return [{ plan: [entry("Look around", "in_progress")] }, { hold: new Promise(() => {}) }];
-  }
-  if (text.includes("edit")) {
-    return [
+/** Exits the agent process shortly, as if it crashed. */
+function dieSoon(delayMs: number) {
+  // oxlint-disable-next-line unicorn/no-process-exit -- simulates the agent process dying mid-turn
+  setTimeout(() => process.exit(3), delayMs);
+}
+
+const never = new Promise(() => {});
+
+const colorQuestion = {
+  sessionId: "",
+  mode: "form" as const,
+  message: "Which color?",
+  requestedSchema: {
+    type: "object" as const,
+    properties: { color: { type: "string" as const, enum: ["red", "blue"] } },
+    required: ["color"],
+  },
+};
+
+/** What the scripted agent does for a prompt containing a keyword, checked in this order. */
+const SCRIPTS: [keyword: string, steps: () => Step[]][] = [
+  [
+    "die planning",
+    () => {
+      dieSoon(50);
+      return [{ plan: [entry("Look around", "in_progress")] }, { hold: never }];
+    },
+  ],
+  [
+    "edit",
+    () => [
       { tool: { toolCallId: "e1", kind: "edit", title: "File notes.txt", status: "pending" } },
       {
         ask: "e1",
         allowed: [{ update: { toolCallId: "e1", status: "completed" } }, { say: "Edited." }],
         declined: [{ update: { toolCallId: "e1", status: "failed" } }],
       },
-    ];
-  }
-  if (text.includes("read")) {
-    return [
+    ],
+  ],
+  [
+    "read",
+    () => [
       { say: "Reading." },
       { tool: { toolCallId: "r1", kind: "read", title: "File notes.txt", status: "in_progress" } },
       {
@@ -41,23 +64,33 @@ function script(prompt: ContentBlock[]): Step[] {
         },
       },
       { say: "It says alpha." },
-    ];
-  }
-  if (text.includes("plan")) {
-    return [
+    ],
+  ],
+  [
+    "plan",
+    () => [
       { plan: [entry("Look around", "in_progress"), entry("Write it", "pending")] },
       { plan: [entry("Look around", "completed"), entry("Write it", "in_progress")] },
       { plan: [entry("Look around", "completed"), entry("Write it", "completed")] },
       { say: "Planned and done." },
-    ];
-  }
-  if (text.includes("crash")) {
-    // oxlint-disable-next-line unicorn/no-process-exit -- simulates the agent process dying mid-turn
-    setImmediate(() => process.exit(3));
-    return [{ say: "Working." }, { hold: new Promise(() => {}) }];
-  }
-  if (text.includes("name")) return [{ title: "Named" }, { say: "Named it." }];
-  if (text.includes("wait")) return [{ say: "Waiting." }, { hold: "cancel" }];
+    ],
+  ],
+  [
+    "crash",
+    () => {
+      dieSoon(0);
+      return [{ say: "Working." }, { hold: never }];
+    },
+  ],
+  ["question", () => [{ elicit: colorQuestion }]],
+  ["name", () => [{ title: "Named" }, { say: "Named it." }]],
+  ["wait", () => [{ say: "Waiting." }, { hold: "cancel" }]],
+];
+
+function script(prompt: ContentBlock[]): Step[] {
+  const text = prompt.map((block) => (block.type === "text" ? block.text : "")).join(" ");
+  const found = SCRIPTS.find(([keyword]) => text.includes(keyword));
+  if (found) return found[1]();
   return [{ think: "hm" }, { usage: [2048, 1_000_000] }, { say: `echo: ${text}` }];
 }
 

@@ -1,6 +1,8 @@
 import type {
   AvailableCommand,
   ContentBlock,
+  CreateElicitationRequest,
+  CreateElicitationResponse,
   PermissionOption,
   PlanEntry,
   PromptResponse,
@@ -82,6 +84,11 @@ export interface SessionHooks {
     options: PermissionOption[],
     signal: AbortSignal,
   ): Promise<PermissionOption | undefined>;
+  /** Answers a structured question from the agent; cancelled when nobody can answer. */
+  elicit(
+    request: CreateElicitationRequest,
+    signal: AbortSignal,
+  ): Promise<CreateElicitationResponse>;
   /** The session's settings, usage or title changed. */
   changed(): void;
 }
@@ -356,6 +363,14 @@ export class AcpSession {
     return picked
       ? { outcome: { outcome: "selected", optionId: picked.optionId } }
       : { outcome: { outcome: "cancelled" } };
+  }
+
+  /** A question asked during the turn; like a permission dialog, it closes when the turn ends. */
+  async elicit(request: CreateElicitationRequest): Promise<CreateElicitationResponse> {
+    const { signal } = this.#dialogs;
+    const cancel: CreateElicitationResponse = { action: "cancel" };
+    const reply = await this.#hooks.elicit(request, signal).catch(() => cancel);
+    return signal.aborted ? cancel : reply;
   }
 
   #mergeTool(patch: ToolCallUpdate): ToolView {

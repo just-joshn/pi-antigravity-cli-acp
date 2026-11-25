@@ -4,6 +4,8 @@ import {
   type AgentContext,
   type AvailableCommand,
   type ContentBlock,
+  type CreateElicitationRequest,
+  type CreateElicitationResponse,
   type InitializeRequest,
   type LoadSessionRequest,
   methods,
@@ -30,6 +32,7 @@ export type Step =
   | { ask: string; options?: PermissionOption[]; allowed?: Step[]; declined?: Step[] }
   | { usage: [used: number, size: number] }
   | { title: string }
+  | { elicit: CreateElicitationRequest }
   | { plan: PlanEntry[] }
   | { read: string }
   | { write: [path: string, content: string] }
@@ -83,6 +86,8 @@ export interface AgentLog {
   cancels: number;
   outcomes: RequestPermissionOutcome[];
   loads: string[];
+  /** What the client answered to each question the agent asked. */
+  answers: CreateElicitationResponse[];
   /** Auth method ids the client signed in with, and how often it logged out. */
   signIns: string[];
   logouts: number;
@@ -202,7 +207,16 @@ async function perform(pb: Playback, step: Step): Promise<StopReason | undefined
   else if ("tool" in step) await send(pb, { sessionUpdate: "tool_call", ...step.tool });
   else if ("update" in step) await send(pb, { sessionUpdate: "tool_call_update", ...step.update });
   else if ("plan" in step) await send(pb, { sessionUpdate: "plan", entries: step.plan });
-  else if ("title" in step)
+  else if ("elicit" in step) {
+    // A question with an empty session id is about the session being played.
+    const question =
+      "sessionId" in step.elicit && step.elicit.sessionId === ""
+        ? { ...step.elicit, sessionId }
+        : step.elicit;
+    const reply = await client.request(methods.client.elicitation.create, question);
+    pb.log.answers.push(reply);
+    await say(pb, "agent_message_chunk", JSON.stringify(reply));
+  } else if ("title" in step)
     await send(pb, { sessionUpdate: "session_info_update", title: step.title });
   else if ("usage" in step) {
     const [used, size] = step.usage;
@@ -326,6 +340,7 @@ const emptyLog = (): AgentLog => ({
   cancels: 0,
   outcomes: [],
   loads: [],
+  answers: [],
   signIns: [],
   logouts: 0,
   loadRequests: [],

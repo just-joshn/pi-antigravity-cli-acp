@@ -2,7 +2,7 @@ import type { PermissionOption } from "@agentclientprotocol/sdk/unstable";
 import { expect, test } from "vitest";
 
 import { AcpSession, type AgentPort } from "../src/session.ts";
-import { resolvable } from "./support/harness.ts";
+import { quietHooks, resolvable } from "./support/harness.ts";
 
 const port: AgentPort = {
   prompt: () => new Promise(() => {}),
@@ -17,7 +17,7 @@ const deny: PermissionOption = { kind: "reject_once", optionId: "deny", name: "D
 function answering(answer: PermissionOption | undefined | Error) {
   const askPermission = () =>
     answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer);
-  return new AcpSession("s", initial, port, { askPermission, changed: () => {} });
+  return new AcpSession("s", initial, port, { ...quietHooks, askPermission });
 }
 
 const ask = (session: AcpSession, options: PermissionOption[]) =>
@@ -46,8 +46,8 @@ test("a permission question with no options, or no deny option, is cancelled unl
 test("a permission request cannot finish its tool call before the user answers", async () => {
   const answer = resolvable<PermissionOption | undefined>();
   const session = new AcpSession("s", initial, port, {
+    ...quietHooks,
     askPermission: () => answer.promise,
-    changed: () => {},
   });
   session.receive({
     sessionUpdate: "tool_call",
