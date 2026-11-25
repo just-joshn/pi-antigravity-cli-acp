@@ -8,6 +8,8 @@ import {
   type TerminalOutputResponse,
 } from "@agentclientprotocol/sdk/unstable";
 
+import { put, without } from "./immutable.ts";
+
 /** Most output kept per terminal, whatever the agent asks for, so a noisy command cannot exhaust memory. */
 const OUTPUT_LIMIT = 1024 * 1024;
 const KILL_GRACE_MS = 1000;
@@ -19,17 +21,17 @@ const GROUPS = process.platform !== "win32";
 type Report = (sessionId: string, terminalId: string, output: string | undefined) => void;
 
 interface Running {
-  sessionId: string;
-  child: ChildProcess;
-  output: string;
+  readonly sessionId: string;
+  readonly child: ChildProcess;
+  readonly output: string;
   /** UTF-8 size of `output`, which may exceed `limit` until it is next trimmed. */
-  bytes: number;
-  truncated: boolean;
-  limit: number;
+  readonly bytes: number;
+  readonly truncated: boolean;
+  readonly limit: number;
   /** An output report is scheduled; reports are coalesced so a flood of chunks costs one each. */
-  reporting: boolean;
-  exit: TerminalExitStatus | undefined;
-  exited: Promise<TerminalExitStatus>;
+  readonly reporting: boolean;
+  readonly exit: TerminalExitStatus | undefined;
+  readonly exited: Promise<TerminalExitStatus>;
 }
 
 /** Keeps the last `limit` bytes of `text`, cut at a character boundary. */
@@ -42,12 +44,12 @@ function keepEnd(text: string, limit: number): { text: string; cut: boolean } {
   return { text: bytes.subarray(start).toString("utf8"), cut: true };
 }
 
-function trim(running: Running) {
-  if (running.bytes <= running.limit) return;
+/** The terminal with its output cut to its limit. */
+function trimmed(running: Running): Running {
+  if (running.bytes <= running.limit) return running;
   const kept = keepEnd(running.output, running.limit);
-  running.output = kept.text;
-  running.bytes = Buffer.byteLength(kept.text);
-  running.truncated ||= kept.cut;
+  const bytes = Buffer.byteLength(kept.text);
+  return { ...running, output: kept.text, bytes, truncated: running.truncated || kept.cut };
 }
 
 /** Signals the command and everything it started, where the platform allows. */
@@ -68,7 +70,7 @@ function signal(child: ChildProcess, name: NodeJS.Signals) {
  * session's directory unless the agent names another absolute one.
  */
 export class Terminals {
-  #all = new Map<string, Running>();
+  #all: ReadonlyMap<string, Running> = new Map();
   #count = 0;
   #report: Report;
 
@@ -91,7 +93,7 @@ export class Terminals {
     });
     this.#count += 1;
     const terminalId = `pi-terminal-${this.#count}`;
-    const running: Running = {
+    this.#all = put(this.#all, terminalId, {
       sessionId: request.sessionId,
       child,
       output: "",
@@ -100,19 +102,18 @@ export class Terminals {
       limit: Math.max(0, Math.min(request.outputByteLimit ?? OUTPUT_LIMIT, OUTPUT_LIMIT)),
       reporting: false,
       exit: undefined,
-      exited: this.#exited(terminalId, child, () => running),
-    };
-    const append = (chunk: Buffer) => this.#append(terminalId, running, chunk.toString("utf8"));
+      exited: this.#exited(terminalId, child),
+    });
+    const append = (chunk: Buffer) => this.#append(terminalId, chunk.toString("utf8"));
     child.stdout?.on("data", append);
     child.stderr?.on("data", append);
-    this.#all.set(terminalId, running);
     return { terminalId };
   }
 
   output(sessionId: string, terminalId: string): TerminalOutputResponse {
-    const running = this.#get(sessionId, terminalId);
-    trim(running);
-    const { output, truncated, exit } = running;
+    const kept = trimmed(this.#get(sessionId, terminalId));
+    this.#all = put(this.#all, terminalId, kept);
+    const { output, truncated, exit } = kept;
     return { output, truncated, ...(exit ? { exitStatus: exit } : {}) };
   }
 
@@ -131,7 +132,7 @@ export class Terminals {
 
   release(sessionId: string, terminalId: string): Record<string, never> {
     this.kill(sessionId, terminalId);
-    this.#all.delete(terminalId);
+    this.#all = without(this.#all, terminalId);
     this.#report(sessionId, terminalId, undefined);
     return {};
   }
@@ -154,12 +155,12 @@ export class Terminals {
   }
 
   /** Resolves when the command exits, once its output is in or a moment has passed for it. */
-  #exited(terminalId: string, child: ChildProcess, running: () => Running) {
+  #exited(terminalId: string, child: ChildProcess) {
     return new Promise<TerminalExitStatus>((resolve) => {
       const end = (exit: TerminalExitStatus) => {
-        const state = running();
-        state.exit ??= exit;
-        resolve(state.exit);
+        const running = this.#all.get(terminalId);
+        if (running && !running.exit) this.#all = put(this.#all, terminalId, { ...running, exit });
+        resolve(running?.exit ?? exit);
       };
       const closed = new Promise<void>((done) => child.once("close", () => done()));
       child.once("exit", (exitCode, signalName) => {
@@ -168,24 +169,32 @@ export class Terminals {
         void Promise.race([closed, drained]).then(finish, finish);
       });
       child.once("error", (error) => {
-        this.#append(terminalId, running(), `${error.message}\n`);
+        this.#append(terminalId, `${error.message}\n`);
         end({ exitCode: null, signal: null });
       });
     });
   }
 
-  #append(terminalId: string, running: Running, text: string) {
-    running.output += text;
-    running.bytes += Buffer.byteLength(text);
+  #append(terminalId: string, text: string) {
+    const running = this.#all.get(terminalId);
+    if (!running) return;
+    const grown = {
+      ...running,
+      output: running.output + text,
+      bytes: running.bytes + Buffer.byteLength(text),
+    };
     // Trimming copies what is kept, so it waits until twice the limit has piled up.
-    if (running.bytes > 2 * running.limit) trim(running);
-    if (running.reporting) return;
-    running.reporting = true;
-    setImmediate(() => {
-      running.reporting = false;
-      if (!this.#all.has(terminalId)) return;
-      trim(running);
-      this.#report(running.sessionId, terminalId, running.output);
-    });
+    const kept = grown.bytes > 2 * grown.limit ? trimmed(grown) : grown;
+    this.#all = put(this.#all, terminalId, { ...kept, reporting: true });
+    if (!running.reporting) setImmediate(() => this.#reportOutput(terminalId));
+  }
+
+  /** Tells the session a terminal's output, once for all the chunks since the last report. */
+  #reportOutput(terminalId: string) {
+    const running = this.#all.get(terminalId);
+    if (!running) return;
+    const current = { ...trimmed(running), reporting: false };
+    this.#all = put(this.#all, terminalId, current);
+    this.#report(current.sessionId, terminalId, current.output);
   }
 }

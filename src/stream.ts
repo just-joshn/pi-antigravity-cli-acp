@@ -2,23 +2,22 @@ import { createHash } from "node:crypto";
 
 import type { ContentBlock } from "@agentclientprotocol/sdk/unstable";
 import {
-  type AssistantMessage,
-  createAssistantMessageEventStream,
   getCurrentTools,
   type Message,
   type Model,
   type StopReason,
   type StreamOptions,
   type TranscriptContext,
-  type Usage,
   type UserMessage,
 } from "@earendil-works/pi-ai";
 
 import { AGENT_DEFAULT, effortFor, PROVIDER } from "./catalog.ts";
 import { AcpError, reasonOf } from "./client.ts";
 import type { Conversation } from "./conversation.ts";
+import { Draft } from "./draft.ts";
+import { Registry } from "./immutable.ts";
 import type { AcpSession, ToolView, Turn, TurnEvent } from "./session.ts";
-import { TOOL_NAME, toolArguments } from "./tool.ts";
+import { TOOL_NAME } from "./tool.ts";
 
 /** Longest wait for the agent to confirm that a cancelled turn has ended. */
 const CANCEL_GRACE_MS = 5000;
@@ -163,8 +162,6 @@ async function applyChoices(session: AcpSession, model: Model<string>, level: st
   return (await session.select("thought_level", effort)) === "unavailable" ? undefined : effort;
 }
 
-const halting = new WeakMap<Turn, Promise<boolean>>();
-
 /**
  * Stops the turn in progress. Resolves false when the agent did not confirm within `graceMs`:
  * the session is then still busy and must not be prompted again.
@@ -172,9 +169,7 @@ const halting = new WeakMap<Turn, Promise<boolean>>();
 export function haltTurn(session: AcpSession, graceMs = CANCEL_GRACE_MS): Promise<boolean> {
   const { turn } = session;
   if (!turn) return Promise.resolve(true);
-  const running = halting.get(turn);
-  if (running) return running;
-  const stop = (async () => {
+  return turn.haltOnce(async () => {
     const giveUp = new AbortController();
     const ended = (async () => {
       await session.cancelTurn();
@@ -194,9 +189,7 @@ export function haltTurn(session: AcpSession, graceMs = CANCEL_GRACE_MS): Promis
     giveUp.abort();
     session.endTurn(turn);
     return confirmed;
-  })();
-  halting.set(turn, stop);
-  return stop;
+  });
 }
 
 const STOP: Record<Extract<TurnEvent, { type: "end" }>["stopReason"], StopReason> = {
@@ -209,106 +202,6 @@ const STOP: Record<Extract<TurnEvent, { type: "end" }>["stopReason"], StopReason
 
 class Aborted extends Error {}
 
-/** Usage of a message the agent's tokens are not counted against. */
-export function noUsage(): Usage {
-  return {
-    input: 0,
-    output: 0,
-    cacheRead: 0,
-    cacheWrite: 0,
-    totalTokens: 0,
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-  };
-}
-
-/** Writes one Pi assistant message as the agent's events arrive. */
-class Draft {
-  readonly message: AssistantMessage;
-  readonly events = createAssistantMessageEventStream();
-  #open: "text" | "thinking" | undefined;
-
-  constructor(model: Model<string>) {
-    this.message = {
-      role: "assistant",
-      api: model.api,
-      provider: model.provider,
-      model: model.id,
-      timestamp: Date.now(),
-      content: [],
-      usage: noUsage(),
-      stopReason: "pending",
-    };
-  }
-
-  append(kind: "text" | "thinking", delta: string) {
-    if (this.#open !== kind) {
-      this.close();
-      this.#open = kind;
-      this.message.content.push(
-        kind === "text" ? { type: "text", text: "" } : { type: "thinking", thinking: "" },
-      );
-      this.events.push({ type: `${kind}_start`, contentIndex: this.#index, partial: this.message });
-    }
-    const block = this.message.content[this.#index];
-    if (block?.type === "text") block.text += delta;
-    else if (block?.type === "thinking") block.thinking += delta;
-    this.events.push({
-      type: `${kind}_delta`,
-      contentIndex: this.#index,
-      delta,
-      partial: this.message,
-    });
-  }
-
-  close() {
-    const block = this.message.content[this.#index];
-    const partial = this.message;
-    if (this.#open === "text" && block?.type === "text")
-      this.events.push({
-        type: "text_end",
-        contentIndex: this.#index,
-        content: block.text,
-        partial,
-      });
-    else if (this.#open === "thinking" && block?.type === "thinking")
-      this.events.push({
-        type: "thinking_end",
-        contentIndex: this.#index,
-        content: block.thinking,
-        partial,
-      });
-    this.#open = undefined;
-  }
-
-  begin() {
-    this.events.push({ type: "start", partial: this.message });
-  }
-
-  finish(reason: "stop" | "length" | "toolUse") {
-    this.close();
-    this.message.stopReason = reason;
-    this.events.push({ type: "done", reason, message: this.message });
-  }
-
-  call(id: string, tool: ToolView) {
-    this.close();
-    const toolCall = {
-      type: "toolCall" as const,
-      id,
-      name: TOOL_NAME,
-      arguments: toolArguments(tool),
-    };
-    this.message.content.push(toolCall);
-    const partial = this.message;
-    this.events.push({ type: "toolcall_start", contentIndex: this.#index, partial });
-    this.events.push({ type: "toolcall_end", contentIndex: this.#index, toolCall, partial });
-  }
-
-  get #index() {
-    return this.message.content.length - 1;
-  }
-}
-
 type Request = StreamOptions & { reasoning?: string };
 type EndEvent = Extract<TurnEvent, { type: "end" | "failed" }>;
 
@@ -320,7 +213,7 @@ class Reply {
   readonly draft: Draft;
   #host: StreamHost;
   /** User messages whose turn failed after reaching the agent, by `messageKey`. */
-  #unfinished: Set<string>;
+  #unfinished: Registry<true>;
   #sent: UserMessage[] = [];
   #model: Model<string>;
   #context: TranscriptContext;
@@ -332,7 +225,7 @@ class Reply {
     model: Model<string>,
     context: TranscriptContext,
     options: Request,
-    unfinished: Set<string>,
+    unfinished: Registry<true>,
   ) {
     this.draft = new Draft(model);
     this.#unfinished = unfinished;
@@ -351,9 +244,9 @@ class Reply {
 
   /** Stamps the message with the session's position so the next request can tell what the agent has seen. */
   #stamp(active: Conversation) {
-    const { message } = this.draft;
-    message.responseId = active.stamp();
-    message.usage.totalTokens = active.session.usage?.used ?? 0;
+    const { usage } = this.draft.message;
+    const totalTokens = active.session.usage?.used ?? 0;
+    this.draft.update({ responseId: active.stamp(), usage: { ...usage, totalTokens } });
   }
 
   async #run() {
@@ -362,7 +255,7 @@ class Reply {
     if (!this.#host.conversing(sessionId)) throw new AcpError(OUTSIDE_CONVERSATION);
     // An automatic retry would give the agent the same message twice, repeating whatever it did.
     const pending = planTurn(this.#context.messages, undefined).prompt;
-    if (pending.some((message) => this.#unfinished.has(messageKey(message))))
+    if (pending.some((message) => this.#unfinished.get(messageKey(message))))
       throw new AcpError(NOT_RESENT);
     const seen = lastAnchor(this.#context.messages).anchor;
     this.draft.begin();
@@ -402,7 +295,7 @@ class Reply {
     const plan = planTurn(this.#context.messages, conversation.anchor);
     const prompt = promptBlocks(plan, conversation.accepts);
     const effort = await applyChoices(conversation.session, this.#model, this.#options.reasoning);
-    if (effort !== undefined) this.draft.message.providerThinkingLevel = effort;
+    if (effort !== undefined) this.draft.update({ providerThinkingLevel: effort });
     signal?.throwIfAborted();
     this.#sent = plan.prompt;
     conversation.startTurn(prompt);
@@ -436,17 +329,18 @@ class Reply {
     active.session.endTurn(turn);
     this.#stamp(active);
     if (event.type === "failed") throw new AcpError(event.message);
-    const { message } = this.draft;
     const usage = event.usage;
-    message.usage = {
-      ...message.usage,
-      input: usage?.inputTokens ?? 0,
-      output: usage?.outputTokens ?? 0,
-      cacheRead: usage?.cachedReadTokens ?? 0,
-      cacheWrite: usage?.cachedWriteTokens ?? 0,
-      ...(typeof usage?.thoughtTokens === "number" ? { reasoning: usage.thoughtTokens } : {}),
-    };
-    message.rawStopReason = event.stopReason;
+    this.draft.update({
+      usage: {
+        ...this.draft.message.usage,
+        input: usage?.inputTokens ?? 0,
+        output: usage?.outputTokens ?? 0,
+        cacheRead: usage?.cachedReadTokens ?? 0,
+        cacheWrite: usage?.cachedWriteTokens ?? 0,
+        ...(typeof usage?.thoughtTokens === "number" ? { reasoning: usage.thoughtTokens } : {}),
+      },
+      rawStopReason: event.stopReason,
+    });
     const reason = STOP[event.stopReason];
     if (reason === "aborted") throw new Aborted();
     if (reason === "error") throw new AcpError("Antigravity refused this request.");
@@ -461,15 +355,15 @@ class Reply {
       this.#stamp(conversation);
       if (!(await haltTurn(conversation.session, this.#host.cancelGraceMs))) this.#host.abandon();
     }
-    if (!aborted) for (const sent of this.#sent) this.#unfinished.add(messageKey(sent));
-    const { message } = this.draft;
-    message.stopReason = aborted ? "aborted" : "error";
-    message.errorMessage = aborted
-      ? "Antigravity request cancelled."
-      : error instanceof AcpError
-        ? error.message
-        : `The Antigravity agent stopped unexpectedly (${reasonOf(error, "no reason given")}). Check that \`agy\` works in a terminal.`;
-    this.draft.events.push({ type: "error", reason: message.stopReason, error: message });
+    if (!aborted) for (const sent of this.#sent) this.#unfinished.put(messageKey(sent), true);
+    this.draft.fail(
+      aborted ? "aborted" : "error",
+      aborted
+        ? "Antigravity request cancelled."
+        : error instanceof AcpError
+          ? error.message
+          : `The Antigravity agent stopped unexpectedly (${reasonOf(error, "no reason given")}). Check that \`agy\` works in a terminal.`,
+    );
   }
 }
 
@@ -480,7 +374,7 @@ function messageKey(message: UserMessage): string {
 }
 
 export function createStream(host: StreamHost) {
-  const unfinished = new Set<string>();
+  const unfinished = new Registry<true>();
   return (model: Model<string>, context: TranscriptContext, options: Request = {}) =>
     new Reply(host, model, context, options, unfinished).start();
 }

@@ -1,5 +1,6 @@
 import type { ContentBlock } from "@agentclientprotocol/sdk/unstable";
 
+import { put } from "./immutable.ts";
 import type { AcpSession, ToolView, Turn } from "./session.ts";
 
 /** Where a saved assistant message left an agent session: `<session id>/<turns>.<segment>`. */
@@ -15,8 +16,10 @@ export class Conversation {
   #anchor: string | undefined;
   /** Assistant messages built from the turn in progress. */
   #segment = 0;
-  /** Mirrored Pi tool call id to the agent's tool call id. */
-  #toolIds = new Map<string, string>();
+  /** Tool calls mirrored so far; numbers the Pi tool call ids. */
+  #mirrored = 0;
+  /** Mirrored Pi tool call id to the agent's tool call id, for the turn in progress. */
+  #toolIds: ReadonlyMap<string, string> = new Map();
 
   /** `anchor` is set when the session was reopened at that position of Pi's transcript. */
   constructor(session: AcpSession, accepts: Conversation["accepts"], anchor?: string) {
@@ -32,6 +35,8 @@ export class Conversation {
 
   startTurn(prompt: ContentBlock[]): Turn {
     this.#segment = 0;
+    // The agent's tool calls belong to their turn; earlier ones can no longer be followed.
+    this.#toolIds = new Map();
     return this.session.startTurn(prompt);
   }
 
@@ -46,8 +51,9 @@ export class Conversation {
   mirror(tool: ToolView): string {
     const prefix = this.session.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 40);
     // The turn keeps ids unique when the session is reopened and this count starts again.
-    const id = `agy_${prefix}_${this.session.turns}_${this.#toolIds.size + 1}`;
-    this.#toolIds.set(id, tool.id);
+    this.#mirrored += 1;
+    const id = `agy_${prefix}_${this.session.turns}_${this.#mirrored}`;
+    this.#toolIds = put(this.#toolIds, id, tool.id);
     return id;
   }
 

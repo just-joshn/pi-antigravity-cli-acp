@@ -93,13 +93,15 @@ export function choiceLabels(options: readonly { name: string; kind: string }[])
   const named = new Map<string, number>();
   for (const { name } of options) named.set(name, (named.get(name) ?? 0) + 1);
   const used = new Set<string>();
-  return options.map((option, index) => {
+  const result: string[] = [];
+  for (const [index, option] of options.entries()) {
     const shared = (named.get(option.name) ?? 0) > 1;
     const label = shared ? `${option.name} [${option.kind.replaceAll("_", " ")}]` : option.name;
     const unique = used.has(label) ? `${label} #${index + 1}` : label;
     used.add(unique);
-    return unique;
-  });
+    result.push(unique);
+  }
+  return result;
 }
 
 type Watch = (

@@ -16,6 +16,7 @@ import type {
 } from "@agentclientprotocol/sdk/unstable";
 
 import { isRecord } from "./guards.ts";
+import { put, without } from "./immutable.ts";
 import { isPlanUpdate, nextPlan, type Plan } from "./plan.ts";
 
 /** The agent settings a client can change, named by ACP's config-option categories. */
@@ -94,14 +95,48 @@ export interface SessionHooks {
   changed(): void;
 }
 
-/** Ordered events of one prompt turn. Each event goes to one reader. */
+/** An immutable list, newest first. */
+type Stack<T> = { readonly head: T; readonly tail: Stack<T> } | undefined;
+
+function reversed<T>(stack: Stack<T>): Stack<T> {
+  let result: Stack<T>;
+  for (let rest = stack; rest; rest = rest.tail) result = { head: rest.head, tail: result };
+  return result;
+}
+
+/**
+ * Ordered events of one prompt turn. Each event goes to one reader. The queue is two immutable
+ * lists, so adding and taking an event are constant time on average without changing either list.
+ */
 export class Turn {
-  #queue: TurnEvent[] = [];
-  #waiting = new Set<() => void>();
+  #front: Stack<TurnEvent>;
+  #back: Stack<TurnEvent>;
+  #waiting: readonly (() => void)[] = [];
+  #halting: Promise<boolean> | undefined;
+
+  /** Runs `halt` once for this turn; later callers share its result. */
+  haltOnce(halt: () => Promise<boolean>): Promise<boolean> {
+    this.#halting ??= halt();
+    return this.#halting;
+  }
 
   push(event: TurnEvent) {
-    this.#queue.push(event);
+    this.#back = { head: event, tail: this.#back };
     for (const wake of this.#waiting) wake();
+  }
+
+  #peek(): TurnEvent | undefined {
+    if (!this.#front) {
+      this.#front = reversed(this.#back);
+      this.#back = undefined;
+    }
+    return this.#front?.head;
+  }
+
+  #shift(): TurnEvent | undefined {
+    const head = this.#peek();
+    this.#front = this.#front?.tail;
+    return head;
   }
 
   /** The next event. With a signal, resolves with undefined once it aborts and nothing is queued. */
@@ -109,16 +144,16 @@ export class Turn {
   next(signal: AbortSignal | undefined): Promise<TurnEvent | undefined>;
   async next(signal?: AbortSignal): Promise<TurnEvent | undefined> {
     for (;;) {
-      const event = this.#queue.shift();
+      const event = this.#shift();
       if (event || signal?.aborted) return event;
       // oxlint-disable-next-line no-await-in-loop -- waits for the next event; nothing to run in parallel
       await new Promise<void>((resolve) => {
         const wake = () => {
-          this.#waiting.delete(wake);
+          this.#waiting = this.#waiting.filter((waiting) => waiting !== wake);
           signal?.removeEventListener("abort", wake);
           resolve();
         };
-        this.#waiting.add(wake);
+        this.#waiting = [...this.#waiting, wake];
         signal?.addEventListener("abort", wake, { once: true });
       });
     }
@@ -126,9 +161,9 @@ export class Turn {
 
   /** Takes the next event only when it is a tool call that has already arrived. */
   takeTool(): ToolView | undefined {
-    const head = this.#queue[0];
+    const head = this.#peek();
     if (head?.type !== "tool") return undefined;
-    this.#queue.shift();
+    this.#shift();
     return head.tool;
   }
 }
@@ -158,10 +193,10 @@ export class AcpSession {
   #usage: { used: number; size: number } | undefined;
   #commands: readonly AgentCommand[] | undefined;
   /** Latest output of each client terminal of this session. */
-  #terminals = new Map<string, string>();
+  #terminals: ReadonlyMap<string, string> = new Map();
   #plan: Plan | undefined;
-  #tools = new Map<string, ToolView>();
-  #watchers = new Map<string, Set<(tool: ToolView) => void>>();
+  #tools: ReadonlyMap<string, ToolView> = new Map();
+  #watchers: ReadonlyMap<string, readonly ((tool: ToolView) => void)[]> = new Map();
   #turn: Turn | undefined;
   #dialogs = new AbortController();
   #port: AgentPort;
@@ -254,7 +289,7 @@ export class AcpSession {
     this.#turns += 1;
     this.#turn = turn;
     this.#settleTools();
-    this.#tools.clear();
+    this.#tools = new Map();
     const dialogs = new AbortController();
     this.#dialogs = dialogs;
     const finish = (event: TurnEvent) => {
@@ -297,11 +332,8 @@ export class AcpSession {
     const current = this.#tools.get(id);
     if (!current || current.settled || signal?.aborted) return Promise.resolve(current);
     return new Promise((resolve) => {
-      const watchers = this.#watchers.get(id) ?? new Set();
-      this.#watchers.set(id, watchers);
       const done = (tool: ToolView | undefined) => {
-        watchers.delete(watch);
-        if (watchers.size === 0) this.#watchers.delete(id);
+        this.#unwatch(id, watch);
         signal?.removeEventListener("abort", abort);
         resolve(tool);
       };
@@ -310,9 +342,14 @@ export class AcpSession {
         else onChange(tool);
       };
       const abort = () => done(this.#tools.get(id));
-      watchers.add(watch);
+      this.#watchers = put(this.#watchers, id, [...(this.#watchers.get(id) ?? []), watch]);
       signal?.addEventListener("abort", abort, { once: true });
     });
+  }
+
+  #unwatch(id: string, watch: (tool: ToolView) => void) {
+    const left = (this.#watchers.get(id) ?? []).filter((other) => other !== watch);
+    this.#watchers = left.length ? put(this.#watchers, id, left) : without(this.#watchers, id);
   }
 
   receive(update: SessionUpdate) {
@@ -419,10 +456,10 @@ export class AcpSession {
   terminalOutput(terminalId: string, output: string | undefined) {
     // A released terminal's last output stays in the tool calls that showed it.
     if (output === undefined) {
-      this.#terminals.delete(terminalId);
+      this.#terminals = without(this.#terminals, terminalId);
       return;
     }
-    this.#terminals.set(terminalId, output);
+    this.#terminals = put(this.#terminals, terminalId, output);
     for (const tool of this.#tools.values()) {
       const shows = tool.content.some(
         (item) => item.type === "terminal" && item.terminalId === terminalId,
@@ -438,7 +475,7 @@ export class AcpSession {
   }
 
   #publish(tool: ToolView) {
-    this.#tools.set(tool.id, tool);
+    this.#tools = put(this.#tools, tool.id, tool);
     for (const watch of this.#watchers.get(tool.id) ?? []) watch(tool);
   }
 }

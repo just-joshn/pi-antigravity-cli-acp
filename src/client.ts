@@ -9,12 +9,14 @@ import {
   PROTOCOL_VERSION,
   RequestError,
   type SessionConfigOption,
+  type SessionInfo,
   type Stream,
 } from "@agentclientprotocol/sdk/unstable";
 
 import { readTextFile, writeTextFile } from "./fs.ts";
 import { isRecord } from "./guards.ts";
-import { type Exchange, hold, type Inbox, type Replay } from "./inbox.ts";
+import { Registry } from "./immutable.ts";
+import { type Exchange, Inbox } from "./inbox.ts";
 import { AcpSession, type AgentPort, type SessionHooks } from "./session.ts";
 import { Terminals } from "./terminal.ts";
 
@@ -53,6 +55,14 @@ export interface SavedSession {
 
 const LIST_PAGES = 5;
 
+function savedSession(info: SessionInfo): SavedSession {
+  return {
+    id: info.sessionId,
+    title: info.title ?? undefined,
+    updatedAt: info.updatedAt ?? undefined,
+  };
+}
+
 function tierName(meta: unknown): string | undefined {
   const antigravity = isRecord(meta) ? meta["antigravity"] : undefined;
   const tier = isRecord(antigravity) ? antigravity["tier"] : undefined;
@@ -80,13 +90,13 @@ function explain(action: string) {
 }
 
 /** Runs the agent's commands for the sessions in `sessions`. */
-function terminalsFor(sessions: ReadonlyMap<string, AcpSession>) {
+function terminalsFor(sessions: Registry<AcpSession>) {
   return new Terminals((sessionId, terminalId, output) =>
     sessions.get(sessionId)?.terminalOutput(terminalId, output),
   );
 }
 
-function sessionCwd(sessions: ReadonlyMap<string, AcpSession>, sessionId: string): string {
+function sessionCwd(sessions: Registry<AcpSession>, sessionId: string): string {
   const session = sessions.get(sessionId);
   if (!session) throw RequestError.invalidParams(undefined, `no session ${sessionId}`);
   return session.cwd;
@@ -97,7 +107,7 @@ type ClientBuilder = ReturnType<typeof client>;
 /** Answers the agent's terminal requests; each names its session and terminal. */
 function serveTerminals(
   builder: ClientBuilder,
-  sessions: ReadonlyMap<string, AcpSession>,
+  sessions: Registry<AcpSession>,
   terminals: Terminals,
 ): ClientBuilder {
   return builder
@@ -122,7 +132,7 @@ function serveTerminals(
 function serve(
   stream: Stream,
   identity: ClientIdentity,
-  sessions: ReadonlyMap<string, AcpSession>,
+  sessions: Registry<AcpSession>,
   inbox: Inbox,
   hooks: SessionHooks,
   terminals: Terminals,
@@ -151,7 +161,7 @@ function serve(
       const session = sessions.get(params.sessionId);
       // Agents report usage before session/new returns; keep it until the session exists.
       if (session) session.receive(params.update);
-      else hold(inbox, params.sessionId, params.update);
+      else inbox.hold(params.sessionId, params.update);
     })
     .connect(stream);
 }
@@ -213,13 +223,13 @@ export class AcpClient {
   readonly signInMethods: readonly SignInMethod[];
   #connection: ClientConnection;
   #terminals: Terminals;
-  #sessions: Map<string, AcpSession>;
+  #sessions: Registry<AcpSession>;
   #inbox: Inbox;
   #hooks: SessionHooks;
 
   private constructor(
     connection: ClientConnection,
-    sessions: Map<string, AcpSession>,
+    sessions: Registry<AcpSession>,
     inbox: Inbox,
     hooks: SessionHooks,
     terminals: Terminals,
@@ -241,8 +251,8 @@ export class AcpClient {
     identity: ClientIdentity,
     hooks: SessionHooks,
   ): Promise<AcpClient> {
-    const sessions = new Map<string, AcpSession>();
-    const inbox: Inbox = { early: new Map(), replays: new Map() };
+    const sessions = new Registry<AcpSession>();
+    const inbox = new Inbox();
     const terminals = terminalsFor(sessions);
     const connection = serve(stream, identity, sessions, inbox, hooks, terminals);
     const introduction: InitializeRequest = {
@@ -263,7 +273,9 @@ export class AcpClient {
       });
     if (hello.protocolVersion !== PROTOCOL_VERSION) {
       connection.close();
-      throw new AcpError("This Antigravity agent speaks an ACP version this extension does not.");
+      throw new AcpError(
+        `This Antigravity agent speaks ACP version ${hello.protocolVersion}; this extension speaks version ${PROTOCOL_VERSION}.`,
+      );
     }
     return new AcpClient(connection, sessions, inbox, hooks, terminals, introduced(hello));
   }
@@ -300,21 +312,19 @@ export class AcpClient {
    * Resolves with undefined when the agent cannot load sessions or no longer has this one.
    */
   async loadSession(sessionId: string, where: Workspace): Promise<AcpSession | undefined> {
-    return this.#load(sessionId, where, { turns: 0, userSpeaking: false });
+    return (await this.#load(sessionId, where, false))?.session;
   }
 
   /** A saved conversation's text, read by loading it and closing it again. */
-  async readTranscript(sessionId: string, where: Workspace): Promise<Exchange[] | undefined> {
-    const exchanges: Exchange[] = [];
-    const session = await this.#load(sessionId, where, {
-      turns: 0,
-      userSpeaking: false,
-      exchanges,
-    });
-    if (!session) return undefined;
+  async readTranscript(
+    sessionId: string,
+    where: Workspace,
+  ): Promise<readonly Exchange[] | undefined> {
+    const loaded = await this.#load(sessionId, where, true);
+    if (!loaded) return undefined;
     // Closing frees the agent's memory; a session left open costs nothing visible.
     await this.closeSession(sessionId).catch(() => undefined);
-    return exchanges;
+    return loaded.exchanges;
   }
 
   /** The agent's saved conversations for `cwd`, newest first as the agent lists them. */
@@ -327,35 +337,28 @@ export class AcpClient {
       const listed = await this.#connection.agent
         .request(methods.agent.session.list, { cwd, ...(cursor ? { cursor } : {}) })
         .catch(explain("list its sessions"));
-      for (const info of listed.sessions)
-        found.push({
-          id: info.sessionId,
-          title: info.title ?? undefined,
-          updatedAt: info.updatedAt ?? undefined,
-        });
+      found.push(...listed.sessions.map(savedSession));
       cursor = listed.nextCursor ?? undefined;
       if (!cursor) break;
     }
     return found;
   }
 
-  async #load(sessionId: string, where: Workspace, replay: Replay) {
+  async #load(sessionId: string, where: Workspace, keepText: boolean) {
     if (!this.offers.load) return undefined;
-    this.#inbox.early.delete(sessionId);
-    this.#inbox.replays.set(sessionId, replay);
-    try {
-      const loaded = await this.#connection.agent.request(methods.agent.session.load, {
-        sessionId,
-        ...this.#place(where),
+    this.#inbox.startReplay(sessionId, keepText);
+    const loaded = await this.#connection.agent
+      .request(methods.agent.session.load, { sessionId, ...this.#place(where) })
+      .catch((error: unknown) => {
+        this.#inbox.endReplay(sessionId);
+        this.#inbox.take(sessionId);
+        if (error instanceof RequestError && error.code === RESOURCE_NOT_FOUND) return undefined;
+        return explain("reopen the saved session")(error);
       });
-      return this.#adopt(sessionId, loaded, this.#place(where), replay.turns);
-    } catch (error) {
-      this.#inbox.early.delete(sessionId);
-      if (error instanceof RequestError && error.code === RESOURCE_NOT_FOUND) return undefined;
-      return explain("reopen the saved session")(error);
-    } finally {
-      this.#inbox.replays.delete(sessionId);
-    }
+    if (!loaded) return undefined;
+    const replay = this.#inbox.endReplay(sessionId);
+    const session = this.#adopt(sessionId, loaded, this.#place(where), replay?.turns ?? 0);
+    return { session, exchanges: replay?.exchanges ?? [] };
   }
 
   async signIn(methodId: string): Promise<void> {
@@ -371,8 +374,8 @@ export class AcpClient {
   /** Lets the agent free a session this client no longer uses. */
   async closeSession(sessionId: string): Promise<void> {
     this.#terminals.releaseSession(sessionId);
-    this.#sessions.delete(sessionId);
-    this.#inbox.early.delete(sessionId);
+    this.#sessions.remove(sessionId);
+    this.#inbox.take(sessionId);
     if (!this.offers.close) return;
     await this.#connection.agent
       .request(methods.agent.session.close, { sessionId })
@@ -411,9 +414,8 @@ export class AcpClient {
       port,
       this.#hooks,
     );
-    this.#sessions.set(session.id, session);
-    for (const update of this.#inbox.early.get(session.id) ?? []) session.receive(update);
-    this.#inbox.early.delete(session.id);
+    this.#sessions.put(session.id, session);
+    for (const update of this.#inbox.take(session.id)) session.receive(update);
     return session;
   }
 

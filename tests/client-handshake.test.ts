@@ -63,7 +63,9 @@ test("an agent that needs sign-in, fails to start or speaks another ACP version 
     b.onRequest(methods.agent.initialize, () => ({ protocolVersion: PROTOCOL_VERSION + 1 })),
   );
   await expect(refused).rejects.toThrow(AcpError);
-  await expect(refused).rejects.toThrow(/ACP version/);
+  await expect(refused).rejects.toThrow(
+    `This Antigravity agent speaks ACP version ${PROTOCOL_VERSION + 1}; this extension speaks version ${PROTOCOL_VERSION}.`,
+  );
 });
 
 test("an agent that says little about itself still gets a working session", async () => {

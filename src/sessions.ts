@@ -4,19 +4,21 @@ import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import type { Antigravity } from "./antigravity.ts";
 import { AGENT_DEFAULT, API, PROVIDER } from "./catalog.ts";
 import type { SavedSession } from "./client.ts";
+import { noUsage } from "./draft.ts";
 import type { Exchange } from "./inbox.ts";
-import { noUsage } from "./stream.ts";
 
 /** One label per session, numbered when titles and times repeat. */
 export function labels(saved: readonly SavedSession[]): string[] {
   const seen = new Map<string, number>();
-  return saved.map((session) => {
+  const result: string[] = [];
+  for (const session of saved) {
     const when = session.updatedAt ? ` — ${session.updatedAt.slice(0, 16).replace("T", " ")}` : "";
     const text = `${session.title ?? "Untitled"}${when}`;
     const count = (seen.get(text) ?? 0) + 1;
     seen.set(text, count);
-    return count > 1 ? `${text} (${count})` : text;
-  });
+    result.push(count > 1 ? `${text} (${count})` : text);
+  }
+  return result;
 }
 
 /** Pi messages for a replayed conversation. Each reply carries the agent session's position. */

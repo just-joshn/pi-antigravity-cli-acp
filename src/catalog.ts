@@ -46,9 +46,7 @@ function levelsByModel(variants: readonly string[]): Map<string, string[]> {
     const level = variant.slice(cut + 1);
     if (cut < 0 || !LEVELS.has(level)) continue;
     const model = variant.slice(0, cut);
-    const found = levels.get(model);
-    if (found) found.push(level);
-    else levels.set(model, [level]);
+    levels.set(model, [...(levels.get(model) ?? []), level]);
   }
   return levels;
 }
