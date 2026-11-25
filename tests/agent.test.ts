@@ -1,16 +1,34 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { Stream } from "@agentclientprotocol/sdk/unstable";
 import { expect, onTestFinished, test } from "vitest";
 
-import { findRegistryAgent, launch, registryRoot } from "../src/agent.ts";
+import { findRegistryAgent, launch, registryRoot, resolveAgent } from "../src/agent.ts";
+import { AcpError } from "../src/client.ts";
 
 async function scratch() {
   const dir = await mkdtemp(join(tmpdir(), "pi-acp-agent-"));
   onTestFinished(() => rm(dir, { recursive: true, force: true }));
   return dir;
+}
+
+async function program(file: string) {
+  await mkdir(join(file, ".."), { recursive: true });
+  await writeFile(file, "#!/bin/sh\n");
+  await chmod(file, 0o755);
+}
+
+/** Two registry copies of the agent under a scratch HOME, as Zed installs them on macOS. */
+async function installCopies() {
+  const home = await scratch();
+  const root = registryRoot({ HOME: home }, "darwin");
+  const older = join(root, "antigravity-acp", "v_1.5.2_aaaa", "agy_acp_server.par");
+  const newer = join(root, "antigravity-acp", "v_1.10.0_bbbb", "agy_acp_server.par");
+  await Promise.all([program(older), program(newer)]);
+  await mkdir(join(root, "antigravity-acp", "not-a-version"));
+  return { home, root, newer, env: { HOME: home, PATH: join(home, "bin") } };
 }
 
 /** Resolves when the agent's output ends, whether it exited cleanly or not. */
@@ -32,6 +50,66 @@ const alive = (pid: number) => {
     return false;
   }
 };
+
+test("the registry directory follows each platform's data directory", async () => {
+  const home = await scratch();
+  expect(registryRoot({ HOME: home }, "darwin")).toBe(
+    join(home, "Library", "Application Support", "Zed", "external_agents", "registry"),
+  );
+  expect(registryRoot({ HOME: "/h" }, "linux")).toMatch(/^\/h\/\.local\/share\/zed\//);
+  expect(registryRoot({ HOME: "/h", XDG_DATA_HOME: "/x" }, "linux")).toMatch(/^\/x\/zed\//);
+  expect(registryRoot({ LOCALAPPDATA: "/l" }, "win32")).toMatch(/^\/l\/Zed\//);
+});
+
+test("with no agent installed, each choice says what is missing", async () => {
+  const home = await scratch();
+  const env = { HOME: home, PATH: join(home, "bin") };
+  expect(() => resolveAgent("auto", env, "darwin", "arm64")).toThrow(AcpError);
+  expect(() => resolveAgent("registry", env, "darwin", "arm64")).toThrow(/Zed/);
+  expect(() => resolveAgent("cli", env, "darwin", "arm64")).toThrow(/agy.*PATH/);
+});
+
+test("without agy on PATH, the newest registry copy runs as its listing says", async () => {
+  const { root, newer, env } = await installCopies();
+  expect(resolveAgent("auto", env, "darwin", "arm64")).toStrictEqual({
+    kind: "registry",
+    command: newer,
+    args: [],
+  });
+  await writeFile(
+    join(root, "registry.json"),
+    JSON.stringify({
+      agents: [
+        { id: "other" },
+        {
+          id: "antigravity-acp",
+          distribution: {
+            binary: { "linux-x86_64": { cmd: "./agy_acp_server.par", args: ["--uid=", 7] } },
+          },
+        },
+      ],
+    }),
+  );
+  expect(findRegistryAgent(root, "linux-x86_64")).toStrictEqual({
+    kind: "registry",
+    command: newer,
+    args: ["--uid="],
+  });
+  expect(findRegistryAgent(root, "darwin-aarch64")?.args).toStrictEqual([]);
+});
+
+test("auto prefers agy on PATH, and a registry copy must be executable", async () => {
+  const { home, root, newer, env } = await installCopies();
+  await program(join(home, "bin", "agy"));
+  expect(resolveAgent("auto", env, "darwin", "arm64")).toStrictEqual({
+    kind: "cli",
+    command: "agy",
+    args: ["acp"],
+  });
+  expect(resolveAgent("registry", env, "darwin", "arm64").kind).toBe("registry");
+  await chmod(newer, 0o644);
+  expect(findRegistryAgent(root, "darwin-aarch64"), "not executable").toBe(undefined);
+});
 
 test("the registry directory falls back to USERPROFILE and Windows' default", () => {
   expect(registryRoot({ USERPROFILE: "/u" }, "darwin")).toMatch(/^\/u\/Library\//);

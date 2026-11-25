@@ -1,0 +1,130 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { expect, onTestFinished, test } from "vitest";
+
+import {
+  effortFor,
+  emptyCatalog,
+  learn,
+  piModels,
+  readCatalog,
+  writeCatalog,
+} from "../src/catalog.ts";
+import { connect } from "./support/harness.ts";
+
+async function scratch() {
+  const dir = await mkdtemp(join(tmpdir(), "pi-acp-catalog-"));
+  onTestFinished(() => rm(dir, { recursive: true, force: true }));
+  return dir;
+}
+
+test("the catalog learns every model's thinking levels from one session", async () => {
+  const listed = await connect({ script: () => [] });
+  onTestFinished(listed.close);
+  const first = learn(emptyCatalog, await listed.client.newSession("/work"));
+  expect(first.models).toStrictEqual([
+    { id: "gemini-a", name: "Gemini A", efforts: ["low", "medium", "high"] },
+    { id: "gemini-b", name: "Gemini B", efforts: ["low", "high", "xhigh"] },
+  ]);
+  expect(first.modes.map((mode) => mode.value)).toStrictEqual(["default", "auto"]);
+  expect(first.contextWindow).toBe(1_000_000);
+
+  const unlisted = await connect({ script: () => [], variants: false });
+  onTestFinished(unlisted.close);
+  const session = await unlisted.client.newSession("/work");
+  const guessed = learn(emptyCatalog, session);
+  expect(guessed.models[1]?.efforts, "assumed until selected").toStrictEqual([
+    "low",
+    "medium",
+    "high",
+  ]);
+  await session.select("model", "gemini-b");
+  expect(learn(guessed, session).models).toStrictEqual([
+    { id: "gemini-a", name: "Gemini A", efforts: ["low", "medium", "high"] },
+    { id: "gemini-b", name: "Gemini B", efforts: ["low", "high", "xhigh"] },
+  ]);
+});
+
+test("thinking levels are read off model ids that share a prefix with another model", async () => {
+  const agent = await connect({
+    script: () => [],
+    models: [
+      { id: "g", name: "G", efforts: ["low", "high"] },
+      { id: "g-pro", name: "G Pro", efforts: ["low"] },
+      { id: "g-lite", name: "G Lite", efforts: [] },
+    ],
+  });
+  onTestFinished(agent.close);
+  const session = await agent.client.newSession("/work");
+  expect(session.variants).toStrictEqual(["g-low", "g-high", "g-pro-low", "g-lite"]);
+  expect(learn(emptyCatalog, session).models.map((m) => [m.id, m.efforts])).toStrictEqual([
+    ["g", ["low", "high"]],
+    ["g-pro", ["low"]],
+    ["g-lite", []],
+  ]);
+});
+
+test("Pi models mark thinking levels the agent lacks as unsupported", () => {
+  const models = piModels({
+    models: [
+      { id: "g", name: "G", efforts: ["low", "high"] },
+      { id: "fixed", name: "Fixed", efforts: [] },
+    ],
+    modes: [],
+    contextWindow: 2000,
+  });
+  expect(models.map((model) => [model.id, model.reasoning, model.contextWindow])).toStrictEqual([
+    ["default", false, 2000],
+    ["g", true, 2000],
+    ["fixed", false, 2000],
+  ]);
+  const [, adjustable, fixed] = models;
+  expect.assert(adjustable && fixed);
+  expect(adjustable.thinkingLevelMap).toStrictEqual({
+    off: null,
+    minimal: null,
+    low: "low",
+    medium: null,
+    high: "high",
+    xhigh: null,
+    max: null,
+  });
+  expect(effortFor(adjustable, "high")).toBe("high");
+  expect(effortFor(adjustable, "medium")).toBe(undefined);
+  expect(effortFor(adjustable, undefined)).toBe(undefined);
+  expect(effortFor(fixed, "high")).toBe(undefined);
+});
+
+test("a saved catalog round-trips; a missing or malformed one is ignored", async () => {
+  const dir = await scratch();
+  const file = join(dir, "nested", "catalog.json");
+  expect(readCatalog(file)).toStrictEqual(emptyCatalog);
+  const catalog = {
+    models: [{ id: "g", name: "G", efforts: ["low"] }],
+    modes: [{ value: "default", name: "Default", description: "Ask first" }],
+    contextWindow: 123,
+  };
+  writeCatalog(file, catalog);
+  expect(readCatalog(file)).toStrictEqual(catalog);
+  const bad = [
+    "{",
+    "[]",
+    '{"models":[{"id":1,"name":"x","efforts":[]}],"modes":[]}',
+    '{"models":[{"id":"x","name":"x","efforts":[1]}],"modes":[]}',
+    '{"models":[],"modes":[{"value":1}]}',
+    '{"models":[]}',
+  ];
+  for (const text of bad) {
+    // oxlint-disable-next-line no-await-in-loop -- each case overwrites the same file
+    await writeFile(file, text);
+    expect(readCatalog(file), text).toStrictEqual(emptyCatalog);
+  }
+  await writeFile(file, '{"models":[],"modes":[{"value":"m","name":"M"}],"contextWindow":-5}');
+  expect(readCatalog(file)).toStrictEqual({
+    models: [],
+    modes: [{ value: "m", name: "M", description: undefined }],
+    contextWindow: emptyCatalog.contextWindow,
+  });
+});
