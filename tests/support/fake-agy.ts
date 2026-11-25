@@ -4,7 +4,9 @@ import { Readable, Writable } from "node:stream";
 
 import { type ContentBlock, ndJsonStream } from "@agentclientprotocol/sdk/unstable";
 
-import { defaultCommands, serveAgent, type Step } from "./fake-agent.ts";
+import { isRecord } from "../../src/guards.ts";
+import { defaultCommands, serveAgent } from "./fake-agent.ts";
+import type { Step } from "./playback.ts";
 
 const entry = (content: string, status: "pending" | "in_progress" | "completed") => ({
   content,
@@ -116,10 +118,18 @@ const store = process.env["FAKE_AGY_STORE"];
 const saved: unknown = store
   ? JSON.parse(readFileSync(store, { encoding: "utf8", flag: "a+" }) || "{}")
   : {};
-const history: Record<string, ContentBlock[][]> = {};
-if (typeof saved === "object" && saved !== null) Object.assign(history, saved);
 
-const { log } = serveAgent(
+const isBlock = (item: unknown) => isRecord(item) && typeof item["type"] === "string";
+
+/** A saved store: prompts by session id, each prompt a list of content blocks. */
+const isPrompt = (item: unknown) => Array.isArray(item) && item.every(isBlock);
+const isPrompts = (item: unknown) => Array.isArray(item) && item.every(isPrompt);
+
+function isHistory(value: unknown): value is Record<string, ContentBlock[][]> {
+  return isRecord(value) && Object.values(value).every(isPrompts);
+}
+
+const { log, history } = serveAgent(
   ndJsonStream(Writable.toWeb(process.stdout), Readable.toWeb(process.stdin)),
   {
     script,
@@ -128,7 +138,7 @@ const { log } = serveAgent(
     restore: process.env["FAKE_AGY_RESTORE"] !== "0",
     signedOut: process.env["FAKE_AGY_SIGNED_OUT"] === "1",
     ghosts: process.env["FAKE_AGY_GHOST"] ? [process.env["FAKE_AGY_GHOST"]] : [],
-    history,
+    history: isHistory(saved) ? saved : {},
     idPrefix: `p${process.pid}-`,
   },
 );
@@ -138,7 +148,7 @@ const startedAt = process.hrtime.bigint();
 const running = `${logFile}.running.${process.pid}`;
 if (logFile) writeFileSync(running, "");
 const save = () => {
-  if (store) writeFileSync(store, JSON.stringify(history));
+  if (store) writeFileSync(store, JSON.stringify(history()));
   if (!logFile) return;
   const previous: unknown = JSON.parse(
     readFileSync(logFile, { encoding: "utf8", flag: "a+" }) || "{}",

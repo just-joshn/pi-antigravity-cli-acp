@@ -5,8 +5,9 @@ import { join } from "node:path";
 import { expect, onTestFinished, test } from "vitest";
 
 import type { TurnEvent } from "../src/session.ts";
-import { allow, deny, type Step } from "./support/fake-agent.ts";
 import { connect, deferred, identity } from "./support/harness.ts";
+import { allow, deny, type Step } from "./support/playback.ts";
+import { answering, recorder } from "./support/record.ts";
 
 const readCall = {
   toolCallId: "t1",
@@ -145,12 +146,12 @@ test("watching a running tool reports progress and resolves when it finishes or 
   expect((await turn.next()).type).toBe("tool");
   expect((await eventually(() => turn.takeTool())).id).toBe("t2");
   expect(turn.takeTool()).toBe(undefined);
-  const titles: string[] = [];
-  const first = session.watchTool("t1", undefined, (tool) => titles.push(tool.title));
+  const titles = recorder<string>();
+  const first = session.watchTool("t1", undefined, (tool) => titles.record(tool.title));
   const second = session.watchTool("t2", undefined, () => {});
   gate.resolve();
   expect((await first)?.status).toBe("failed");
-  expect(titles).toStrictEqual(["File b.txt"]);
+  expect(titles.all()).toStrictEqual(["File b.txt"]);
   expect(await second.then((tool) => [tool?.status, tool?.settled])).toStrictEqual([
     "pending",
     true,
@@ -159,8 +160,8 @@ test("watching a running tool reports progress and resolves when it finishes or 
 });
 
 test("permission: the user's choice is passed on; no decision means the agent's deny option, never allow", async () => {
-  const asked: string[] = [];
-  const answers = [allow, undefined, undefined];
+  const asked = recorder<string>();
+  const next = answering([allow, undefined, undefined]);
   const steps: Step[] = [
     { tool: { toolCallId: "t1", kind: "edit", title: "File a.txt", status: "pending" } },
     { ask: "t1", allowed: [{ update: { toolCallId: "t1", status: "completed" } }] },
@@ -171,8 +172,8 @@ test("permission: the user's choice is passed on; no decision means the agent's 
     { script: () => steps },
     {
       askPermission: (tool, options) => {
-        asked.push(`${tool.id}:${options.map((o) => o.kind).join("+")}`);
-        const answer = answers.shift();
+        asked.record(`${tool.id}:${options.map((o) => o.kind).join("+")}`);
+        const answer = next();
         return Promise.resolve(options.find((option) => option.optionId === answer?.optionId));
       },
     },
@@ -180,7 +181,7 @@ test("permission: the user's choice is passed on; no decision means the agent's 
   onTestFinished(close);
   const session = await client.newSession({ cwd: "/work" });
   const events = await collect(session.startTurn([{ type: "text", text: "edit" }]));
-  expect(asked).toStrictEqual([
+  expect(asked.all()).toStrictEqual([
     "t1:allow_once+reject_once",
     "t2:allow_once+reject_once",
     "t3:allow_once",

@@ -13,8 +13,10 @@ import { type Catalog, piModels, PROVIDER } from "../src/catalog.ts";
 import { Conversation } from "../src/conversation.ts";
 import { createStream, haltTurn, TURN_LOST } from "../src/stream.ts";
 import { runMirror, TOOL_NAME } from "../src/tool.ts";
-import { allow, defaultModels, type FakeAgentOptions, type Step } from "./support/fake-agent.ts";
+import { defaultModels, type FakeAgentOptions } from "./support/fake-agent.ts";
 import { connect, deferred } from "./support/harness.ts";
+import { allow, type Step } from "./support/playback.ts";
+import { answering, recorder } from "./support/record.ts";
 
 const catalog: Catalog = {
   models: defaultModels,
@@ -42,60 +44,66 @@ type Client = Awaited<ReturnType<typeof connect>>["client"];
 
 /** What the extension does for the stream: one agent session at a time, recorded for the test. */
 function scriptedHost(client: Client, options: ChatOptions) {
-  const state = { conversation: undefined as Conversation | undefined };
-  const notes: string[] = [];
-  const abandoned = { count: 0 };
+  let conversation: Conversation | undefined;
+  let abandoned = 0;
+  const notes = recorder<string>();
   const start = async () =>
     new Conversation(await client.newSession({ cwd: "/work" }), client.accepts);
   const stream = createStream({
     conversing: () => options.conversing ?? true,
-    open: async () => (state.conversation ??= await start()),
-    restart: async () => (state.conversation = await start()),
+    open: async () => (conversation ??= await start()),
+    restart: async () => (conversation = await start()),
     abandon() {
-      abandoned.count += 1;
-      state.conversation = undefined;
+      abandoned += 1;
+      conversation = undefined;
     },
-    noteTool: (tool) => notes.push(`${tool.kind}:${tool.title}`),
+    noteTool: (tool) => notes.record(`${tool.kind}:${tool.title}`),
     ...(options.cancelGraceMs === undefined ? {} : { cancelGraceMs: options.cancelGraceMs }),
   });
   const watch = (id: string, signal?: AbortSignal) =>
     runMirror(
       (stop, onChange) =>
-        state.conversation
-          ? state.conversation.watch(id, stop, onChange)
-          : Promise.resolve(undefined),
+        conversation ? conversation.watch(id, stop, onChange) : Promise.resolve(undefined),
       signal,
       undefined,
     );
-  return { stream, watch, notes, abandoned, conversation: () => state.conversation };
+  return {
+    stream,
+    watch,
+    notes: notes.all,
+    abandoned: () => abandoned,
+    conversation: () => conversation,
+  };
 }
 
 /** Runs a message's mirrored tool calls and appends their results, as Pi does. */
-async function runTools(
-  host: ReturnType<typeof scriptedHost>,
-  messages: Message[],
-  message: AssistantMessage,
-) {
+async function runTools(host: ReturnType<typeof scriptedHost>, message: AssistantMessage) {
   const calls = message.content.filter((block) => block.type === "toolCall");
   const results = await Promise.all(calls.map((call) => host.watch(call.id)));
-  for (const [index, call] of calls.entries()) {
+  const toolResults = calls.map((call, index): Message => {
     const result = results[index];
     expect.assert(result);
-    messages.push({
+    return {
       role: "toolResult",
       toolCallId: call.id,
       toolName: call.name,
       content: result.content,
       isError: result.isError,
       timestamp: Date.now(),
-    });
-  }
-  return results;
+    };
+  });
+  return { results, toolResults };
 }
 
 /** Drives the provider the way Pi's agent loop does: stream, run the mirrored tools, stream again. */
 function piLoop(host: ReturnType<typeof scriptedHost>, mirrorTool: boolean) {
-  const messages: Message[] = [];
+  let messages: readonly Message[] = [];
+  const add = (...more: Message[]) => {
+    messages = [...messages, ...more];
+  };
+  const rewind = (count: number) => {
+    messages = messages.slice(0, -count);
+  };
   const tools = mirrorTool ? [{ name: TOOL_NAME, description: "", parameters: {} }] : [];
 
   async function step(model: Model<string> = modelA, request: { signal?: AbortSignal } = {}) {
@@ -108,14 +116,18 @@ function piLoop(host: ReturnType<typeof scriptedHost>, mirrorTool: boolean) {
     const running = host.stream(model, context, request);
     for await (const event of running) events.push(event);
     const message = await running.result();
-    messages.push(message);
+    add(message);
     return { events, message };
   }
 
-  const mirror = (message: AssistantMessage) => runTools(host, messages, message);
+  const mirror = async (message: AssistantMessage) => {
+    const { results, toolResults } = await runTools(host, message);
+    add(...toolResults);
+    return results;
+  };
 
   async function turn(text: string, model: Model<string> = modelA, request = {}) {
-    messages.push({ role: "user", content: text, timestamp: Date.now() });
+    add({ role: "user", content: text, timestamp: Date.now() });
     const replies: AssistantMessage[] = [];
     for (;;) {
       // oxlint-disable-next-line no-await-in-loop -- each provider call depends on the previous one
@@ -127,15 +139,15 @@ function piLoop(host: ReturnType<typeof scriptedHost>, mirrorTool: boolean) {
     }
   }
 
-  return { messages, step, mirror, turn };
+  return { messages: () => messages, add, rewind, step, mirror, turn };
 }
 
 /** A scripted agent behind the provider, driven by Pi's loop. */
 async function chat(agent: FakeAgentOptions, options: ChatOptions = {}) {
-  const answers = [...(options.answers ?? [])];
+  const next = answering(options.answers ?? []);
   const { client, log, close } = await connect(agent, {
     askPermission(_tool, offered) {
-      const answer = answers.shift();
+      const answer = next();
       return Promise.resolve(offered.find((option) => option.optionId === answer?.optionId));
     },
   });
@@ -163,7 +175,7 @@ test("a prompt reaches the agent as the user's words only and the reply streams 
     { say: "lo." },
   ];
   const c = await chat({ script: () => steps });
-  c.messages.push({ role: "user", content: "hi there", timestamp: 1 });
+  c.add({ role: "user", content: "hi there", timestamp: 1 });
   const { events, message } = await c.step();
   expect(c.log.prompts).toStrictEqual([[{ type: "text", text: "hi there" }]]);
   expect(events.map((e) => e.type)).toStrictEqual([
@@ -228,7 +240,7 @@ test("agent tool calls become mirrored Pi tool calls and the same turn resumes a
     [TOOL_NAME, { kind: "execute", title: "ls" }],
   ]);
   expect(new Set(calls.map((call) => call.id)).size).toBe(2);
-  const results = c.messages.filter((m) => m.role === "toolResult");
+  const results = c.messages().filter((m) => m.role === "toolResult");
   expect(results.map((m) => [m.isError, m.content])).toStrictEqual([
     [false, [{ type: "text", text: "alpha" }]],
     [false, [{ type: "text", text: "a.txt\n" }]],
@@ -251,7 +263,7 @@ test("a declined permission is reported on the tool and the turn ends without in
   const denied = await chat({ script: () => steps });
   const [call, end] = await denied.turn("clean up");
   expect(call?.stopReason).toBe("toolUse");
-  const result = denied.messages.find((m) => m.role === "toolResult");
+  const result = denied.messages().find((m) => m.role === "toolResult");
   expect(result?.isError).toBe(true);
   expect(JSON.stringify(result?.content)).toMatch(/Permission declined: rm -rf build/);
   expect([end?.stopReason, end?.content]).toStrictEqual(["stop", []]);
@@ -259,7 +271,7 @@ test("a declined permission is reported on the tool and the turn ends without in
 
   const granted = await chat({ script: () => steps }, { answers: [allow] });
   await granted.turn("clean up");
-  expect(granted.messages.find((m) => m.role === "toolResult")?.isError).toBe(false);
+  expect(granted.messages().find((m) => m.role === "toolResult")?.isError).toBe(false);
   expect(granted.log.outcomes).toStrictEqual([{ outcome: "selected", optionId: "allow" }]);
 });
 
@@ -294,11 +306,11 @@ test("a message typed during a turn stops that turn and is sent next", async () 
           ]
         : [{ say: "switched" }],
   });
-  c.messages.push({ role: "user", content: "long task", timestamp: 1 });
+  c.add({ role: "user", content: "long task", timestamp: 1 });
   const first = await c.step();
   expect(first.message.stopReason).toBe("toolUse");
   await c.mirror(first.message);
-  c.messages.push({ role: "user", content: "do this instead", timestamp: 2 });
+  c.add({ role: "user", content: "do this instead", timestamp: 2 });
   const second = await c.step();
   expect(c.log.cancels).toBe(1);
   expect(c.log.prompts[1]).toStrictEqual([{ type: "text", text: "do this instead" }]);
@@ -312,7 +324,7 @@ test("aborting from Pi cancels the agent's turn and the conversation stays usabl
       n === 0 ? [{ say: "working" }, { hold: "cancel" }] : [{ say: "fresh" }],
   });
   const abort = new AbortController();
-  c.messages.push({ role: "user", content: "start", timestamp: 1 });
+  c.add({ role: "user", content: "start", timestamp: 1 });
   const running = c.step(modelA, { signal: abort.signal });
   await new Promise((resolve) => setTimeout(resolve, 20));
   abort.abort();
@@ -327,7 +339,7 @@ test("aborting from Pi cancels the agent's turn and the conversation stays usabl
 
 test("history the agent has not seen is supplied as context; a rewound transcript starts a new agent session", async () => {
   const c = await chat({ script: (_prompt, n) => [{ say: `reply ${n + 1}` }] });
-  c.messages.push(
+  c.add(
     { role: "user", content: "earlier question", timestamp: 1 },
     {
       role: "assistant",
@@ -356,7 +368,7 @@ test("history the agent has not seen is supplied as context; a rewound transcrip
 
   await c.turn("second");
   expect(c.log.prompts[1]).toStrictEqual([{ type: "text", text: "second" }]);
-  c.messages.splice(-2);
+  c.rewind(2);
   await c.turn("alternate second");
   expect(c.log.sessions.length, "the agent session held a turn this branch no longer has").toBe(2);
   const replay = c.log.prompts[2]?.[0];
@@ -376,13 +388,13 @@ test("an agent that ignores cancellation is abandoned, not prompted again while 
     { cancelGraceMs: 30 },
   );
   const abort = new AbortController();
-  c.messages.push({ role: "user", content: "start", timestamp: 1 });
+  c.add({ role: "user", content: "start", timestamp: 1 });
   const running = c.step(modelA, { signal: abort.signal });
   await new Promise((resolve) => setTimeout(resolve, 20));
   abort.abort();
   const { message, events } = await running;
   expect([message.stopReason, events.at(-1)?.type]).toStrictEqual(["aborted", "error"]);
-  expect([c.log.cancels, c.abandoned.count]).toStrictEqual([1, 1]);
+  expect([c.log.cancels, c.abandoned()]).toStrictEqual([1, 1]);
   expect(textOf((await c.turn("again")).at(-1))).toBe("new");
   expect(c.log.sessions.length, "the unresponsive session is not reused").toBe(2);
   const context = c.log.prompts[1]?.[0];
@@ -418,7 +430,7 @@ test("without the mirror tool, tool activity is noted and the reply still arrive
   const replies = await c.turn("read it");
   expect(replies.length).toBe(1);
   expect(textOf(replies[0])).toBe("Reading. Done.");
-  expect(c.notes).toStrictEqual(["read:File a.txt"]);
+  expect(c.notes()).toStrictEqual(["read:File a.txt"]);
 });
 
 test("agent failures, refusals, truncation and unsupported images surface as Pi stop reasons", async () => {
@@ -441,7 +453,7 @@ test("agent failures, refusals, truncation and unsupported images surface as Pi 
   ]);
 
   const blind = await chat({ script: () => [{ say: "never" }], image: false });
-  blind.messages.push({
+  blind.add({
     role: "user",
     content: [{ type: "image", data: "aGk=", mimeType: "image/png" }],
     timestamp: 1,
@@ -452,7 +464,7 @@ test("agent failures, refusals, truncation and unsupported images surface as Pi 
   expect(blind.log.prompts.length).toBe(0);
 
   const seeing = await chat({ script: () => [{ say: "a cat" }] });
-  seeing.messages.push({
+  seeing.add({
     role: "user",
     content: [
       { type: "text", text: "what is this?" },
@@ -470,7 +482,7 @@ test("agent failures, refusals, truncation and unsupported images surface as Pi 
 test("a mirrored call that Pi aborts, or that the agent never made, is reported as such", async () => {
   const gate = deferred();
   const c = await chat({ script: () => [{ tool: readCall }, { hold: gate.promise }] });
-  c.messages.push({ role: "user", content: "go", timestamp: 1 });
+  c.add({ role: "user", content: "go", timestamp: 1 });
   const { message } = await c.step();
   const call = message.content.find((block) => block.type === "toolCall");
   expect.assert(call);
@@ -514,10 +526,10 @@ test("an image the agent cannot take is refused before the running turn is stopp
       { hold: "cancel" },
     ],
   });
-  c.messages.push({ role: "user", content: "long task", timestamp: 1 });
+  c.add({ role: "user", content: "long task", timestamp: 1 });
   const first = await c.step();
   await c.mirror(first.message);
-  c.messages.push({
+  c.add({
     role: "user",
     content: [{ type: "image", data: "aGk=", mimeType: "image/png" }],
     timestamp: 2,
@@ -536,7 +548,7 @@ test("continuing a turn the agent no longer has says so instead of an empty repl
       { hold: "cancel" },
     ],
   });
-  c.messages.push({ role: "user", content: "long task", timestamp: 1 });
+  c.add({ role: "user", content: "long task", timestamp: 1 });
   const first = await c.step();
   await c.mirror(first.message);
   // The agent's turn ends while Pi runs the mirrored tools, as when its process restarts.

@@ -17,8 +17,9 @@ import { expect, test } from "vitest";
 import { AGENT_DEFAULT, emptyCatalog, piModels } from "../src/catalog.ts";
 import { Conversation } from "../src/conversation.ts";
 import { createStream } from "../src/stream.ts";
-import { type FakeAgentOptions, serveAgent, type Step } from "../tests/support/fake-agent.ts";
+import { type FakeAgentOptions, serveAgent } from "../tests/support/fake-agent.ts";
 import { connect } from "../tests/support/harness.ts";
+import type { Step } from "../tests/support/playback.ts";
 
 const CHUNKS = 1000;
 const chunks: Step[] = Array.from({ length: CHUNKS }, (_, i) => ({ say: `word${i} ` }));

@@ -35,7 +35,7 @@ test("an agent command needs an antigravity model selected", async () => {
   expect.assert(other);
   await session.setModel(other);
   await session.prompt("/agy goal ship it");
-  expect(notes.at(-1)).toBe(
+  expect(notes().at(-1)).toBe(
     "warning: /agy goal runs in the Antigravity agent. Select an antigravity model with /model first.",
   );
   expect((await stop()).prompts.length).toBe(1);

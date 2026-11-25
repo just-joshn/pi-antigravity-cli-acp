@@ -18,7 +18,7 @@ test("--agy-dir passes extra directories, resolved from the workspace, and repor
   await session.prompt("hello");
   const log = await stop();
   expect(log.sessions[0]?.additionalDirectories).toStrictEqual([join(work, "lib")]);
-  expect(notes).toContain(
+  expect(notes()).toContain(
     "warning: --agy-dir /no/such/dir is not a directory, so the agent does not get it.",
   );
 });
@@ -48,7 +48,7 @@ test("--agy-mcp says which HTTP servers an agent without HTTP support does not g
   };
   const { session, stop } = await start({ ui, flags: { "agy-mcp": true }, setup });
   await session.prompt("hello");
-  expect(notes).toContain(
+  expect(notes()).toContain(
     "warning: MCP server docs: this agent takes no HTTP servers; it does not get it.",
   );
   expect((await stop()).sessions[0]?.mcpServers).toStrictEqual([]);

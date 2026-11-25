@@ -15,20 +15,14 @@ export const quietHooks: SessionHooks = {
 
 /** A promise the test settles by hand. */
 export function deferred() {
-  const settle: { resolve?: () => void } = {};
-  const promise = new Promise<void>((done) => {
-    settle.resolve = done;
-  });
-  return { promise, resolve: () => settle.resolve?.() };
+  const { promise, resolve } = Promise.withResolvers<void>();
+  return { promise, resolve: () => resolve() };
 }
 
 /** A promise of a value the test supplies by hand. */
 export function resolvable<T>() {
-  const settle: { resolve?: (value: T) => void } = {};
-  const promise = new Promise<T>((done) => {
-    settle.resolve = done;
-  });
-  return { promise, resolve: (value: T) => settle.resolve?.(value) };
+  const { promise, resolve } = Promise.withResolvers<T>();
+  return { promise, resolve };
 }
 
 /** Connects a real ACP client to a scripted in-memory agent. */

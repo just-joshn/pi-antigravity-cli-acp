@@ -4,16 +4,18 @@ import { expect, onTestFinished, test } from "vitest";
 import { answerElicitation, type Dialogs } from "../src/elicit.ts";
 import { connect } from "./support/harness.ts";
 import { fakeUi, said, start } from "./support/pi.ts";
+import { answering, recorder } from "./support/record.ts";
 
 /** Dialogs that answer from a list and record what they showed. */
-function scripted(answers: (string | undefined)[]) {
-  const shown: string[] = [];
+function scripted(answers: readonly (string | undefined)[]) {
+  const shown = recorder<string>();
+  const answer = answering(answers);
   const next = (title: string) => {
-    shown.push(title);
-    return Promise.resolve(answers.shift());
+    shown.record(title);
+    return Promise.resolve(answer());
   };
   const dialogs: Dialogs = { select: (title) => next(title), input: (title) => next(title) };
-  return { dialogs, shown };
+  return { dialogs, shown: shown.all };
 }
 
 const form = (properties: Record<string, unknown>, required: string[] = []) =>
@@ -72,8 +74,8 @@ test("a form is answered field by field with Pi's dialogs", async () => {
       note: "ok",
     },
   });
-  expect(shown).toContain("How many (from 1 to 9; try again: at least 1)");
-  expect(shown).toContain("agree: Proceed?");
+  expect(shown()).toContain("How many (from 1 to 9; try again: at least 1)");
+  expect(shown()).toContain("agree: Proceed?");
 });
 
 test("declining, dismissing, or a field Pi cannot ask about ends the form", async () => {
@@ -110,7 +112,7 @@ test("a link to visit is shown with its URL; continuing accepts", async () => {
   expect(await answerElicitation(request, accepted.dialogs, signal)).toStrictEqual({
     action: "accept",
   });
-  expect(accepted.shown).toStrictEqual(["Approve in your browser\nhttps://example.com/approve"]);
+  expect(accepted.shown()).toStrictEqual(["Approve in your browser\nhttps://example.com/approve"]);
   expect(await answerElicitation(request, scripted(["Decline"]).dialogs, signal)).toStrictEqual({
     action: "decline",
   });
@@ -123,14 +125,14 @@ test("an aborted question is cancelled without asking", async () => {
   expect(await answerElicitation(form({}), dialogs, stop.signal)).toStrictEqual({
     action: "cancel",
   });
-  expect(shown).toStrictEqual([]);
+  expect(shown()).toStrictEqual([]);
 });
 
 test("the agent's question in a turn becomes Pi dialogs, and the answer goes back to it", async () => {
   const { ui, dialogs } = fakeUi(["Answer", "red"]);
   const { session, stop, assistants } = await start({ ui });
   await session.prompt("a question for you");
-  expect(dialogs.map((d) => d.title)).toStrictEqual(["Which color?", "color"]);
+  expect(dialogs().map((d) => d.title)).toStrictEqual(["Which color?", "color"]);
   expect(said(assistants().at(-1))).toBe('{"action":"accept","content":{"color":"red"}}');
   expect((await stop()).answers).toStrictEqual([{ action: "accept", content: { color: "red" } }]);
 });
@@ -140,7 +142,7 @@ test("without a UI the question is cancelled; one for an unknown session too", a
   await headless.session.prompt("a question for you");
   expect((await headless.stop()).answers).toStrictEqual([{ action: "cancel" }]);
 
-  const asked: string[] = [];
+  const asked = recorder<string>();
   const { client, close } = await connect(
     {
       script: () => [
@@ -164,7 +166,7 @@ test("without a UI the question is cancelled; one for an unknown session too", a
     },
     {
       elicit: (request) => {
-        asked.push(request.message);
+        asked.record(request.message);
         return Promise.resolve({ action: "decline" });
       },
     },
@@ -178,7 +180,7 @@ test("without a UI the question is cancelled; one for an unknown session too", a
     if (event.type === "text") replies.push(event.text);
     if (event.type === "end" || event.type === "failed") break;
   }
-  expect(asked, "a question outside any session is asked as well").toStrictEqual(["Outside"]);
+  expect(asked.all(), "a question outside any session is asked as well").toStrictEqual(["Outside"]);
   expect(replies).toStrictEqual(['{"action":"decline"}', '{"action":"cancel"}']);
 });
 

@@ -7,14 +7,15 @@ import { expect, onTestFinished, test, vi } from "vitest";
 
 import { Terminals } from "../src/terminal.ts";
 import { said, start } from "./support/pi.ts";
+import { recorder } from "./support/record.ts";
 
 function terminals() {
-  const updates: [string, string, string | undefined][] = [];
+  const updates = recorder<[string, string, string | undefined]>();
   const all = new Terminals((sessionId, terminalId, output) =>
-    updates.push([sessionId, terminalId, output]),
+    updates.record([sessionId, terminalId, output]),
   );
   onTestFinished(() => all.releaseAll());
-  return { all, updates };
+  return { all, updates: updates.all };
 }
 
 const node = (code: string) => ({ command: process.execPath, args: ["-e", code] });
@@ -35,7 +36,7 @@ test("a command runs without a shell, and its output and exit status are reporte
     truncated: false,
     exitStatus: { exitCode: 3, signal: null },
   });
-  expect(updates.at(-1)).toStrictEqual(["s", terminalId, "hi $HOME"]);
+  expect(updates().at(-1)).toStrictEqual(["s", terminalId, "hi $HOME"]);
 });
 
 test("output past the byte limit keeps its end", async () => {

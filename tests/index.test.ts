@@ -124,11 +124,11 @@ test("with a UI, the agent's permission request becomes a Pi dialog and the mode
   const { ui, dialogs, status } = fakeUi(["Allow"]);
   const { session, stop, assistants } = await start({ ui });
   await session.prompt("now edit it");
-  expect(dialogs).toStrictEqual([
+  expect(dialogs()).toStrictEqual([
     { title: "Antigravity asks permission · edit: File notes.txt", options: ["Allow", "Deny"] },
   ]);
   expect(said(assistants().at(-1))).toBe("Edited.");
-  expect(status.get("antigravity")).toBe("agy mode: default");
+  expect(status("antigravity")).toBe("agy mode: default");
   const log = await stop();
   expect(log.outcomes).toStrictEqual([{ outcome: "selected", optionId: "allow" }]);
 });
@@ -137,15 +137,15 @@ test("/agy mode without an id offers the agent's modes, and /agy status reports 
   const { ui, notes, dialogs, status } = fakeUi(["auto — auto", undefined]);
   const { session, stop } = await start({ ui });
   await session.prompt("/agy status");
-  expect(notes.at(-1)).toMatch(/No Antigravity session yet/);
+  expect(notes().at(-1)).toMatch(/No Antigravity session yet/);
   await session.prompt("/agy mode");
-  expect(dialogs[0]?.options).toStrictEqual(["default — default", "auto — auto"]);
-  expect(notes.at(-1)).toBe("info: Antigravity permission mode: auto");
-  expect(status.get("antigravity")).toBe("agy mode: auto");
+  expect(dialogs()[0]?.options).toStrictEqual(["default — default", "auto — auto"]);
+  expect(notes().at(-1)).toBe("info: Antigravity permission mode: auto");
+  expect(status("antigravity")).toBe("agy mode: auto");
   await session.prompt("/agy mode");
-  expect(dialogs.length, "a dismissed dialog changes nothing").toBe(2);
+  expect(dialogs().length, "a dismissed dialog changes nothing").toBe(2);
   await session.prompt("/agy status");
-  expect(notes.at(-1)?.split("\n")).toStrictEqual([
+  expect(notes().at(-1)?.split("\n")).toStrictEqual([
     "info: Agent: Fake Agent 0.0.1",
     "Quota tier: Test Tier",
     "Model: gemini-a",
@@ -155,7 +155,7 @@ test("/agy mode without an id offers the agent's modes, and /agy status reports 
     expect.stringMatching(/^Agent session: p\d+-s1$/),
   ]);
   await session.prompt("/agy bogus");
-  expect(notes.at(-1)).toBe(
+  expect(notes().at(-1)).toBe(
     "warning: Usage: /agy status, /agy mode [id], /agy sessions, /agy login, /agy logout, or /agy <agent command> [input]",
   );
   const log = await stop();
@@ -166,7 +166,7 @@ test("/agy reports an agent it cannot start, and completes its subcommands", asy
   const { ui, notes } = fakeUi();
   const { session } = await start({ agy: false, ui });
   await session.prompt("/agy mode auto");
-  expect(notes.at(-1)).toMatch(/^error: .*agy.*not found on PATH/);
+  expect(notes().at(-1)).toMatch(/^error: .*agy.*not found on PATH/);
   const agy = session.extensionRunner.getCommand("agy");
   expect(await agy?.getArgumentCompletions?.("mo")).toStrictEqual([
     { value: "mode", label: "mode" },
@@ -181,10 +181,10 @@ test("--agy-mode picks the starting mode, and an unknown one is reported", async
 
   const { ui, notes, status } = fakeUi();
   const unknown = await start({ ui, flags: { "agy-mode": "bogus" } });
-  expect(status.get("antigravity")).toBe("agy mode: bogus");
+  expect(status("antigravity")).toBe("agy mode: bogus");
   await unknown.session.prompt("hello");
-  expect(notes).toContain('warning: Antigravity has no "bogus" mode. Available: default, auto.');
-  expect(status.get("antigravity")).toBe("agy mode: default");
+  expect(notes()).toContain('warning: Antigravity has no "bogus" mode. Available: default, auto.');
+  expect(status("antigravity")).toBe("agy mode: default");
   expect(said(unknown.assistants().at(-1))).toBe("echo: hello");
 });
 
@@ -193,7 +193,7 @@ test("with the mirror tool turned off, the agent's tool calls become notices", a
   const { session, assistants } = await start({ ui });
   session.setActiveToolsByName([]);
   await session.prompt("please read it");
-  expect(notes).toContain("info: Antigravity read: File notes.txt");
+  expect(notes()).toContain("info: Antigravity read: File notes.txt");
   expect(said(assistants().at(-1))).toBe("Reading.It says alpha.");
 });
 
@@ -218,7 +218,7 @@ test("Pi's manual compaction is declined with a notice", async () => {
   await session.prompt("hello");
   await session.prompt("again");
   await expect(session.compact()).rejects.toThrow("Compaction cancelled");
-  expect(notes).toContain(
+  expect(notes()).toContain(
     "info: Antigravity manages its own context, so Pi's compaction is skipped for this model.",
   );
 });
@@ -273,9 +273,9 @@ test("switching to another provider's model hides the mirror tool, the footer an
   expect.assert(other);
   await session.setModel(other);
   expect(session.getActiveToolNames()).not.toContain(TOOL_NAME);
-  expect(status.get("antigravity")).toBeUndefined();
+  expect(status("antigravity")).toBeUndefined();
   await expect(session.compact()).rejects.toThrow(/not called/);
-  expect(notes.join("\n")).not.toMatch(/compaction is skipped/);
+  expect(notes().join("\n")).not.toMatch(/compaction is skipped/);
 });
 
 test("--agy-agent picks the agent to run", async () => {
@@ -289,16 +289,16 @@ test("/agy status names the session once the agent titles it", async () => {
   const { session } = await start({ ui });
   await session.prompt("name this chat");
   await session.prompt("/agy status");
-  expect(notes.at(-1)).toMatch(/^Agent session: p\d+-s1 \(Named\)$/m);
+  expect(notes().at(-1)).toMatch(/^Agent session: p\d+-s1 \(Named\)$/m);
 });
 
 test("/agy status and mode with an agent that reports no tier, settings or usage", async () => {
   const { ui, notes } = fakeUi();
   const { session } = await start({ ui, plain: true });
   await session.prompt("/agy mode auto");
-  expect(notes.at(-1)).toBe('warning: Antigravity has no "auto" mode. Available: .');
+  expect(notes().at(-1)).toBe('warning: Antigravity has no "auto" mode. Available: .');
   await session.prompt("/agy status");
-  expect(notes.at(-1)?.split("\n")).toStrictEqual([
+  expect(notes().at(-1)?.split("\n")).toStrictEqual([
     "info: Agent: Fake Agent 0.0.1",
     "Model: unknown",
     "Thinking: not adjustable",
@@ -327,9 +327,9 @@ test("/agy alone shows the status, and extra spaces around its arguments are ign
   const { ui, notes } = fakeUi();
   const { session, stop } = await start({ ui });
   await session.prompt("/agy");
-  expect(notes.at(-1)).toMatch(/No Antigravity session yet/);
+  expect(notes().at(-1)).toMatch(/No Antigravity session yet/);
   await session.prompt("/agy   mode   auto  ");
-  expect(notes.at(-1)).toBe("info: Antigravity permission mode: auto");
+  expect(notes().at(-1)).toBe("info: Antigravity permission mode: auto");
   expect((await stop()).config).toStrictEqual([["mode", "auto"]]);
 });
 
@@ -339,5 +339,5 @@ test("/agy reports an unexpected failure with its reason", async () => {
     ui: { ...ui, select: () => Promise.reject(new Error("dialog closed")) },
   });
   await session.prompt("/agy mode");
-  expect(notes.at(-1)).toBe("error: The Antigravity agent could not be reached: dialog closed");
+  expect(notes().at(-1)).toBe("error: The Antigravity agent could not be reached: dialog closed");
 });

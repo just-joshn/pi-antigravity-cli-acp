@@ -19,6 +19,7 @@ import { expect, onTestFinished, vi } from "vitest";
 import { emptyCatalog, piModels } from "../../src/catalog.ts";
 import antigravityAcp from "../../src/index.ts";
 import type { AgentLog } from "./fake-agent.ts";
+import { answering, recorder } from "./record.ts";
 
 const fakeAgy = join(import.meta.dirname, "fake-agy.ts");
 export type ProcessLog = AgentLog & { argv: string[]; cwd: string };
@@ -51,27 +52,24 @@ function otherProvider(pi: ExtensionAPI) {
 }
 
 /** A UI that answers dialogs from a list and records what the extension showed. */
-export function fakeUi(answers: (string | undefined)[] = []) {
-  const notes: string[] = [];
-  const dialogs: { title: string; options: string[] }[] = [];
-  const status = new Map<string, string | undefined>();
-  const widgets: [key: string, lines: unknown][] = [];
+export function fakeUi(answers: readonly (string | undefined)[] = []) {
+  const next = answering(answers);
+  const notes = recorder<string>();
+  const dialogs = recorder<{ title: string; options: string[] }>();
+  const statuses = recorder<[key: string, text: string | undefined]>();
+  const widgets = recorder<[key: string, lines: unknown]>();
   const ui: Partial<ExtensionUIContext> = {
     select(title, options) {
-      dialogs.push({ title, options });
-      return Promise.resolve(answers.shift());
+      dialogs.record({ title, options });
+      return Promise.resolve(next());
     },
-    notify(message, type) {
-      notes.push(`${type ?? "info"}: ${message}`);
-    },
-    setStatus(key, text) {
-      status.set(key, text);
-    },
-    setWidget(key: string, content: unknown) {
-      widgets.push([key, content]);
-    },
+    notify: (message, type) => notes.record(`${type ?? "info"}: ${message}`),
+    setStatus: (key, text) => statuses.record([key, text]),
+    setWidget: (key: string, content: unknown) => widgets.record([key, content]),
   };
-  return { ui, notes, dialogs, status, widgets };
+  /** The last status the extension set under `key`. */
+  const status = (key: string) => statuses.all().findLast(([shown]) => shown === key)?.[1];
+  return { ui, notes: notes.all, dialogs: dialogs.all, status, widgets: widgets.all };
 }
 
 export interface StartOptions {

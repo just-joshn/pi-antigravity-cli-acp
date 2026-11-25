@@ -9,7 +9,9 @@ test("the agent's plan shows above the editor while it works and goes away when 
   await session.prompt("make a plan");
   expect(said(assistants().at(-1))).toBe("Planned and done.");
   expect(
-    widgets.filter(([key]) => key === "antigravity-plan").map(([, lines]) => lines),
+    widgets()
+      .filter(([key]) => key === "antigravity-plan")
+      .map(([, lines]) => lines),
   ).toStrictEqual([
     ["Antigravity plan", "[>] Look around", "[ ] Write it"],
     ["Antigravity plan", "[x] Look around", "[>] Write it"],
@@ -22,7 +24,9 @@ test("the plan goes away when the agent process dies", async () => {
   const { session } = await start({ ui, settings: { retry: { baseDelayMs: 1 } } });
   await session.prompt("hello");
   await session.prompt("die planning");
-  const plans = widgets.filter(([key]) => key === "antigravity-plan").map(([, lines]) => lines);
+  const plans = widgets()
+    .filter(([key]) => key === "antigravity-plan")
+    .map(([, lines]) => lines);
   expect(plans).toStrictEqual([["Antigravity plan", "[>] Look around"], undefined]);
 });
 
@@ -79,6 +83,8 @@ test("a markdown plan shows above the editor until the agent removes it", async 
   const { ui, widgets } = fakeUi();
   const { session } = await start({ ui });
   await session.prompt("a markdown plan");
-  const plans = widgets.filter(([key]) => key === "antigravity-plan").map(([, lines]) => lines);
+  const plans = widgets()
+    .filter(([key]) => key === "antigravity-plan")
+    .map(([, lines]) => lines);
   expect(plans).toStrictEqual([["Antigravity plan", "1. Look", "2. Write"], undefined]);
 });

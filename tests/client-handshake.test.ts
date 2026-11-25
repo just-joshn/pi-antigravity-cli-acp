@@ -10,6 +10,7 @@ import { expect, onTestFinished, test } from "vitest";
 
 import { AcpClient, AcpError } from "../src/client.ts";
 import { connect, identity, quietHooks } from "./support/harness.ts";
+import { answering, recorder } from "./support/record.ts";
 
 type Builder = ReturnType<typeof agent>;
 
@@ -69,7 +70,7 @@ test("an agent that needs sign-in, fails to start or speaks another ACP version 
 });
 
 test("an agent that says little about itself still gets a working session", async () => {
-  const asked: string[] = [];
+  const asked = recorder<string>();
   const client = await meet((b) =>
     b
       .onRequest(methods.agent.initialize, () => hello)
@@ -80,7 +81,7 @@ test("an agent that says little about itself still gets a working session", asyn
           toolCall: { toolCallId: "t" },
           options: [],
         });
-        asked.push(outcome.outcome);
+        asked.record(outcome.outcome);
         return {
           sessionId: "s1",
           configOptions: [mode],
@@ -95,7 +96,7 @@ test("an agent that says little about itself still gets a working session", asyn
   expect(client.agent).toStrictEqual({ name: "ACP agent", version: "" });
   expect(client.accepts).toStrictEqual({ image: false, embeddedContext: false });
   const session = await client.newSession({ cwd: "/work" });
-  expect(asked).toStrictEqual(["cancelled"]);
+  expect(asked.all()).toStrictEqual(["cancelled"]);
   expect(session.tier).toBeUndefined();
   expect(session.choices("model")).toStrictEqual([]);
   await expect(session.select("mode", "auto")).rejects.toThrow(
@@ -119,13 +120,13 @@ test("a session the agent cannot create is explained", async () => {
 });
 
 test("a failed prompt reports the agent's message with any details it attached", async () => {
-  const replies = [{ details: "quota exhausted" }, { details: 7 }, null];
+  const reply = answering([{ details: "quota exhausted" }, { details: 7 }, null]);
   const client = await meet((b) =>
     b
       .onRequest(methods.agent.initialize, () => hello)
       .onRequest(methods.agent.session.new, () => ({ sessionId: "s1" }))
       .onRequest(methods.agent.session.prompt, () => {
-        throw new RequestError(-32603, "Internal error", replies.shift());
+        throw new RequestError(-32603, "Internal error", reply());
       }),
   );
   const session = await client.newSession({ cwd: "/work" });
