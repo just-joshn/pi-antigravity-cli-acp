@@ -30,6 +30,10 @@ const HISTORY_LIMIT = 24_000;
  * Shown instead of sending a message again whose earlier attempt failed after reaching the agent.
  * Pi retries some errors on its own; this text must not look like one of them.
  */
+/** Shown when Pi continues a turn the agent no longer runs; it must not look retryable either. */
+export const TURN_LOST =
+  "Antigravity's turn was over before Pi finished showing its tool calls, so this reply is empty. Send a message to go on.";
+
 export const NOT_RESENT =
   "Antigravity stopped before it finished this message, so what it did is unknown. It was not sent again; check the workspace, then send it again if needed.";
 
@@ -361,20 +365,21 @@ class Reply {
     if (pending.some((message) => this.#unfinished.has(messageKey(message))))
       throw new AcpError(NOT_RESENT);
     const seen = lastAnchor(this.#context.messages).anchor;
+    this.draft.begin();
     let conversation = await this.#host.open(signal, seen);
     signal?.throwIfAborted();
     this.#conversation = conversation;
     const plan = planTurn(this.#context.messages, conversation.anchor);
     const continuing = !plan.diverged && plan.prompt.length === 0;
+    const afterTools = this.#context.messages.at(-1)?.role === "toolResult";
+    if (continuing && afterTools && !conversation.session.turn) throw new AcpError(TURN_LOST);
     if (!continuing || !conversation.session.turn) {
       if (plan.prompt.length === 0) {
-        this.draft.begin();
         this.draft.finish("stop");
         return;
       }
       conversation = await this.#prompt(conversation, plan);
     }
-    this.draft.begin();
     const tools = getCurrentTools(this.#context.messages);
     const mirrored = tools.some((tool) => tool.name === TOOL_NAME);
     const { turn } = conversation.session;
@@ -385,6 +390,8 @@ class Reply {
   async #prompt(current: Conversation, first: TurnPlan): Promise<Conversation> {
     const { signal } = this.#options;
     const seen = lastAnchor(this.#context.messages).anchor;
+    // Refuse what cannot be sent before stopping the turn in progress for it.
+    promptBlocks(first, current.accepts);
     let conversation = current;
     if (!(await haltTurn(conversation.session, this.#host.cancelGraceMs))) {
       this.#host.abandon();

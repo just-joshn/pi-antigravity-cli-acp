@@ -2,6 +2,7 @@ import type { PermissionOption } from "@agentclientprotocol/sdk/unstable";
 import {
   type AssistantMessage,
   type AssistantMessageEvent,
+  isRetryableAssistantError,
   type Message,
   type Model,
   normalizeContext,
@@ -10,7 +11,7 @@ import { expect, onTestFinished, test } from "vitest";
 
 import { type Catalog, piModels, PROVIDER } from "../src/catalog.ts";
 import { Conversation } from "../src/conversation.ts";
-import { createStream } from "../src/stream.ts";
+import { createStream, haltTurn, TURN_LOST } from "../src/stream.ts";
 import { runMirror, TOOL_NAME } from "../src/tool.ts";
 import { allow, defaultModels, type FakeAgentOptions, type Step } from "./support/fake-agent.ts";
 import { connect, deferred } from "./support/harness.ts";
@@ -66,7 +67,7 @@ function scriptedHost(client: Client, options: ChatOptions) {
       signal,
       undefined,
     );
-  return { stream, watch, notes, abandoned };
+  return { stream, watch, notes, abandoned, conversation: () => state.conversation };
 }
 
 /** Runs a message's mirrored tool calls and appends their results, as Pi does. */
@@ -140,8 +141,8 @@ async function chat(agent: FakeAgentOptions, options: ChatOptions = {}) {
   });
   onTestFinished(close);
   const host = scriptedHost(client, options);
-  const { notes, abandoned, watch } = host;
-  return { log, notes, abandoned, watch, ...piLoop(host, options.mirror !== false) };
+  const { notes, abandoned, watch, conversation } = host;
+  return { log, notes, abandoned, watch, conversation, ...piLoop(host, options.mirror !== false) };
 }
 
 const textOf = (message: AssistantMessage | undefined) =>
@@ -502,4 +503,48 @@ test("an unexpected failure is reported with its reason", async () => {
   expect(message.errorMessage).toBe(
     "The Antigravity agent stopped unexpectedly (socket hang up). Check that `agy` works in a terminal.",
   );
+});
+
+test("an image the agent cannot take is refused before the running turn is stopped", async () => {
+  const c = await chat({
+    image: false,
+    script: () => [
+      { tool: readCall },
+      { update: { toolCallId: "t1", status: "completed" } },
+      { hold: "cancel" },
+    ],
+  });
+  c.messages.push({ role: "user", content: "long task", timestamp: 1 });
+  const first = await c.step();
+  await c.mirror(first.message);
+  c.messages.push({
+    role: "user",
+    content: [{ type: "image", data: "aGk=", mimeType: "image/png" }],
+    timestamp: 2,
+  });
+  const { message, events } = await c.step();
+  expect(message.errorMessage ?? "").toMatch(/image/i);
+  expect(events[0]?.type, "the reply starts before it fails").toBe("start");
+  expect(c.log.cancels, "the turn in progress keeps going").toBe(0);
+});
+
+test("continuing a turn the agent no longer has says so instead of an empty reply", async () => {
+  const c = await chat({
+    script: () => [
+      { tool: readCall },
+      { update: { toolCallId: "t1", status: "completed" } },
+      { hold: "cancel" },
+    ],
+  });
+  c.messages.push({ role: "user", content: "long task", timestamp: 1 });
+  const first = await c.step();
+  await c.mirror(first.message);
+  // The agent's turn ends while Pi runs the mirrored tools, as when its process restarts.
+  const session = c.conversation()?.session;
+  expect.assert(session);
+  await haltTurn(session, 1000);
+  const { message } = await c.step();
+  expect(message.stopReason).toBe("error");
+  expect(message.errorMessage).toBe(TURN_LOST);
+  expect(isRetryableAssistantError(message), "Pi must not repeat the turn").toBe(false);
 });

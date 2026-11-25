@@ -1,7 +1,7 @@
 import type { PermissionOption } from "@agentclientprotocol/sdk/unstable";
 import { expect, test } from "vitest";
 
-import { AcpSession, type AgentPort } from "../src/session.ts";
+import { AcpSession, type AgentPort, Turn } from "../src/session.ts";
 import { quietHooks, resolvable } from "./support/harness.ts";
 
 const port: AgentPort = {
@@ -99,4 +99,15 @@ test("an agent's plan, commands and title are capped", () => {
   expect(session.commands?.length).toBe(200);
   expect(session.commands?.[0]?.description.length).toBe(500);
   expect(session.title?.length).toBe(200);
+});
+
+test("a turn wakes every reader waiting for its next event", async () => {
+  const turn = new Turn();
+  const both = Promise.all([turn.next(), turn.next()]);
+  turn.push({ type: "text", text: "a" });
+  turn.push({ type: "text", text: "b" });
+  expect(await both).toStrictEqual([
+    { type: "text", text: "a" },
+    { type: "text", text: "b" },
+  ]);
 });

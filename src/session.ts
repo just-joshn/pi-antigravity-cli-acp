@@ -95,15 +95,14 @@ export interface SessionHooks {
   changed(): void;
 }
 
-/** Ordered events of one prompt turn, read by a single consumer. */
+/** Ordered events of one prompt turn. Each event goes to one reader. */
 export class Turn {
   #queue: TurnEvent[] = [];
-  #wake: (() => void) | undefined;
+  #waiting = new Set<() => void>();
 
   push(event: TurnEvent) {
     this.#queue.push(event);
-    this.#wake?.();
-    this.#wake = undefined;
+    for (const wake of this.#waiting) wake();
   }
 
   /** The next event. With a signal, resolves with undefined once it aborts and nothing is queued. */
@@ -116,10 +115,11 @@ export class Turn {
       // oxlint-disable-next-line no-await-in-loop -- waits for the next event; nothing to run in parallel
       await new Promise<void>((resolve) => {
         const wake = () => {
+          this.#waiting.delete(wake);
           signal?.removeEventListener("abort", wake);
           resolve();
         };
-        this.#wake = wake;
+        this.#waiting.add(wake);
         signal?.addEventListener("abort", wake, { once: true });
       });
     }
