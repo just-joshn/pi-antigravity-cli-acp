@@ -252,6 +252,16 @@ class Draft {
     this.#open = undefined;
   }
 
+  begin() {
+    this.events.push({ type: "start", partial: this.message });
+  }
+
+  finish(reason: "stop" | "length" | "toolUse") {
+    this.close();
+    this.message.stopReason = reason;
+    this.events.push({ type: "done", reason, message: this.message });
+  }
+
   call(id: string, tool: ToolView) {
     this.close();
     const toolCall = {
@@ -272,118 +282,155 @@ class Draft {
 }
 
 type Request = StreamOptions & { reasoning?: string };
+type EndEvent = Extract<TurnEvent, { type: "end" | "failed" }>;
+
+const OUTSIDE_CONVERSATION =
+  "Antigravity keeps its own context, so it only answers messages in the conversation. Summaries and other background requests are not available with this model.";
+const AGENT_STOPPED =
+  "The Antigravity agent stopped unexpectedly. Check that `agy` works in a terminal.";
+
+/** One Pi request: plans the agent turn, then relays its events into one assistant message. */
+class Reply {
+  readonly draft: Draft;
+  #host: StreamHost;
+  #model: Model<string>;
+  #context: TranscriptContext;
+  #options: Request;
+  #conversation: Conversation | undefined;
+
+  constructor(
+    host: StreamHost,
+    model: Model<string>,
+    context: TranscriptContext,
+    options: Request,
+  ) {
+    this.draft = new Draft(model);
+    this.#host = host;
+    this.#model = model;
+    this.#context = context;
+    this.#options = options;
+  }
+
+  start() {
+    this.#run()
+      .catch((error: unknown) => this.#fail(error))
+      .finally(() => this.draft.events.end());
+    return this.draft.events;
+  }
+
+  /** Stamps the message with the session's position so the next request can tell what the agent has seen. */
+  #stamp(active: Conversation) {
+    const { message } = this.draft;
+    message.responseId = active.stamp();
+    message.usage.totalTokens = active.session.usage?.used ?? 0;
+  }
+
+  async #run() {
+    const { signal, sessionId } = this.#options;
+    signal?.throwIfAborted();
+    if (!this.#host.conversing(sessionId)) throw new AcpError(OUTSIDE_CONVERSATION);
+    let conversation = await this.#host.open(signal);
+    this.#conversation = conversation;
+    const plan = planTurn(this.#context.messages, conversation.anchor);
+    const continuing = !plan.diverged && plan.prompt.length === 0;
+    if (!continuing || !conversation.session.turn) {
+      if (plan.prompt.length === 0) {
+        this.draft.begin();
+        this.draft.finish("stop");
+        return;
+      }
+      conversation = await this.#prompt(conversation, plan);
+    }
+    this.draft.begin();
+    const tools = getCurrentTools(this.#context.messages);
+    const mirrored = tools.some((tool) => tool.name === TOOL_NAME);
+    const { turn } = conversation.session;
+    if (turn) await this.#relay(conversation, turn, mirrored);
+  }
+
+  /** Ends whatever the agent was doing and sends the new message, in a new session if the transcript diverged. */
+  async #prompt(current: Conversation, first: TurnPlan): Promise<Conversation> {
+    const { signal } = this.#options;
+    let conversation = current;
+    if (!(await haltTurn(conversation.session, this.#host.cancelGraceMs))) {
+      this.#host.abandon();
+      conversation = await this.#host.open(signal);
+    } else if (first.diverged && conversation.session.turns > 0)
+      conversation = await this.#host.restart(signal);
+    this.#conversation = conversation;
+    const plan = planTurn(this.#context.messages, conversation.anchor);
+    const prompt = promptBlocks(plan, conversation.accepts);
+    const effort = await applyChoices(conversation.session, this.#model, this.#options.reasoning);
+    if (effort !== undefined) this.draft.message.providerThinkingLevel = effort;
+    signal?.throwIfAborted();
+    conversation.startTurn(prompt);
+    return conversation;
+  }
+
+  async #relay(active: Conversation, turn: Turn, mirrored: boolean) {
+    for (;;) {
+      // oxlint-disable-next-line no-await-in-loop -- events are consumed strictly in order
+      const event = await turn.next(this.#options.signal);
+      if (!event) throw new Aborted();
+      if (event.type === "text") this.draft.append("text", event.text);
+      else if (event.type === "thought") this.draft.append("thinking", event.text);
+      else if (event.type === "tool" && !mirrored) this.#host.noteTool(event.tool);
+      else if (event.type === "tool") return this.#mirror(active, turn, event.tool);
+      else return this.#end(active, turn, event);
+    }
+  }
+
+  /** Ends the message with the agent's tool calls, grouping those it started together. */
+  async #mirror(active: Conversation, turn: Turn, first: ToolView) {
+    const add = (tool: ToolView) => this.draft.call(active.mirror(tool), tool);
+    add(first);
+    await new Promise((resolve) => setTimeout(resolve, TOOL_BATCH_MS));
+    for (let next = turn.takeTool(); next; next = turn.takeTool()) add(next);
+    this.#stamp(active);
+    this.draft.finish("toolUse");
+  }
+
+  #end(active: Conversation, turn: Turn, event: EndEvent) {
+    active.session.endTurn(turn);
+    this.#stamp(active);
+    if (event.type === "failed") throw new AcpError(event.message);
+    const { message } = this.draft;
+    const usage = event.usage;
+    message.usage = {
+      ...message.usage,
+      input: usage?.inputTokens ?? 0,
+      output: usage?.outputTokens ?? 0,
+      cacheRead: usage?.cachedReadTokens ?? 0,
+      cacheWrite: usage?.cachedWriteTokens ?? 0,
+      ...(typeof usage?.thoughtTokens === "number" ? { reasoning: usage.thoughtTokens } : {}),
+    };
+    message.rawStopReason = event.stopReason;
+    const reason = STOP[event.stopReason];
+    if (reason === "aborted") throw new Aborted();
+    if (reason === "error") throw new AcpError("Antigravity refused this request.");
+    this.draft.finish(reason === "length" ? "length" : "stop");
+  }
+
+  async #fail(error: unknown) {
+    this.draft.close();
+    const aborted = error instanceof Aborted || this.#options.signal?.aborted === true;
+    const conversation = this.#conversation;
+    if (aborted && conversation?.session.turn) {
+      this.#stamp(conversation);
+      if (!(await haltTurn(conversation.session, this.#host.cancelGraceMs))) this.#host.abandon();
+    }
+    const { message } = this.draft;
+    message.stopReason = aborted ? "aborted" : "error";
+    message.errorMessage = aborted
+      ? "Antigravity request cancelled."
+      : error instanceof AcpError
+        ? error.message
+        : AGENT_STOPPED;
+    this.draft.events.push({ type: "error", reason: message.stopReason, error: message });
+  }
+}
 
 export function createStream(host: StreamHost) {
-  return (model: Model<string>, context: TranscriptContext, options: Request = {}) => {
-    const draft = new Draft(model);
-    const { message, events } = draft;
-    const { signal } = options;
-    let conversation: Conversation | undefined;
-
-    /** Stamps the message with the session's position so the next request can tell what the agent has seen. */
-    const stamp = (active: Conversation) => {
-      message.responseId = active.stamp();
-      message.usage.totalTokens = active.session.usage?.used ?? 0;
-    };
-
-    const finish = (reason: "stop" | "length" | "toolUse") => {
-      draft.close();
-      message.stopReason = reason;
-      events.push({ type: "done", reason, message });
-    };
-
-    async function relay(active: Conversation, turn: Turn, mirrored: boolean) {
-      const { session } = active;
-      for (;;) {
-        // oxlint-disable-next-line no-await-in-loop -- events are consumed strictly in order
-        const event = await turn.next(signal);
-        if (!event) throw new Aborted();
-        if (event.type === "text") draft.append("text", event.text);
-        else if (event.type === "thought") draft.append("thinking", event.text);
-        else if (event.type === "tool" && !mirrored) host.noteTool(event.tool);
-        else if (event.type === "tool") {
-          const add = (tool: ToolView) => draft.call(active.mirror(tool), tool);
-          add(event.tool);
-          // oxlint-disable-next-line no-await-in-loop -- one short wait per assistant message
-          await new Promise((resolve) => setTimeout(resolve, TOOL_BATCH_MS));
-          for (let next = turn.takeTool(); next; next = turn.takeTool()) add(next);
-          stamp(active);
-          finish("toolUse");
-          return;
-        } else {
-          session.endTurn(turn);
-          stamp(active);
-          if (event.type === "failed") throw new AcpError(event.message);
-          const usage = event.usage;
-          message.usage = {
-            ...message.usage,
-            input: usage?.inputTokens ?? 0,
-            output: usage?.outputTokens ?? 0,
-            cacheRead: usage?.cachedReadTokens ?? 0,
-            cacheWrite: usage?.cachedWriteTokens ?? 0,
-            ...(typeof usage?.thoughtTokens === "number" ? { reasoning: usage.thoughtTokens } : {}),
-          };
-          message.rawStopReason = event.stopReason;
-          const reason = STOP[event.stopReason];
-          if (reason === "aborted") throw new Aborted();
-          if (reason === "error") throw new AcpError("Antigravity refused this request.");
-          finish(reason === "length" ? "length" : "stop");
-          return;
-        }
-      }
-    }
-
-    async function run() {
-      signal?.throwIfAborted();
-      if (!host.conversing(options.sessionId))
-        throw new AcpError(
-          "Antigravity keeps its own context, so it only answers messages in the conversation. Summaries and other background requests are not available with this model.",
-        );
-      conversation = await host.open(signal);
-      let plan = planTurn(context.messages, conversation.anchor);
-      const continuing = !plan.diverged && plan.prompt.length === 0;
-      if (!continuing || !conversation.session.turn) {
-        if (plan.prompt.length === 0) {
-          events.push({ type: "start", partial: message });
-          finish("stop");
-          return;
-        }
-        // A new message ends whatever the agent was doing; a transcript it does not match needs a new session.
-        if (!(await haltTurn(conversation.session, host.cancelGraceMs))) {
-          host.abandon();
-          conversation = await host.open(signal);
-        } else if (plan.diverged && conversation.session.turns > 0)
-          conversation = await host.restart(signal);
-        plan = planTurn(context.messages, conversation.anchor);
-        const prompt = promptBlocks(plan, conversation.accepts);
-        const effort = await applyChoices(conversation.session, model, options.reasoning);
-        if (effort !== undefined) message.providerThinkingLevel = effort;
-        signal?.throwIfAborted();
-        conversation.startTurn(prompt);
-      }
-      events.push({ type: "start", partial: message });
-      const mirrored = getCurrentTools(context.messages).some((tool) => tool.name === TOOL_NAME);
-      const { turn } = conversation.session;
-      if (turn) await relay(conversation, turn, mirrored);
-    }
-
-    run()
-      .catch(async (error: unknown) => {
-        draft.close();
-        const aborted = error instanceof Aborted || signal?.aborted === true;
-        if (aborted && conversation?.session.turn) {
-          stamp(conversation);
-          if (!(await haltTurn(conversation.session, host.cancelGraceMs))) host.abandon();
-        }
-        message.stopReason = aborted ? "aborted" : "error";
-        message.errorMessage = aborted
-          ? "Antigravity request cancelled."
-          : error instanceof AcpError
-            ? error.message
-            : "The Antigravity agent stopped unexpectedly. Check that `agy` works in a terminal.";
-        events.push({ type: "error", reason: message.stopReason, error: message });
-      })
-      .finally(() => events.end());
-    return events;
-  };
+  return (model: Model<string>, context: TranscriptContext, options: Request = {}) =>
+    new Reply(host, model, context, options).start();
 }
