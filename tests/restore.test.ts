@@ -78,3 +78,17 @@ test("a fresh Pi session never loads an agent conversation", async () => {
   expect(log.loads).toStrictEqual([]);
   expect(log.sessions.length).toBe(1);
 });
+
+test("after Pi reloads its extensions, the agent conversation continues in a new agent process", async () => {
+  const { session, stop, assistants } = await start();
+  await session.prompt("hello");
+  const before = assistants().at(-1)?.responseId ?? "";
+  await session.reload();
+  await session.prompt("again");
+  const after = assistants().at(-1)?.responseId ?? "";
+  const log = await stop();
+  const agentSession = before.slice(0, before.indexOf("/"));
+  expect(after).toBe(`${agentSession}/2.1`);
+  expect(log.loads, "the reloaded extension started its own agent").toStrictEqual([agentSession]);
+  expect(log.prompts.map(texts)).toStrictEqual([["again"]]);
+});

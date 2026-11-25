@@ -1,6 +1,12 @@
 {
-  "name": "pi-google-ai-oauth",
+  "name": "pi-antigravity-acp",
+  "version": "0.1.0",
+  "description": "Use Google Antigravity's agent (agy) in Pi over the Agent Client Protocol",
   "keywords": [
+    "acp",
+    "agent-client-protocol",
+    "antigravity",
+    "gemini",
     "pi-package"
   ],
   "license": "MIT",
@@ -26,10 +32,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "check": "bun run format:check && bun run lint && bun run typecheck && bun run test:coverage"
+    "check": "bun run format:check && bun run lint && bun run typecheck && bun run test:coverage",
+    "bench": "vitest bench --run --reporter=verbose",
+    "pack": "npm pack",
+    "verify:package": "bash scripts/verify-package.sh"
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "2.12.0"
+    "@agentclientprotocol/sdk": "2.12.0",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "22",
