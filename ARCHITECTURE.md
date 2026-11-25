@@ -14,20 +14,27 @@ The extension registers an `antigravity` provider, because Pi's model picker, th
 
 ## Modules
 
-| File                   | Role                                                                                                                                     |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.ts`             | Entry point. Registers flags, the mirror tool, Pi event handlers and `/agy`.                                                             |
-| `antigravity.ts`       | `Antigravity`: the link to one agent process and its live session; registers the provider; status line, plan widget, permission dialogs. |
-| `agent.ts`             | Finds the agent (`agy acp` or the ACP registry agent Zed installed) and starts it as a subprocess.                                       |
-| `client.ts`            | `AcpClient`: the ACP connection. Handshake, `session/new`, `session/load`, `session/close`, and the agent's requests to Pi.              |
-| `session.ts`           | `AcpSession`: one agent session's settings, usage, title, commands, plan, tool calls and the turn in progress.                           |
-| `conversation.ts`      | `Conversation`: an agent session as the current Pi session sees it; its position (anchor) and the Pi ids of mirrored tool calls.         |
-| `stream.ts`            | The provider's stream: decides what the agent has not seen, sends it, and turns agent events into one Pi assistant message.              |
-| `tool.ts`, `render.ts` | The mirror tool `antigravity_tool`, which shows the agent's tool calls as Pi tool rows, and how those rows render.                       |
-| `catalog.ts`           | The agent's models, modes and commands as Pi models, cached in `antigravity/catalog.json` under Pi's agent directory.                    |
-| `command.ts`           | `/agy status`, `/agy mode` and `/agy <agent command>`.                                                                                   |
-| `guards.ts`            | `isRecord`, which narrows untyped input such as agent metadata and saved catalogs.                                                       |
-| `fs.ts`                | The agent's file requests: reads by absolute path, writes only inside the session's working directory.                                   |
+| File                     | Role                                                                                                                                     |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `index.ts`               | Entry point. Registers flags, the mirror tool, Pi event handlers and `/agy`.                                                             |
+| `antigravity.ts`         | `Antigravity`: the link to one agent process and its live session; registers the provider; status line, plan widget, permission dialogs. |
+| `agent.ts`               | Finds the agent (`agy acp` or the ACP registry agent Zed installed) and starts it as a subprocess.                                       |
+| `client.ts`              | `AcpClient`: the ACP connection. Handshake, `session/new`, `session/load`, `session/close`, and the agent's requests to Pi.              |
+| `session.ts`             | `AcpSession`: one agent session's settings, usage, title, commands, plan, tool calls and the turn in progress.                           |
+| `conversation.ts`        | `Conversation`: an agent session as the current Pi session sees it; its position (anchor) and the Pi ids of mirrored tool calls.         |
+| `stream.ts`              | The provider's stream: decides what the agent has not seen, sends it, and turns agent events into one Pi assistant message.              |
+| `tool.ts`, `render.ts`   | The mirror tool `antigravity_tool`, which shows the agent's tool calls as Pi tool rows, and how those rows render.                       |
+| `catalog.ts`             | The agent's models, modes and commands as Pi models, cached in `antigravity/catalog.json` under Pi's agent directory.                    |
+| `command.ts`             | `/agy status`, `/agy mode` and `/agy <agent command>`.                                                                                   |
+| `guards.ts`              | `isRecord`, which narrows untyped input such as agent metadata and saved catalogs.                                                       |
+| `fs.ts`                  | The agent's file requests: reads by absolute path, writes only inside the session's working directory.                                   |
+| `workspace.ts`, `mcp.ts` | `--agy-dir` and `--agy-mcp`: the extra directories and Pi's MCP servers each session gets.                                               |
+| `inbox.ts`               | Updates for sessions not open yet: the replay of a reopened session, counted and optionally kept as text, and early settings and usage.  |
+| `sessions.ts`            | `/agy sessions`: a saved agent conversation as a new Pi session.                                                                         |
+| `sign-in.ts`             | Offers the agent's sign-in methods and has it authenticate.                                                                              |
+| `elicit.ts`              | The agent's structured questions, asked with Pi's dialogs.                                                                               |
+| `terminal.ts`            | Commands the agent runs through Pi (ACP terminals).                                                                                      |
+| `plan.ts`                | The agent's plan from `plan`, `plan_update` and `plan_removed`, and the widget's lines.                                                  |
 
 ## A prompt, end to end
 
@@ -61,6 +68,9 @@ Esc aborts Pi's request. The extension sends `session/cancel`, aborts any open p
 - Reads requested by the agent take any absolute path, as an editor's would, but refuse devices, pipes and files over 16 MiB.
 - What the agent sends is bounded: plans to 100 entries, commands to 200, each text to 500 characters, titles to 200, tool output shown to 20,000 characters, and updates held for not-yet-known sessions to 64 each for the newest 16 sessions.
 - The agent process inherits Pi's environment, because `agy` needs it to find its sign-in. Do not run Pi with secrets in its environment that the agent should not see.
+- Commands the agent runs through Pi's terminals start without a shell, keep at most 1 MiB of output, and are stopped when their session or the connection closes. Pi runs what the agent asks; whether to ask the user first is the agent's permission policy, as for its own tools.
+- Structured questions are cancelled without a UI, and close with their turn like permission dialogs.
+- `--agy-mcp` passes the MCP servers' configured environment and headers to the agent, credentials included; it is off by default.
 - Nothing is logged.
 
 ## Performance

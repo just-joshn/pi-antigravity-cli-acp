@@ -21,7 +21,9 @@ Pi loads a local package from its path, so keep the checkout where it is. To try
 
 ## Sign in
 
-Sign-in belongs to the agent. Run `agy` once in a terminal and sign in there; the extension uses that sign-in and never reads a token. If the agent reports that you are signed out, Pi shows "Antigravity needs you to sign in. Run `agy` in a terminal, sign in, then try again."
+Sign-in belongs to the agent. Run `agy` once in a terminal and sign in there; the extension uses that sign-in and never reads a token.
+
+If the agent reports that you are signed out, Pi offers the agent's own sign-in methods (for `agy`: Google, Gemini Enterprise, a Gemini API key or Agent Platform) and asks the agent to sign in with the one you pick. `/agy login` does the same at any time, and `/agy logout` signs the agent out after asking you. Without a UI, as in `pi -p`, Pi shows "Antigravity needs you to sign in. Run `agy` in a terminal, sign in, then try again."
 
 ## Use it
 
@@ -31,20 +33,22 @@ pi --model antigravity/default
 
 Say hello. `antigravity/default` uses whichever model the agent is set to. After the first reply, `/model` lists the agent's own models under `antigravity`, for example `gemini-4-hydrogen` and `gemini-3.8-flash`. Pi remembers the list, so later runs can start on one directly with `--model antigravity/gemini-3.8-flash`.
 
-| Control              | In Pi                                                                                               |
-| -------------------- | --------------------------------------------------------------------------------------------------- |
-| Model                | `/model`, Ctrl+P, or `--model antigravity/<id>`                                                     |
-| Thinking level       | Shift+Tab, or `--thinking <level>`. Pi offers only the levels the agent has for that model.         |
-| Permission requests  | A dialog with the agent's own choices, such as Allow and Deny. Esc picks the agent's reject choice. |
-| Permission mode      | `/agy mode` to choose, `/agy mode <id>` to set, `--agy-mode <id>` at launch. Shown in the footer.   |
-| The agent's commands | `/agy <command> [input]`, for example `/agy goal ship the fix` or `/agy compact`. Tab completes.    |
-| Plan                 | While the agent works through a plan, its steps show above the editor.                              |
-| Context              | Pi's footer shows the agent's context use. `/agy status` gives the exact numbers.                   |
-| Stop                 | Esc cancels the agent's turn.                                                                       |
+| Control              | In Pi                                                                                                                  |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Model                | `/model`, Ctrl+P, or `--model antigravity/<id>`                                                                        |
+| Thinking level       | Shift+Tab, or `--thinking <level>`. Pi offers only the levels the agent has for that model.                            |
+| Permission requests  | A dialog with the agent's own choices, such as Allow and Deny. Esc picks the agent's reject choice.                    |
+| Permission mode      | `/agy mode` to choose, `/agy mode <id>` to set, `--agy-mode <id>` at launch. Shown in the footer.                      |
+| The agent's commands | `/agy <command> [input]`, for example `/agy goal ship the fix` or `/agy compact`. Tab completes.                       |
+| Saved sessions       | `/agy sessions` opens one of the agent's saved conversations for this directory as a new Pi session that continues it. |
+| Questions            | When the agent asks a structured question, Pi asks it field by field with its own dialogs. Esc cancels.                |
+| Plan                 | While the agent works through a plan, its steps or its markdown plan show above the editor.                            |
+| Context              | Pi's footer shows the agent's context use. `/agy status` gives the exact numbers.                                      |
+| Stop                 | Esc cancels the agent's turn.                                                                                          |
 
 `/agy status` also shows the agent's version, the quota tier it reports for your account, and the agent session id.
 
-The agent's tool calls appear as Pi tool rows: `read`, `edit` with the changed line counts, `$` for commands with their output, up to 20,000 characters. Ctrl+O expands them. The `antigravity_tool` tool behind these rows is turned on while an antigravity model is selected and off otherwise.
+The agent's tool calls appear as Pi tool rows: `read`, `edit` with the changed line counts, `$` for commands with their output, up to 20,000 characters, including commands the agent runs through Pi's own terminals. Ctrl+O expands them. The `antigravity_tool` tool behind these rows is turned on while an antigravity model is selected and off otherwise.
 
 `antigravity/default` has no thinking levels in Pi; pick one of the agent's models to choose one.
 
@@ -65,10 +69,12 @@ One Pi session drives one agent session. A follow-up sends only your new message
 
 ## Configure
 
-| Flag                 | Effect                                                     |
-| -------------------- | ---------------------------------------------------------- |
-| `--agy-agent <name>` | Which agent to run; see below. Default `auto`.             |
-| `--agy-mode <id>`    | Permission mode for new agent sessions, such as `default`. |
+| Flag                 | Effect                                                                                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--agy-agent <name>` | Which agent to run; see below. Default `auto`.                                                                                                                |
+| `--agy-mode <id>`    | Permission mode for new agent sessions, such as `default`.                                                                                                    |
+| `--agy-dir <dirs>`   | More directories the agent may work in, separated like `PATH` and resolved from the workspace.                                                                |
+| `--agy-mcp`          | Also give the agent Pi's configured MCP servers (stdio only for `agy`). Servers Pi alone can run, such as ones with OAuth sign-in, are skipped with a notice. |
 
 | `--agy-agent`    | Agent                                                         | Notes                                                                                                                                                             |
 | ---------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -99,7 +105,8 @@ Live-tested on macOS with Pi 1.6.1 and `agy` 1.5.17, using ACP protocol version 
 - **The agent runs the tools, not Pi.** Pi's own tools, skills, context files and tool hooks do not apply to these models. The agent has its own equivalents.
 - **No Pi-side summaries.** The agent manages its context, so Pi's compaction and branch summaries are skipped or refused for these models. Use `/agy compact` for the agent's own.
 - When the agent writes files through Pi, as the registry agent does, Pi writes only inside the session's working directory.
-- Not implemented yet: signing in from Pi, Pi's MCP servers and extra workspace directories passed to the agent, client-side terminals, structured questions (elicitation) and browsing the agent's saved sessions. [PARITY.md](PARITY.md) lists each with its status.
+- Not implemented: the agent's subagents, which ACP reports as child sessions. [PARITY.md](PARITY.md) lists every capability with its status and evidence.
+- `/agy sessions` carries over a saved conversation's text, not the agent's tool calls in it.
 - Quota, model access and account policy are the agent's and Google's. Nothing here changes what your account may do.
 
 ## Develop
