@@ -12,15 +12,10 @@ import { Type } from "typebox";
 import { type AgentChoice, launch, resolveAgent, type RunningAgent } from "./agent.ts";
 import { type Catalog, learn, piModels, PROVIDER, readCatalog, writeCatalog } from "./catalog.ts";
 import { AcpClient, AcpError } from "./client.ts";
+import { Conversation } from "./conversation.ts";
 import { callLine, resultLines } from "./render.ts";
 import type { AcpSession, SessionHooks } from "./session.ts";
-import {
-  type Conversation,
-  createStream,
-  haltTurn,
-  newConversation,
-  watchMirror,
-} from "./stream.ts";
+import { createStream, haltTurn } from "./stream.ts";
 import { choiceLabels, runMirror, TOOL_NAME, toolArguments, type ToolDetails } from "./tool.ts";
 
 const STATUS = "antigravity";
@@ -167,7 +162,7 @@ export default function antigravityAcp(pi: ExtensionAPI) {
       );
       wantedMode = undefined;
     }
-    live = newConversation(session, connected.accepts);
+    live = new Conversation(session, connected.accepts);
     absorb(session);
     showStatus();
     return live;
@@ -208,8 +203,7 @@ export default function antigravityAcp(pi: ExtensionAPI) {
     defaultActive: false,
     execute: (id, _params, signal, onUpdate) =>
       runMirror(
-        (stop, onChange) =>
-          live ? watchMirror(live, id, stop, onChange) : Promise.resolve(undefined),
+        (stop, onChange) => (live ? live.watch(id, stop, onChange) : Promise.resolve(undefined)),
         signal,
         onUpdate,
       ),

@@ -13,6 +13,7 @@ import {
 
 import { AGENT_DEFAULT, effortFor, PROVIDER } from "./catalog.ts";
 import { AcpError } from "./client.ts";
+import type { Conversation } from "./conversation.ts";
 import type { AcpSession, ToolView, Turn, TurnEvent } from "./session.ts";
 import { TOOL_NAME, toolArguments } from "./tool.ts";
 
@@ -21,18 +22,6 @@ const CANCEL_GRACE_MS = 5000;
 /** Tool calls the agent starts together arrive as separate updates; wait this long to group them. */
 const TOOL_BATCH_MS = 25;
 const HISTORY_LIMIT = 24_000;
-
-/** One agent session as this Pi session sees it. */
-export interface Conversation {
-  session: AcpSession;
-  accepts: { image: boolean; embeddedContext: boolean };
-  /** `responseId` of the last assistant message built from this session. */
-  anchor: string | undefined;
-  /** Assistant messages built from the turn in progress. */
-  segment: number;
-  /** Mirrored Pi tool call id to the agent's tool call id. */
-  toolIds: Map<string, string>;
-}
 
 export interface StreamHost {
   /** Whether Pi is running a turn of the session this extension serves. */
@@ -46,25 +35,6 @@ export interface StreamHost {
   cancelGraceMs?: number;
   /** Reports tool activity when Pi cannot show it as a tool call. */
   noteTool(tool: ToolView): void;
-}
-
-export function newConversation(
-  session: AcpSession,
-  accepts: Conversation["accepts"],
-): Conversation {
-  return { session, accepts, anchor: undefined, segment: 0, toolIds: new Map() };
-}
-
-export function watchMirror(
-  conversation: Conversation,
-  piToolId: string,
-  signal: AbortSignal | undefined,
-  onChange: (tool: ToolView) => void,
-): Promise<ToolView | undefined> {
-  const id = conversation.toolIds.get(piToolId);
-  return id === undefined
-    ? Promise.resolve(undefined)
-    : conversation.session.watchTool(id, signal, onChange);
 }
 
 export interface TurnPlan {
@@ -312,9 +282,7 @@ export function createStream(host: StreamHost) {
 
     /** Stamps the message with the session's position so the next request can tell what the agent has seen. */
     const stamp = (active: Conversation) => {
-      active.segment += 1;
-      message.responseId = `${active.session.id}/${active.session.turns}.${active.segment}`;
-      active.anchor = message.responseId;
+      message.responseId = active.stamp();
       message.usage.totalTokens = active.session.usage?.used ?? 0;
     };
 
@@ -334,11 +302,7 @@ export function createStream(host: StreamHost) {
         else if (event.type === "thought") draft.append("thinking", event.text);
         else if (event.type === "tool" && !mirrored) host.noteTool(event.tool);
         else if (event.type === "tool") {
-          const add = (tool: ToolView) => {
-            const id = `agy_${session.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 40)}_${active.toolIds.size + 1}`;
-            active.toolIds.set(id, tool.id);
-            draft.call(id, tool);
-          };
+          const add = (tool: ToolView) => draft.call(active.mirror(tool), tool);
           add(event.tool);
           // oxlint-disable-next-line no-await-in-loop -- one short wait per assistant message
           await new Promise((resolve) => setTimeout(resolve, TOOL_BATCH_MS));
@@ -395,8 +359,7 @@ export function createStream(host: StreamHost) {
         const effort = await applyChoices(conversation.session, model, options.reasoning);
         if (effort !== undefined) message.providerThinkingLevel = effort;
         signal?.throwIfAborted();
-        conversation.segment = 0;
-        conversation.session.startTurn(prompt);
+        conversation.startTurn(prompt);
       }
       events.push({ type: "start", partial: message });
       const mirrored = getCurrentTools(context.messages).some((tool) => tool.name === TOOL_NAME);

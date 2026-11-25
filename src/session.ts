@@ -122,9 +122,8 @@ export class AcpSession {
   readonly cwd: string;
   /** Model ids the agent lists with the thinking level spelled out, such as `gemini-x-high`. */
   readonly variants: readonly string[];
-  title: string | undefined;
-  /** Prompt turns started so far. */
-  turns = 0;
+  #title: string | undefined;
+  #turns = 0;
   #options: SessionConfigOption[];
   #usage: { used: number; size: number } | undefined;
   #tools = new Map<string, ToolView>();
@@ -162,6 +161,15 @@ export class AcpSession {
     return this.#turn;
   }
 
+  get title() {
+    return this.#title;
+  }
+
+  /** Prompt turns started so far. */
+  get turns() {
+    return this.#turns;
+  }
+
   #option(category: OptionCategory): SelectOption | undefined {
     return this.#options.find(
       (o): o is SelectOption => o.type === "select" && (o.category ?? o.id) === category,
@@ -194,7 +202,7 @@ export class AcpSession {
 
   startTurn(prompt: ContentBlock[]): Turn {
     const turn = new Turn();
-    this.turns += 1;
+    this.#turns += 1;
     this.#turn = turn;
     this.#settleTools();
     this.#tools.clear();
@@ -272,7 +280,7 @@ export class AcpSession {
       this.#options = update.configOptions;
       this.#hooks.changed();
     } else if (update.sessionUpdate === "session_info_update") {
-      if (update.title) this.title = update.title;
+      if (update.title) this.#title = update.title;
       this.#hooks.changed();
     }
   }

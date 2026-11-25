@@ -9,7 +9,8 @@ import {
 import { expect, onTestFinished, test } from "vitest";
 
 import { type Catalog, piModels, PROVIDER } from "../src/catalog.ts";
-import { type Conversation, createStream, newConversation, watchMirror } from "../src/stream.ts";
+import { Conversation } from "../src/conversation.ts";
+import { createStream } from "../src/stream.ts";
 import { runMirror, TOOL_NAME } from "../src/tool.ts";
 import { allow, defaultModels, type FakeAgentOptions, type Step } from "./support/fake-agent.ts";
 import { connect, deferred } from "./support/harness.ts";
@@ -44,7 +45,7 @@ async function chat(agent: FakeAgentOptions, options: ChatOptions = {}) {
   let conversation: Conversation | undefined;
   const notes: string[] = [];
   const abandoned = { count: 0 };
-  const start = async () => newConversation(await client.newSession("/work"), client.accepts);
+  const start = async () => new Conversation(await client.newSession("/work"), client.accepts);
   const stream = createStream({
     conversing: () => options.conversing ?? true,
     open: async () => (conversation ??= await start()),
@@ -77,7 +78,7 @@ async function chat(agent: FakeAgentOptions, options: ChatOptions = {}) {
   const watch = (id: string, signal?: AbortSignal) =>
     runMirror(
       (stop, onChange) =>
-        conversation ? watchMirror(conversation, id, stop, onChange) : Promise.resolve(undefined),
+        conversation ? conversation.watch(id, stop, onChange) : Promise.resolve(undefined),
       signal,
       undefined,
     );
