@@ -35,6 +35,7 @@ function outputOf(tool: ToolView): string {
   const parts = tool.content.flatMap((item) =>
     item.type === "content" && item.content.type === "text" ? [item.content.text] : [],
   );
+  if (tool.terminalOutput) parts.push(tool.terminalOutput);
   const raw = tool.rawOutput;
   if (parts.length === 0 && typeof raw === "string") parts.push(raw);
   else if (parts.length === 0 && typeof raw === "object" && raw !== null) {

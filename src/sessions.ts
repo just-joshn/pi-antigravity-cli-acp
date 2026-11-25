@@ -3,7 +3,8 @@ import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
 import type { Antigravity } from "./antigravity.ts";
 import { AGENT_DEFAULT, API, PROVIDER } from "./catalog.ts";
-import type { Exchange, SavedSession } from "./client.ts";
+import type { SavedSession } from "./client.ts";
+import type { Exchange } from "./inbox.ts";
 import { noUsage } from "./stream.ts";
 
 /** One label per session, numbered when titles and times repeat. */

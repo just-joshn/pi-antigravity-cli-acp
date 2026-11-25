@@ -35,7 +35,7 @@ async function collect(turn: { next(): Promise<TurnEvent> }) {
   }
 }
 
-test("the client introduces itself as Pi and offers file access but no terminal", async () => {
+test("the client introduces itself as Pi and offers files, terminals, questions and nothing else", async () => {
   const { log, close } = await connect({ script: () => [] });
   onTestFinished(close);
   expect(log.initialize?.clientInfo).toStrictEqual(identity);
@@ -43,7 +43,12 @@ test("the client introduces itself as Pi and offers file access but no terminal"
     readTextFile: true,
     writeTextFile: true,
   });
-  expect(log.initialize?.clientCapabilities?.terminal).toBe(false);
+  expect(log.initialize?.clientCapabilities).toStrictEqual({
+    fs: { readTextFile: true, writeTextFile: true },
+    terminal: true,
+    auth: { terminal: false },
+    elicitation: { form: {}, url: {} },
+  });
 });
 
 test("a session reports the agent's choices, quota tier and early context usage", async () => {

@@ -11,6 +11,7 @@ export function view(patch: Partial<ToolView>): ToolView {
     status: "completed",
     content: [],
     rawOutput: undefined,
+    terminalOutput: "",
     decision: undefined,
     settled: true,
     ...patch,

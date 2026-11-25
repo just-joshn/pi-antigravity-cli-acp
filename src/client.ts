@@ -2,19 +2,21 @@ import {
   client,
   type ClientConnection,
   type InitializeRequest,
+  type InitializeResponse,
   type McpServer,
   methods,
   type NewSessionRequest,
   PROTOCOL_VERSION,
   RequestError,
   type SessionConfigOption,
-  type SessionUpdate,
   type Stream,
 } from "@agentclientprotocol/sdk/unstable";
 
 import { readTextFile, writeTextFile } from "./fs.ts";
 import { isRecord } from "./guards.ts";
+import { type Exchange, hold, type Inbox, type Replay } from "./inbox.ts";
 import { AcpSession, type AgentPort, type SessionHooks } from "./session.ts";
+import { Terminals } from "./terminal.ts";
 
 /** A failure the user can act on. Its message is shown as is. */
 export class AcpError extends Error {}
@@ -42,16 +44,6 @@ export interface ClientIdentity {
 
 const AUTH_REQUIRED = -32000;
 const RESOURCE_NOT_FOUND = -32002;
-const EARLY_UPDATE_LIMIT = 64;
-/** Sessions whose early updates are kept at once; the oldest is dropped for a new one. */
-const EARLY_SESSION_LIMIT = 16;
-
-/** One prompt turn of a replayed conversation, as its text. */
-export interface Exchange {
-  user: string;
-  agent: string;
-}
-
 /** A conversation the agent keeps, as session/list reports it. */
 export interface SavedSession {
   id: string;
@@ -60,52 +52,6 @@ export interface SavedSession {
 }
 
 const LIST_PAGES = 5;
-
-/**
- * Prompt turns an agent replays while it loads a saved session; each starts with the user speaking.
- * With `exchanges`, their text is kept as well.
- */
-interface Replay {
-  turns: number;
-  userSpeaking: boolean;
-  exchanges?: Exchange[];
-}
-
-function chunkText(update: SessionUpdate): string {
-  const content = "content" in update ? update.content : undefined;
-  return isRecord(content) && content["type"] === "text" && typeof content["text"] === "string"
-    ? content["text"]
-    : "";
-}
-
-/** Updates that arrive before their session exists: settings and usage are kept, a replay is counted. */
-interface Inbox {
-  early: Map<string, SessionUpdate[]>;
-  replays: Map<string, Replay>;
-}
-
-function hold(inbox: Inbox, sessionId: string, update: SessionUpdate) {
-  const replay = inbox.replays.get(sessionId);
-  const kind = update.sessionUpdate;
-  if (replay && kind === "user_message_chunk") {
-    if (!replay.userSpeaking) replay.turns += 1;
-    if (!replay.userSpeaking) replay.exchanges?.push({ user: "", agent: "" });
-    replay.userSpeaking = true;
-    const last = replay.exchanges?.at(-1);
-    if (last) last.user += chunkText(update);
-    return;
-  }
-  if (replay) replay.userSpeaking = false;
-  const answering = replay?.exchanges?.at(-1);
-  if (answering && kind === "agent_message_chunk") answering.agent += chunkText(update);
-  if (replay && /^(agent_|tool_call|plan)/.test(kind)) return;
-  const held = inbox.early.get(sessionId) ?? [];
-  if (held.length >= EARLY_UPDATE_LIMIT) return;
-  inbox.early.delete(sessionId);
-  inbox.early.set(sessionId, [...held, update]);
-  const oldest = inbox.early.keys().next();
-  if (inbox.early.size > EARLY_SESSION_LIMIT && !oldest.done) inbox.early.delete(oldest.value);
-}
 
 function tierName(meta: unknown): string | undefined {
   const antigravity = isRecord(meta) ? meta["antigravity"] : undefined;
@@ -134,14 +80,54 @@ function explain(action: string) {
 }
 
 /** Answers the agent's requests for the sessions in `sessions`. */
+/** Runs the agent's commands for the sessions in `sessions`. */
+function terminalsFor(sessions: ReadonlyMap<string, AcpSession>) {
+  return new Terminals((sessionId, terminalId, output) =>
+    sessions.get(sessionId)?.terminalOutput(terminalId, output),
+  );
+}
+
+function sessionCwd(sessions: ReadonlyMap<string, AcpSession>, sessionId: string): string {
+  const session = sessions.get(sessionId);
+  if (!session) throw RequestError.invalidParams(undefined, `no session ${sessionId}`);
+  return session.cwd;
+}
+
+type ClientBuilder = ReturnType<typeof client>;
+
+/** Answers the agent's terminal requests; each names its session and terminal. */
+function serveTerminals(
+  builder: ClientBuilder,
+  sessions: ReadonlyMap<string, AcpSession>,
+  terminals: Terminals,
+): ClientBuilder {
+  return builder
+    .onRequest(methods.client.terminal.create, ({ params }) =>
+      terminals.create(params, sessionCwd(sessions, params.sessionId)),
+    )
+    .onRequest(methods.client.terminal.output, ({ params }) =>
+      terminals.output(params.sessionId, params.terminalId),
+    )
+    .onRequest(methods.client.terminal.waitForExit, ({ params }) =>
+      terminals.waitForExit(params.sessionId, params.terminalId),
+    )
+    .onRequest(methods.client.terminal.kill, ({ params }) =>
+      terminals.kill(params.sessionId, params.terminalId),
+    )
+    .onRequest(methods.client.terminal.release, ({ params }) =>
+      terminals.release(params.sessionId, params.terminalId),
+    );
+}
+
 function serve(
   stream: Stream,
   identity: ClientIdentity,
   sessions: ReadonlyMap<string, AcpSession>,
   inbox: Inbox,
   hooks: SessionHooks,
+  terminals: Terminals,
 ): ClientConnection {
-  return client({ name: identity.name })
+  return serveTerminals(client({ name: identity.name }), sessions, terminals)
     .onRequest(methods.client.session.requestPermission, ({ params }) => {
       const session = sessions.get(params.sessionId);
       return session ? session.permission(params) : { outcome: { outcome: "cancelled" } };
@@ -177,6 +163,38 @@ export interface Workspace {
   mcpServers?: readonly McpServer[];
 }
 
+type Introduced = Pick<AcpClient, "agent" | "accepts" | "offers" | "signInMethods">;
+
+/** What the agent said about itself in `initialize`, in the terms this client uses. */
+function introduced(hello: InitializeResponse): Introduced {
+  const capabilities = hello.agentCapabilities;
+  const sessionCapabilities = capabilities?.sessionCapabilities;
+  const prompts = capabilities?.promptCapabilities;
+  return {
+    agent: {
+      name: hello.agentInfo?.title ?? hello.agentInfo?.name ?? "ACP agent",
+      version: hello.agentInfo?.version ?? "",
+    },
+    accepts: {
+      image: prompts?.image === true,
+      embeddedContext: prompts?.embeddedContext === true,
+    },
+    offers: {
+      load: capabilities?.loadSession === true,
+      close: Boolean(sessionCapabilities?.close),
+      directories: Boolean(sessionCapabilities?.additionalDirectories),
+      mcpHttp: capabilities?.mcpCapabilities?.http === true,
+      logout: Boolean(capabilities?.auth?.logout),
+      list: Boolean(sessionCapabilities?.list),
+    },
+    signInMethods: (hello.authMethods ?? []).flatMap((method) =>
+      "type" in method
+        ? []
+        : [{ id: method.id, name: method.name, description: method.description ?? undefined }],
+    ),
+  };
+}
+
 /** One connection to an ACP agent process. */
 export class AcpClient {
   readonly agent: { name: string; version: string };
@@ -194,6 +212,7 @@ export class AcpClient {
   /** Sign-in methods the agent runs itself; terminal methods need a capability Pi does not offer. */
   readonly signInMethods: readonly SignInMethod[];
   #connection: ClientConnection;
+  #terminals: Terminals;
   #sessions: Map<string, AcpSession>;
   #inbox: Inbox;
   #hooks: SessionHooks;
@@ -203,8 +222,10 @@ export class AcpClient {
     sessions: Map<string, AcpSession>,
     inbox: Inbox,
     hooks: SessionHooks,
-    hello: Pick<AcpClient, "agent" | "accepts" | "offers" | "signInMethods">,
+    terminals: Terminals,
+    hello: Introduced,
   ) {
+    this.#terminals = terminals;
     this.#connection = connection;
     this.#sessions = sessions;
     this.#inbox = inbox;
@@ -222,13 +243,14 @@ export class AcpClient {
   ): Promise<AcpClient> {
     const sessions = new Map<string, AcpSession>();
     const inbox: Inbox = { early: new Map(), replays: new Map() };
-    const connection = serve(stream, identity, sessions, inbox, hooks);
+    const terminals = terminalsFor(sessions);
+    const connection = serve(stream, identity, sessions, inbox, hooks, terminals);
     const introduction: InitializeRequest = {
       protocolVersion: PROTOCOL_VERSION,
       clientInfo: identity,
       clientCapabilities: {
         fs: { readTextFile: true, writeTextFile: true },
-        terminal: false,
+        terminal: true,
         elicitation: { form: {}, url: {} },
       },
     };
@@ -239,30 +261,7 @@ export class AcpClient {
       connection.close();
       throw new AcpError("This Antigravity agent speaks an ACP version this extension does not.");
     }
-    const prompts = hello.agentCapabilities?.promptCapabilities;
-    return new AcpClient(connection, sessions, inbox, hooks, {
-      agent: {
-        name: hello.agentInfo?.title ?? hello.agentInfo?.name ?? "ACP agent",
-        version: hello.agentInfo?.version ?? "",
-      },
-      accepts: {
-        image: prompts?.image === true,
-        embeddedContext: prompts?.embeddedContext === true,
-      },
-      offers: {
-        load: hello.agentCapabilities?.loadSession === true,
-        close: Boolean(hello.agentCapabilities?.sessionCapabilities?.close),
-        directories: Boolean(hello.agentCapabilities?.sessionCapabilities?.additionalDirectories),
-        mcpHttp: hello.agentCapabilities?.mcpCapabilities?.http === true,
-        logout: Boolean(hello.agentCapabilities?.auth?.logout),
-        list: Boolean(hello.agentCapabilities?.sessionCapabilities?.list),
-      },
-      signInMethods: (hello.authMethods ?? []).flatMap((method) =>
-        "type" in method
-          ? []
-          : [{ id: method.id, name: method.name, description: method.description ?? undefined }],
-      ),
-    });
+    return new AcpClient(connection, sessions, inbox, hooks, terminals, introduced(hello));
   }
 
   /** Resolves when the connection ends, for whatever reason. */
@@ -367,6 +366,7 @@ export class AcpClient {
 
   /** Lets the agent free a session this client no longer uses. */
   async closeSession(sessionId: string): Promise<void> {
+    this.#terminals.releaseSession(sessionId);
     this.#sessions.delete(sessionId);
     this.#inbox.early.delete(sessionId);
     if (!this.offers.close) return;
@@ -413,6 +413,7 @@ export class AcpClient {
   }
 
   close() {
+    this.#terminals.releaseAll();
     this.#connection.close();
   }
 }

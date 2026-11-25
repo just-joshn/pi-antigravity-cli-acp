@@ -83,6 +83,10 @@ const SCRIPTS: [keyword: string, steps: () => Step[]][] = [
     },
   ],
   ["question", () => [{ elicit: colorQuestion }]],
+  [
+    "run",
+    () => [{ run: [process.execPath, "-e", "process.stdout.write('ran in ' + process.cwd())"] }],
+  ],
   ["name", () => [{ title: "Named" }, { say: "Named it." }]],
   ["wait", () => [{ say: "Waiting." }, { hold: "cancel" }]],
 ];

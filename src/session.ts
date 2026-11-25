@@ -54,6 +54,8 @@ export interface ToolView {
   readonly status: ToolCallStatus;
   readonly content: readonly ToolCallContent[];
   readonly rawOutput: unknown;
+  /** Output so far of the client terminals the tool call shows, in order. */
+  readonly terminalOutput: string;
   readonly decision: "allowed" | "declined" | undefined;
   /** No further updates will arrive: the tool finished or its turn ended. */
   readonly settled: boolean;
@@ -154,6 +156,8 @@ export class AcpSession {
   #options: SessionConfigOption[];
   #usage: { used: number; size: number } | undefined;
   #commands: readonly AgentCommand[] | undefined;
+  /** Latest output of each client terminal of this session. */
+  #terminals = new Map<string, string>();
   #plan: readonly PlanEntry[] = [];
   #tools = new Map<string, ToolView>();
   #watchers = new Map<string, Set<(tool: ToolView) => void>>();
@@ -384,12 +388,33 @@ export class AcpSession {
       status,
       content: patch.content ?? previous?.content ?? [],
       rawOutput: patch.rawOutput ?? previous?.rawOutput,
+      terminalOutput: "",
       decision: previous?.decision,
       settled: status === "completed" || status === "failed",
     };
-    this.#publish(tool);
-    if (!previous) this.#turn?.push({ type: "tool", tool });
-    return tool;
+    const shown = { ...tool, terminalOutput: this.#terminalOutputOf(tool.content) };
+    this.#publish(shown);
+    if (!previous) this.#turn?.push({ type: "tool", tool: shown });
+    return shown;
+  }
+
+  #terminalOutputOf(content: readonly ToolCallContent[]): string {
+    return content
+      .flatMap((item) =>
+        item.type === "terminal" ? [this.#terminals.get(item.terminalId) ?? ""] : [],
+      )
+      .join("\n");
+  }
+
+  /** New output of a client terminal; tool calls that show it are updated. */
+  terminalOutput(terminalId: string, output: string) {
+    this.#terminals.set(terminalId, output);
+    for (const tool of this.#tools.values()) {
+      const shows = tool.content.some(
+        (item) => item.type === "terminal" && item.terminalId === terminalId,
+      );
+      if (shows) this.#publish({ ...tool, terminalOutput: this.#terminalOutputOf(tool.content) });
+    }
   }
 
   #settleTools() {

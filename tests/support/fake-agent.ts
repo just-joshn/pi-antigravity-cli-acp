@@ -33,6 +33,7 @@ export type Step =
   | { usage: [used: number, size: number] }
   | { title: string }
   | { elicit: CreateElicitationRequest }
+  | { run: [command: string, ...args: string[]] }
   | { plan: PlanEntry[] }
   | { read: string }
   | { write: [path: string, content: string] }
@@ -199,6 +200,33 @@ async function ask(pb: Playback, step: Extract<Step, { ask: string }>) {
   return play(pb, (granted ? step.allowed : step.declined) ?? []);
 }
 
+/** Runs a command in a client terminal, shown in a tool call, and says how it ended. */
+async function runInTerminal(pb: Playback, [command, ...args]: string[]) {
+  const { client, sessionId } = pb;
+  const { terminalId } = await client.request(methods.client.terminal.create, {
+    sessionId,
+    command: command ?? "",
+    args,
+  });
+  const toolCallId = `run-${terminalId}`;
+  const content = [{ type: "terminal" as const, terminalId }];
+  await send(pb, {
+    sessionUpdate: "tool_call",
+    toolCallId,
+    kind: "execute",
+    title: command ?? "",
+    content,
+  });
+  const exit = await client.request(methods.client.terminal.waitForExit, { sessionId, terminalId });
+  const { output } = await client.request(methods.client.terminal.output, {
+    sessionId,
+    terminalId,
+  });
+  await send(pb, { sessionUpdate: "tool_call_update", toolCallId, status: "completed" });
+  await client.request(methods.client.terminal.release, { sessionId, terminalId });
+  await say(pb, "agent_message_chunk", `exit ${exit.exitCode}: ${output}`);
+}
+
 /** Performs one step; a stop reason ends the turn. */
 async function perform(pb: Playback, step: Step): Promise<StopReason | undefined> {
   const { client, sessionId } = pb;
@@ -207,6 +235,7 @@ async function perform(pb: Playback, step: Step): Promise<StopReason | undefined
   else if ("tool" in step) await send(pb, { sessionUpdate: "tool_call", ...step.tool });
   else if ("update" in step) await send(pb, { sessionUpdate: "tool_call_update", ...step.update });
   else if ("plan" in step) await send(pb, { sessionUpdate: "plan", entries: step.plan });
+  else if ("run" in step) await runInTerminal(pb, step.run);
   else if ("elicit" in step) {
     // A question with an empty session id is about the session being played.
     const question =
