@@ -10,6 +10,7 @@ import {
   type StopReason,
   type StreamOptions,
   type TranscriptContext,
+  type Usage,
   type UserMessage,
 } from "@earendil-works/pi-ai";
 
@@ -204,6 +205,18 @@ const STOP: Record<Extract<TurnEvent, { type: "end" }>["stopReason"], StopReason
 
 class Aborted extends Error {}
 
+/** Usage of a message the agent's tokens are not counted against. */
+export function noUsage(): Usage {
+  return {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: 0,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+  };
+}
+
 /** Writes one Pi assistant message as the agent's events arrive. */
 class Draft {
   readonly message: AssistantMessage;
@@ -218,14 +231,7 @@ class Draft {
       model: model.id,
       timestamp: Date.now(),
       content: [],
-      usage: {
-        input: 0,
-        output: 0,
-        cacheRead: 0,
-        cacheWrite: 0,
-        totalTokens: 0,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-      },
+      usage: noUsage(),
       stopReason: "pending",
     };
   }

@@ -1,11 +1,16 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  ExtensionCommandContext,
+  ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 
 import type { Antigravity } from "./antigravity.ts";
 import { AcpError, reasonOf } from "./client.ts";
+import { openSaved } from "./sessions.ts";
 import { signIn } from "./sign-in.ts";
 
 const USAGE =
-  "Usage: /agy status, /agy mode [id], /agy login, /agy logout, or /agy <agent command> [input]";
+  "Usage: /agy status, /agy mode [id], /agy sessions, /agy login, /agy logout, or /agy <agent command> [input]";
 
 /** Sets the agent's permission mode, asking the user to pick one when `requested` is undefined. */
 async function chooseMode(link: Antigravity, requested: string | undefined, ctx: ExtensionContext) {
@@ -87,7 +92,7 @@ async function logOut(link: Antigravity, _value: string | undefined, ctx: Extens
 type Subcommand = (
   link: Antigravity,
   value: string | undefined,
-  ctx: ExtensionContext,
+  ctx: ExtensionCommandContext,
 ) => Promise<void>;
 
 /** /agy's own subcommands; an agent command with one of these names is typed directly instead. */
@@ -96,6 +101,7 @@ const OWN: Record<string, Subcommand> = {
   mode: chooseMode,
   login: logIn,
   logout: logOut,
+  sessions: (link, _value, ctx) => openSaved(link, ctx),
 };
 
 /** Sends `/name input` to the agent as an ordinary user message, as if typed at the prompt. */

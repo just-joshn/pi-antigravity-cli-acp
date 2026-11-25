@@ -59,6 +59,8 @@ export interface FakeAgentOptions {
   plain?: boolean;
   /** Commands the agent lists for its sessions. */
   commands?: AvailableCommand[];
+  /** Extra sessions session/list reports that the agent cannot load. */
+  ghosts?: string[];
   /** Start signed out: session/new and session/load need authenticate first. */
   signedOut?: boolean;
   /** Accept additional workspace directories, as `agy` does. */
@@ -272,6 +274,9 @@ async function openSession(
   return reply;
 }
 
+const textOf = (blocks: ContentBlock[]) =>
+  blocks.map((block) => (block.type === "text" ? block.text : "")).join("");
+
 /** Replays a saved conversation the way `agy` does on session/load: each prompt, then a reply. */
 async function replay(client: AgentContext, sessionId: string, prompts: ContentBlock[][]) {
   for (const prompt of prompts) {
@@ -301,7 +306,7 @@ function hello(options: FakeAgentOptions) {
       promptCapabilities: { image, embeddedContext },
       ...(restore ? { loadSession: true } : {}),
       sessionCapabilities: {
-        ...(restore ? { close: {} } : {}),
+        ...(restore ? { close: {}, list: {} } : {}),
         ...(options.directories === false ? {} : { additionalDirectories: {} }),
       },
       ...(options.mcpHttp ? { mcpCapabilities: { http: true } } : {}),
@@ -374,6 +379,22 @@ async function answer(
   return { stopReason: (await play(pb, steps)) ?? "end_turn", usage: TURN_USAGE };
 }
 
+/** Every saved conversation, titled by its first prompt. */
+function list(state: Agent, cwd: string) {
+  const sessions = Object.entries(state.history).map(([sessionId, prompts]) => ({
+    sessionId,
+    cwd,
+    title: textOf(prompts[0] ?? []) || null,
+    updatedAt: "2026-11-25T10:00:00Z",
+  }));
+  const ghosts = (state.options.ghosts ?? []).map((sessionId) => ({
+    sessionId,
+    cwd,
+    title: sessionId,
+  }));
+  return { sessions: [...sessions, ...ghosts] };
+}
+
 function signInAs(state: Agent, methodId: string | undefined) {
   if (methodId === undefined) state.log.logouts += 1;
   else state.log.signIns.push(methodId);
@@ -409,6 +430,7 @@ export function serveAgent(stream: Stream, options: FakeAgentOptions) {
       return openSession(state.offer, options, state.sessions, sessionId, client);
     })
     .onRequest(methods.agent.session.load, ({ params, client }) => load(state, params, client))
+    .onRequest(methods.agent.session.list, ({ params }) => list(state, params.cwd ?? "/"))
     .onRequest(methods.agent.session.close, ({ params }) => {
       log.closes.push(params.sessionId);
       state.sessions.delete(params.sessionId);

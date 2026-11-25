@@ -9,6 +9,7 @@ import {
   createAgentSession,
   DefaultResourceLoader,
   type ExtensionAPI,
+  type ExtensionCommandContextActions,
   type ExtensionUIContext,
   SessionManager,
   SettingsManager,
@@ -83,6 +84,8 @@ export interface StartOptions {
   plain?: boolean;
   /** Reuse the scratch HOME of an earlier start, with its saved Pi and agent sessions. */
   home?: string;
+  /** Pi's newSession for commands; without it, the SDK's does nothing. */
+  newSession?: ExtensionCommandContextActions["newSession"];
   /** Prepares the scratch HOME before Pi starts, for example with config files. */
   setup?: (home: string) => Promise<void>;
   /** Start the scripted agent signed out. */
@@ -119,6 +122,22 @@ async function scratchHome(options: StartOptions) {
   return { dir, work, agentDir, logFile };
 }
 
+const unsupported = () => Promise.reject(new Error("not used by these tests"));
+
+/** Command actions the SDK leaves out, with a test's own newSession. */
+function commandActions(
+  newSession: ExtensionCommandContextActions["newSession"],
+): ExtensionCommandContextActions {
+  return {
+    waitForIdle: () => Promise.resolve(),
+    newSession,
+    fork: unsupported,
+    navigateTree: unsupported,
+    switchSession: unsupported,
+    reload: unsupported,
+  };
+}
+
 /** A Pi session in `work` with this extension and another provider loaded. */
 async function piSession(
   home: { dir: string; work: string; agentDir: string },
@@ -150,9 +169,12 @@ async function piSession(
   });
   for (const [name, value] of Object.entries(options.flags ?? {}))
     session.extensionRunner.setFlagValue(name, value);
-  await session.bindExtensions(
-    options.ui ? { uiContext: { ...session.extensionRunner.getUIContext(), ...options.ui } } : {},
-  );
+  await session.bindExtensions({
+    ...(options.ui
+      ? { uiContext: { ...session.extensionRunner.getUIContext(), ...options.ui } }
+      : {}),
+    ...(options.newSession ? { commandContextActions: commandActions(options.newSession) } : {}),
+  });
   return session;
 }
 

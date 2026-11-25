@@ -46,10 +46,36 @@ const EARLY_UPDATE_LIMIT = 64;
 /** Sessions whose early updates are kept at once; the oldest is dropped for a new one. */
 const EARLY_SESSION_LIMIT = 16;
 
-/** Prompt turns an agent replays while it loads a saved session; each starts with the user speaking. */
+/** One prompt turn of a replayed conversation, as its text. */
+export interface Exchange {
+  user: string;
+  agent: string;
+}
+
+/** A conversation the agent keeps, as session/list reports it. */
+export interface SavedSession {
+  id: string;
+  title: string | undefined;
+  updatedAt: string | undefined;
+}
+
+const LIST_PAGES = 5;
+
+/**
+ * Prompt turns an agent replays while it loads a saved session; each starts with the user speaking.
+ * With `exchanges`, their text is kept as well.
+ */
 interface Replay {
   turns: number;
   userSpeaking: boolean;
+  exchanges?: Exchange[];
+}
+
+function chunkText(update: SessionUpdate): string {
+  const content = "content" in update ? update.content : undefined;
+  return isRecord(content) && content["type"] === "text" && typeof content["text"] === "string"
+    ? content["text"]
+    : "";
 }
 
 /** Updates that arrive before their session exists: settings and usage are kept, a replay is counted. */
@@ -63,10 +89,15 @@ function hold(inbox: Inbox, sessionId: string, update: SessionUpdate) {
   const kind = update.sessionUpdate;
   if (replay && kind === "user_message_chunk") {
     if (!replay.userSpeaking) replay.turns += 1;
+    if (!replay.userSpeaking) replay.exchanges?.push({ user: "", agent: "" });
     replay.userSpeaking = true;
+    const last = replay.exchanges?.at(-1);
+    if (last) last.user += chunkText(update);
     return;
   }
   if (replay) replay.userSpeaking = false;
+  const answering = replay?.exchanges?.at(-1);
+  if (answering && kind === "agent_message_chunk") answering.agent += chunkText(update);
   if (replay && /^(agent_|tool_call|plan)/.test(kind)) return;
   const held = inbox.early.get(sessionId) ?? [];
   if (held.length >= EARLY_UPDATE_LIMIT) return;
@@ -146,6 +177,7 @@ export class AcpClient {
     directories: boolean;
     mcpHttp: boolean;
     logout: boolean;
+    list: boolean;
   };
   /** Sign-in methods the agent runs itself; terminal methods need a capability Pi does not offer. */
   readonly signInMethods: readonly SignInMethod[];
@@ -207,6 +239,7 @@ export class AcpClient {
         directories: Boolean(hello.agentCapabilities?.sessionCapabilities?.additionalDirectories),
         mcpHttp: hello.agentCapabilities?.mcpCapabilities?.http === true,
         logout: Boolean(hello.agentCapabilities?.auth?.logout),
+        list: Boolean(hello.agentCapabilities?.sessionCapabilities?.list),
       },
       signInMethods: (hello.authMethods ?? []).flatMap((method) =>
         "type" in method
@@ -248,8 +281,47 @@ export class AcpClient {
    * Resolves with undefined when the agent cannot load sessions or no longer has this one.
    */
   async loadSession(sessionId: string, where: Workspace): Promise<AcpSession | undefined> {
+    return this.#load(sessionId, where, { turns: 0, userSpeaking: false });
+  }
+
+  /** A saved conversation's text, read by loading it and closing it again. */
+  async readTranscript(sessionId: string, where: Workspace): Promise<Exchange[] | undefined> {
+    const exchanges: Exchange[] = [];
+    const session = await this.#load(sessionId, where, {
+      turns: 0,
+      userSpeaking: false,
+      exchanges,
+    });
+    if (!session) return undefined;
+    // Closing frees the agent's memory; a session left open costs nothing visible.
+    await this.closeSession(sessionId).catch(() => undefined);
+    return exchanges;
+  }
+
+  /** The agent's saved conversations for `cwd`, newest first as the agent lists them. */
+  async listSessions(cwd: string): Promise<SavedSession[]> {
+    if (!this.offers.list) return [];
+    const found: SavedSession[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < LIST_PAGES; page++) {
+      // oxlint-disable-next-line no-await-in-loop -- each page names the next
+      const listed = await this.#connection.agent
+        .request(methods.agent.session.list, { cwd, ...(cursor ? { cursor } : {}) })
+        .catch(explain("list its sessions"));
+      for (const info of listed.sessions)
+        found.push({
+          id: info.sessionId,
+          title: info.title ?? undefined,
+          updatedAt: info.updatedAt ?? undefined,
+        });
+      cursor = listed.nextCursor ?? undefined;
+      if (!cursor) break;
+    }
+    return found;
+  }
+
+  async #load(sessionId: string, where: Workspace, replay: Replay) {
     if (!this.offers.load) return undefined;
-    const replay = { turns: 0, userSpeaking: false };
     this.#inbox.early.delete(sessionId);
     this.#inbox.replays.set(sessionId, replay);
     try {

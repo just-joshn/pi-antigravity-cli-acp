@@ -77,6 +77,7 @@ const { log } = serveAgent(
     plain: process.env["FAKE_AGY_PLAIN"] === "1",
     restore: process.env["FAKE_AGY_RESTORE"] !== "0",
     signedOut: process.env["FAKE_AGY_SIGNED_OUT"] === "1",
+    ghosts: process.env["FAKE_AGY_GHOST"] ? [process.env["FAKE_AGY_GHOST"]] : [],
     history,
     idPrefix: `p${process.pid}-`,
   },
