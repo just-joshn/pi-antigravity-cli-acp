@@ -32,34 +32,64 @@ interface ChatOptions {
   answers?: (PermissionOption | undefined)[];
 }
 
-/** Drives the provider the way Pi's agent loop does: stream, run the mirrored tools, stream again. */
-async function chat(agent: FakeAgentOptions, options: ChatOptions = {}) {
-  const answers = [...(options.answers ?? [])];
-  const { client, log, close } = await connect(agent, {
-    askPermission(_tool, offered) {
-      const answer = answers.shift();
-      return Promise.resolve(offered.find((option) => option.optionId === answer?.optionId));
-    },
-  });
-  onTestFinished(close);
-  let conversation: Conversation | undefined;
+type Client = Awaited<ReturnType<typeof connect>>["client"];
+
+/** What the extension does for the stream: one agent session at a time, recorded for the test. */
+function scriptedHost(client: Client, options: ChatOptions) {
+  const state = { conversation: undefined as Conversation | undefined };
   const notes: string[] = [];
   const abandoned = { count: 0 };
   const start = async () => new Conversation(await client.newSession("/work"), client.accepts);
   const stream = createStream({
     conversing: () => options.conversing ?? true,
-    open: async () => (conversation ??= await start()),
-    restart: async () => (conversation = await start()),
+    open: async () => (state.conversation ??= await start()),
+    restart: async () => (state.conversation = await start()),
     abandon() {
       abandoned.count += 1;
-      conversation = undefined;
+      state.conversation = undefined;
     },
     noteTool: (tool) => notes.push(`${tool.kind}:${tool.title}`),
     ...(options.cancelGraceMs === undefined ? {} : { cancelGraceMs: options.cancelGraceMs }),
   });
+  const watch = (id: string, signal?: AbortSignal) =>
+    runMirror(
+      (stop, onChange) =>
+        state.conversation
+          ? state.conversation.watch(id, stop, onChange)
+          : Promise.resolve(undefined),
+      signal,
+      undefined,
+    );
+  return { stream, watch, notes, abandoned };
+}
+
+/** Runs a message's mirrored tool calls and appends their results, as Pi does. */
+async function runTools(
+  host: ReturnType<typeof scriptedHost>,
+  messages: Message[],
+  message: AssistantMessage,
+) {
+  const calls = message.content.filter((block) => block.type === "toolCall");
+  const results = await Promise.all(calls.map((call) => host.watch(call.id)));
+  for (const [index, call] of calls.entries()) {
+    const result = results[index];
+    expect.assert(result);
+    messages.push({
+      role: "toolResult",
+      toolCallId: call.id,
+      toolName: call.name,
+      content: result.content,
+      isError: result.isError,
+      timestamp: Date.now(),
+    });
+  }
+  return results;
+}
+
+/** Drives the provider the way Pi's agent loop does: stream, run the mirrored tools, stream again. */
+function piLoop(host: ReturnType<typeof scriptedHost>, mirrorTool: boolean) {
   const messages: Message[] = [];
-  const tools =
-    options.mirror === false ? [] : [{ name: TOOL_NAME, description: "", parameters: {} }];
+  const tools = mirrorTool ? [{ name: TOOL_NAME, description: "", parameters: {} }] : [];
 
   async function step(model: Model<string> = modelA, request: { signal?: AbortSignal } = {}) {
     const context = normalizeContext({
@@ -68,38 +98,14 @@ async function chat(agent: FakeAgentOptions, options: ChatOptions = {}) {
       messages: [...messages],
     });
     const events: AssistantMessageEvent[] = [];
-    const running = stream(model, context, request);
+    const running = host.stream(model, context, request);
     for await (const event of running) events.push(event);
     const message = await running.result();
     messages.push(message);
     return { events, message };
   }
 
-  const watch = (id: string, signal?: AbortSignal) =>
-    runMirror(
-      (stop, onChange) =>
-        conversation ? conversation.watch(id, stop, onChange) : Promise.resolve(undefined),
-      signal,
-      undefined,
-    );
-
-  async function mirror(message: AssistantMessage) {
-    const calls = message.content.filter((block) => block.type === "toolCall");
-    const results = await Promise.all(calls.map((call) => watch(call.id)));
-    for (const [index, call] of calls.entries()) {
-      const result = results[index];
-      expect.assert(result);
-      messages.push({
-        role: "toolResult",
-        toolCallId: call.id,
-        toolName: call.name,
-        content: result.content,
-        isError: result.isError,
-        timestamp: Date.now(),
-      });
-    }
-    return results;
-  }
+  const mirror = (message: AssistantMessage) => runTools(host, messages, message);
 
   async function turn(text: string, model: Model<string> = modelA, request = {}) {
     messages.push({ role: "user", content: text, timestamp: Date.now() });
@@ -114,7 +120,22 @@ async function chat(agent: FakeAgentOptions, options: ChatOptions = {}) {
     }
   }
 
-  return { log, messages, step, turn, mirror, watch, notes, abandoned };
+  return { messages, step, mirror, turn };
+}
+
+/** A scripted agent behind the provider, driven by Pi's loop. */
+async function chat(agent: FakeAgentOptions, options: ChatOptions = {}) {
+  const answers = [...(options.answers ?? [])];
+  const { client, log, close } = await connect(agent, {
+    askPermission(_tool, offered) {
+      const answer = answers.shift();
+      return Promise.resolve(offered.find((option) => option.optionId === answer?.optionId));
+    },
+  });
+  onTestFinished(close);
+  const host = scriptedHost(client, options);
+  const { notes, abandoned, watch } = host;
+  return { log, notes, abandoned, watch, ...piLoop(host, options.mirror !== false) };
 }
 
 const textOf = (message: AssistantMessage | undefined) =>

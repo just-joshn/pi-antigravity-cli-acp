@@ -23,7 +23,6 @@ import { TOOL_NAME } from "../src/tool.ts";
 import type { AgentLog } from "./support/fake-agent.ts";
 
 const fakeAgy = join(import.meta.dirname, "support", "fake-agy.ts");
-const ENV = ["PATH", "HOME", "PI_CODING_AGENT_DIR", "FAKE_AGY_LOG", "FAKE_AGY_PLAIN"] as const;
 type ProcessLog = AgentLog & { argv: string[]; cwd: string };
 
 function isProcessLog(value: unknown): value is ProcessLog {
@@ -83,9 +82,10 @@ interface StartOptions {
   plain?: boolean;
 }
 
-/** A real Pi session with the extension loaded and a scripted `agy` first on PATH. */
-async function start(options: StartOptions = {}) {
+/** A scratch HOME whose PATH holds only the scripted `agy`, away from any editor-installed agent. */
+async function scratchHome(options: StartOptions) {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-acp-ext-")));
+  onTestFinished(() => rm(dir, { recursive: true, force: true }));
   const [work, bin, agentDir] = [join(dir, "work"), join(dir, "bin"), join(dir, "pi")];
   const logFile = join(dir, "agent-log.json");
   await Promise.all([mkdir(work), mkdir(bin)]);
@@ -93,17 +93,21 @@ async function start(options: StartOptions = {}) {
     await writeFile(join(bin, "agy"), `#!/bin/sh\nexec "${process.execPath}" "${fakeAgy}" "$@"\n`, {
       mode: 0o755,
     });
-  const saved = ENV.map((name) => [name, process.env[name]] as const);
-  // HOME points away from any editor-installed agent; PATH holds only the scripted agy.
-  Object.assign(process.env, {
-    PATH: bin,
-    HOME: dir,
-    PI_CODING_AGENT_DIR: agentDir,
-    FAKE_AGY_LOG: logFile,
-    FAKE_AGY_PLAIN: options.plain ? "1" : "0",
+  vi.stubEnv("PATH", bin);
+  vi.stubEnv("HOME", dir);
+  vi.stubEnv("PI_CODING_AGENT_DIR", agentDir);
+  vi.stubEnv("FAKE_AGY_LOG", logFile);
+  vi.stubEnv("FAKE_AGY_PLAIN", options.plain ? "1" : "0");
+  onTestFinished(() => {
+    vi.unstubAllEnvs();
   });
   const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline test"));
   onTestFinished(() => fetch.mockRestore());
+  return { work, agentDir, logFile };
+}
+
+/** A Pi session in `work` with this extension and another provider loaded. */
+async function piSession(work: string, agentDir: string, options: StartOptions) {
   const settingsManager = SettingsManager.inMemory(options.settings);
   const resourceLoader = new DefaultResourceLoader({
     cwd: work,
@@ -132,6 +136,26 @@ async function start(options: StartOptions = {}) {
   await session.bindExtensions(
     options.ui ? { uiContext: { ...session.extensionRunner.getUIContext(), ...options.ui } } : {},
   );
+  return session;
+}
+
+/** Reads what the scripted agent recorded, once its process has exited and saved it. */
+async function agentLog(logFile: string): Promise<ProcessLog> {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    // oxlint-disable-next-line no-await-in-loop -- polls for the agent process to exit and save its log
+    const text = await readFile(logFile, "utf8").catch(() => "");
+    const recorded: unknown = text ? JSON.parse(text) : undefined;
+    if (isProcessLog(recorded)) return recorded;
+    // oxlint-disable-next-line no-await-in-loop -- see above
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error("the agent process did not exit");
+}
+
+/** A real Pi session with the extension loaded and a scripted `agy` first on PATH. */
+async function start(options: StartOptions = {}) {
+  const { work, agentDir, logFile } = await scratchHome(options);
+  const session = await piSession(work, agentDir, options);
   let stopped = false;
   /** Ends the session the way Pi does and returns what the scripted agent recorded. */
   const stop = async (): Promise<ProcessLog> => {
@@ -140,23 +164,10 @@ async function start(options: StartOptions = {}) {
       await session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
       session.dispose();
     }
-    for (let attempt = 0; attempt < 100; attempt++) {
-      // oxlint-disable-next-line no-await-in-loop -- polls for the agent process to exit and save its log
-      const text = await readFile(logFile, "utf8").catch(() => "");
-      const recorded: unknown = text ? JSON.parse(text) : undefined;
-      if (isProcessLog(recorded)) return recorded;
-      // oxlint-disable-next-line no-await-in-loop -- see above
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-    throw new Error("the agent process did not exit");
+    return agentLog(logFile);
   };
   onTestFinished(async () => {
     if (!stopped) await stop().catch(() => {});
-    for (const [name, value] of saved) {
-      if (value === undefined) delete process.env[name];
-      else process.env[name] = value;
-    }
-    await rm(dir, { recursive: true, force: true });
   });
   const assistants = () =>
     session.messages.filter((m): m is AssistantMessage => m.role === "assistant");
