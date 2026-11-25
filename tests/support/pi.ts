@@ -1,8 +1,8 @@
 /** A real Pi session with this extension loaded, talking to the scripted `agy`. */
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import {
@@ -85,6 +85,8 @@ export interface StartOptions {
   home?: string;
   /** Prepares the scratch HOME before Pi starts, for example with config files. */
   setup?: (home: string) => Promise<void>;
+  /** Start the scripted agent signed out. */
+  signedOut?: boolean;
   /** Start the scripted agent without session/load and session/close. */
   restore?: boolean;
 }
@@ -106,6 +108,7 @@ async function scratchHome(options: StartOptions) {
   vi.stubEnv("PI_CODING_AGENT_DIR", agentDir);
   vi.stubEnv("FAKE_AGY_LOG", logFile);
   vi.stubEnv("FAKE_AGY_PLAIN", options.plain ? "1" : "0");
+  vi.stubEnv("FAKE_AGY_SIGNED_OUT", options.signedOut ? "1" : "0");
   vi.stubEnv("FAKE_AGY_RESTORE", options.restore === false ? "0" : "1");
   vi.stubEnv("FAKE_AGY_STORE", join(dir, "agy-sessions.json"));
   onTestFinished(() => {
@@ -153,11 +156,17 @@ async function piSession(
   return session;
 }
 
-/** Reads what the scripted agent recorded, once its process has exited and saved it. */
+/** Reads what the newest scripted agent recorded, once every agent process has exited. */
 async function agentLog(logFile: string): Promise<ProcessLog> {
+  const marker = `${basename(logFile)}.running.`;
+  const settled = async () => {
+    const names = await readdir(dirname(logFile));
+    if (names.some((name) => name.startsWith(marker))) return "";
+    return readFile(logFile, "utf8").catch(() => "");
+  };
   for (let attempt = 0; attempt < 100; attempt++) {
-    // oxlint-disable-next-line no-await-in-loop -- polls for the agent process to exit and save its log
-    const text = await readFile(logFile, "utf8").catch(() => "");
+    // oxlint-disable-next-line no-await-in-loop -- polls for the agent processes to exit
+    const text = await settled();
     const recorded: unknown = text ? JSON.parse(text) : undefined;
     if (isProcessLog(recorded)) return recorded;
     // oxlint-disable-next-line no-await-in-loop -- see above
@@ -176,8 +185,6 @@ export async function start(options: StartOptions = {}) {
   const stop = async (): Promise<ProcessLog> => {
     if (!stopped) {
       stopped = true;
-      // Agent processes the session replaced wrote here when they exited; read the last one's.
-      await rm(logFile, { force: true });
       await session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
       session.dispose();
     }

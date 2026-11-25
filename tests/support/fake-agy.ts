@@ -1,5 +1,5 @@
 /** A scripted ACP agent on stdio, started by tests in place of the real `agy acp`. */
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { Readable, Writable } from "node:stream";
 
 import { type ContentBlock, ndJsonStream } from "@agentclientprotocol/sdk/unstable";
@@ -76,16 +76,34 @@ const { log } = serveAgent(
     commands: [...defaultCommands, { name: "status", description: "The agent's own status." }],
     plain: process.env["FAKE_AGY_PLAIN"] === "1",
     restore: process.env["FAKE_AGY_RESTORE"] !== "0",
+    signedOut: process.env["FAKE_AGY_SIGNED_OUT"] === "1",
     history,
     idPrefix: `p${process.pid}-`,
   },
 );
+/** Each process marks itself running; the log of the newest-started process is kept. */
+const logFile = process.env["FAKE_AGY_LOG"];
+const startedAt = process.hrtime.bigint();
+const running = `${logFile}.running.${process.pid}`;
+if (logFile) writeFileSync(running, "");
 const save = () => {
   if (store) writeFileSync(store, JSON.stringify(history));
-  const file = process.env["FAKE_AGY_LOG"];
-  if (!file) return;
-  const record = JSON.stringify({ ...log, argv: process.argv.slice(2), cwd: process.cwd() });
-  writeFileSync(file, record);
+  if (!logFile) return;
+  const previous: unknown = JSON.parse(
+    readFileSync(logFile, { encoding: "utf8", flag: "a+" }) || "{}",
+  );
+  const newer =
+    typeof previous !== "object" ||
+    previous === null ||
+    BigInt(String(Reflect.get(previous, "startedAt") ?? 0)) < startedAt;
+  const record = {
+    ...log,
+    argv: process.argv.slice(2),
+    cwd: process.cwd(),
+    startedAt: String(startedAt),
+  };
+  if (newer) writeFileSync(logFile, JSON.stringify(record));
+  rmSync(running, { force: true });
 };
 // oxlint-disable-next-line unicorn/no-process-exit -- a test double; exiting runs the handler that saves its log
 const quit = () => process.exit(0);

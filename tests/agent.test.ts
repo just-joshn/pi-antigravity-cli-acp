@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { Stream } from "@agentclientprotocol/sdk/unstable";
-import { expect, onTestFinished, test } from "vitest";
+import { expect, onTestFinished, test, vi } from "vitest";
 
 import { findRegistryAgent, launch, registryRoot, resolveAgent } from "../src/agent.ts";
 import { AcpError } from "../src/client.ts";
@@ -169,7 +169,8 @@ test("stopping an agent that ignores SIGTERM kills it", async () => {
   while (!pid) pid = await readFile(pidFile, "utf8").catch(() => "");
   agent.stop();
   await ended(agent.stream);
-  expect(alive(Number(pid))).toBe(false);
+  // The output closes before the killed process is reaped; wait for it to be gone.
+  await vi.waitFor(() => expect(alive(Number(pid))).toBe(false), { timeout: 3000 });
 });
 
 test("stopping an agent that already exited, or never started, does nothing", async () => {

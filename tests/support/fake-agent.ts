@@ -59,6 +59,8 @@ export interface FakeAgentOptions {
   plain?: boolean;
   /** Commands the agent lists for its sessions. */
   commands?: AvailableCommand[];
+  /** Start signed out: session/new and session/load need authenticate first. */
+  signedOut?: boolean;
   /** Accept additional workspace directories, as `agy` does. */
   directories?: boolean;
   /** Accept MCP servers over HTTP; `agy` 1.5.17 does not. */
@@ -79,6 +81,9 @@ export interface AgentLog {
   cancels: number;
   outcomes: RequestPermissionOutcome[];
   loads: string[];
+  /** Auth method ids the client signed in with, and how often it logged out. */
+  signIns: string[];
+  logouts: number;
   /** The full session/load requests, in order. */
   loadRequests: LoadSessionRequest[];
   closes: string[];
@@ -300,8 +305,12 @@ function hello(options: FakeAgentOptions) {
         ...(options.directories === false ? {} : { additionalDirectories: {} }),
       },
       ...(options.mcpHttp ? { mcpCapabilities: { http: true } } : {}),
+      auth: { logout: {} },
     },
-    authMethods: [],
+    authMethods: [
+      { id: "oauth-personal", name: "Log in with Google", description: "Your Google account" },
+      { id: "gemini-api-key", name: "Gemini API key" },
+    ],
   };
 }
 
@@ -312,6 +321,8 @@ const emptyLog = (): AgentLog => ({
   cancels: 0,
   outcomes: [],
   loads: [],
+  signIns: [],
+  logouts: 0,
   loadRequests: [],
   closes: [],
 });
@@ -325,6 +336,7 @@ interface Agent {
   sessions: Map<string, SessionState>;
   cancel: (() => void) | undefined;
   prompts: number;
+  signedIn: boolean;
 }
 
 async function load(state: Agent, request: LoadSessionRequest, client: AgentContext) {
@@ -362,6 +374,13 @@ async function answer(
   return { stopReason: (await play(pb, steps)) ?? "end_turn", usage: TURN_USAGE };
 }
 
+function signInAs(state: Agent, methodId: string | undefined) {
+  if (methodId === undefined) state.log.logouts += 1;
+  else state.log.signIns.push(methodId);
+  state.signedIn = methodId !== undefined;
+  return {};
+}
+
 /** Serves a scripted ACP agent on `stream` and records what the client sent. */
 export function serveAgent(stream: Stream, options: FakeAgentOptions) {
   const log = emptyLog();
@@ -373,13 +392,17 @@ export function serveAgent(stream: Stream, options: FakeAgentOptions) {
     sessions: new Map(),
     cancel: undefined,
     prompts: 0,
+    signedIn: options.signedOut !== true,
   };
   const connection = agent({ name: "fake-agent" })
     .onRequest(methods.agent.initialize, ({ params }) => {
       log.initialize = params;
       return hello(options);
     })
+    .onRequest(methods.agent.authenticate, ({ params }) => signInAs(state, params.methodId))
+    .onRequest(methods.agent.logout, () => signInAs(state, undefined))
     .onRequest(methods.agent.session.new, ({ params, client }) => {
+      if (!state.signedIn) throw RequestError.authRequired();
       log.sessions.push(params);
       const sessionId = `${options.idPrefix ?? ""}s${log.sessions.length}`;
       state.history[sessionId] = [];

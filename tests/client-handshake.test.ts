@@ -206,6 +206,7 @@ test("an agent without session/load or session/close is not asked for either", a
     close: false,
     directories: true,
     mcpHttp: false,
+    logout: true,
   });
   expect(await client.loadSession("a", { cwd: "/work" })).toBeUndefined();
   await client.closeSession("a");

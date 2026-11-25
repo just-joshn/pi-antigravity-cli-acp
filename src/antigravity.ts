@@ -2,9 +2,10 @@ import { type ExtensionAPI, type ExtensionContext, VERSION } from "@earendil-wor
 
 import { type AgentChoice, launch, resolveAgent, type RunningAgent } from "./agent.ts";
 import { type Catalog, learn, piModels, PROVIDER, readCatalog, writeCatalog } from "./catalog.ts";
-import { AcpClient, type Workspace } from "./client.ts";
+import { AcpClient, SignInRequired, type Workspace } from "./client.ts";
 import { Conversation, parseAnchor } from "./conversation.ts";
 import type { SessionHooks } from "./session.ts";
+import { signIn } from "./sign-in.ts";
 import { createStream, haltTurn } from "./stream.ts";
 import { choiceLabels, TOOL_NAME, toolArguments } from "./tool.ts";
 import { workspaceFor } from "./workspace.ts";
@@ -280,16 +281,38 @@ export class Antigravity {
     return undefined;
   }
 
-  async #start(anchor: string | undefined): Promise<Conversation> {
+  /** The connection to the agent, starting the agent if needed, without opening a session. */
+  connected(): Promise<AcpClient> {
     this.#client ??= this.#connect();
-    const connected = await this.#client;
+    return this.#client;
+  }
+
+  /** Drops the agent process; the next message starts a new one. */
+  disconnect() {
+    this.#lose();
+  }
+
+  async #begin(connected: AcpClient, anchor: string | undefined, where: Workspace) {
+    return (
+      (anchor && (await this.#reopen(connected, anchor, where))) ||
+      new Conversation(await connected.newSession(where), connected.accepts)
+    );
+  }
+
+  async #start(anchor: string | undefined): Promise<Conversation> {
+    const connected = await this.connected();
     const pane = this.#pane;
     const trusted = pane?.isProjectTrusted() ?? false;
     const { where, notes } = workspaceFor(this.#pi, pane?.cwd ?? process.cwd(), trusted);
     for (const note of notes) this.#pane?.ui.notify(note, "warning");
-    const conversation =
-      (anchor && (await this.#reopen(connected, anchor, where))) ||
-      new Conversation(await connected.newSession(where), connected.accepts);
+    const conversation = await this.#begin(connected, anchor, where).catch(
+      async (error: unknown) => {
+        const title = "Antigravity needs you to sign in";
+        if (error instanceof SignInRequired && (await signIn(connected, this.#pane, title)))
+          return this.#begin(connected, anchor, where);
+        throw error;
+      },
+    );
     const { session } = conversation;
     const wanted = this.#wantedMode;
     if (wanted !== undefined && (await session.select("mode", wanted)) === "unavailable") {

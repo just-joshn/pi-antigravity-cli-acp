@@ -2,10 +2,10 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 
 import type { Antigravity } from "./antigravity.ts";
 import { AcpError, reasonOf } from "./client.ts";
+import { signIn } from "./sign-in.ts";
 
-const USAGE = "Usage: /agy status, /agy mode [id], or /agy <agent command> [input]";
-/** /agy's own subcommands; an agent command with one of these names is typed directly instead. */
-const OWN = new Set(["status", "mode"]);
+const USAGE =
+  "Usage: /agy status, /agy mode [id], /agy login, /agy logout, or /agy <agent command> [input]";
 
 /** Sets the agent's permission mode, asking the user to pick one when `requested` is undefined. */
 async function chooseMode(link: Antigravity, requested: string | undefined, ctx: ExtensionContext) {
@@ -57,6 +57,47 @@ async function showAgent(link: Antigravity, ctx: ExtensionContext) {
   ctx.ui.notify(lines.filter(Boolean).join("\n"), "info");
 }
 
+async function logIn(link: Antigravity, _value: string | undefined, ctx: ExtensionContext) {
+  const method = await signIn(await link.connected(), ctx, "Sign in to Antigravity");
+  ctx.ui.notify(
+    method ? `Signed in to Antigravity with ${method.name}.` : "Not signed in to Antigravity.",
+    "info",
+  );
+}
+
+async function logOut(link: Antigravity, _value: string | undefined, ctx: ExtensionContext) {
+  const client = await link.connected();
+  if (!client.offers.logout) {
+    ctx.ui.notify(
+      "This Antigravity agent cannot sign out from Pi. Run `agy` to sign out.",
+      "warning",
+    );
+    return;
+  }
+  const sure = await ctx.ui.confirm("Sign out of Antigravity?", "You will need to sign in again.");
+  if (!sure) {
+    ctx.ui.notify("Still signed in to Antigravity.", "info");
+    return;
+  }
+  await client.logOut();
+  link.disconnect();
+  ctx.ui.notify("Signed out of Antigravity.", "info");
+}
+
+type Subcommand = (
+  link: Antigravity,
+  value: string | undefined,
+  ctx: ExtensionContext,
+) => Promise<void>;
+
+/** /agy's own subcommands; an agent command with one of these names is typed directly instead. */
+const OWN: Record<string, Subcommand> = {
+  status: (link, _value, ctx) => showAgent(link, ctx),
+  mode: chooseMode,
+  login: logIn,
+  logout: logOut,
+};
+
 /** Sends `/name input` to the agent as an ordinary user message, as if typed at the prompt. */
 function runAgentCommand(
   pi: ExtensionAPI,
@@ -77,11 +118,11 @@ function runAgentCommand(
 }
 
 function completions(link: Antigravity, prefix: string) {
-  const own = ["status", "mode", ...link.modes.map((mode) => `mode ${mode.value}`)].map(
+  const own = [...Object.keys(OWN), ...link.modes.map((mode) => `mode ${mode.value}`)].map(
     (value) => ({ value, label: value }),
   );
   const agents = link.commands
-    .filter((command) => !OWN.has(command.name))
+    .filter((command) => !Object.hasOwn(OWN, command.name))
     .map((command) => ({
       value: command.name,
       label: command.name,
@@ -100,10 +141,10 @@ export function registerAgyCommand(pi: ExtensionAPI, link: Antigravity) {
     async handler(args, ctx) {
       link.commandStarted(ctx);
       const typed = args.trim();
-      const [command, value] = typed.split(/\s+/);
+      const [command = "status", value] = typed.split(/\s+/).filter(Boolean);
+      const own = OWN[command];
       try {
-        if (command === "mode") await chooseMode(link, value, ctx);
-        else if (!command || command === "status") await showAgent(link, ctx);
+        if (own) await own(link, value, ctx);
         else if (link.commands.some((known) => known.name === command))
           runAgentCommand(pi, link, typed, ctx);
         else ctx.ui.notify(USAGE, "warning");

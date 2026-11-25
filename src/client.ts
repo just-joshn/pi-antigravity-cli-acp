@@ -19,6 +19,16 @@ import { AcpSession, type AgentPort, type SessionHooks } from "./session.ts";
 /** A failure the user can act on. Its message is shown as is. */
 export class AcpError extends Error {}
 
+/** The agent needs the user to sign in before it can start a session. */
+export class SignInRequired extends AcpError {}
+
+/** A way the agent offers to sign in. */
+export interface SignInMethod {
+  id: string;
+  name: string;
+  description: string | undefined;
+}
+
 /** The start of an error's message, to show the user why something failed. */
 export function reasonOf(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message.slice(0, 300) : fallback;
@@ -85,7 +95,7 @@ function modelVariants(created: unknown): string[] {
 function explain(action: string) {
   return (error: unknown): never => {
     if (error instanceof RequestError && error.code === AUTH_REQUIRED)
-      throw new AcpError(
+      throw new SignInRequired(
         "Antigravity needs you to sign in. Run `agy` in a terminal, sign in, then try again.",
       );
     throw new AcpError(`Antigravity could not ${action}: ${reasonOf(error, "the agent stopped")}`);
@@ -130,7 +140,15 @@ export class AcpClient {
   /** Prompt content the agent accepts besides text. */
   readonly accepts: { image: boolean; embeddedContext: boolean };
   /** Session lifecycle requests the agent offers besides session/new. */
-  readonly offers: { load: boolean; close: boolean; directories: boolean; mcpHttp: boolean };
+  readonly offers: {
+    load: boolean;
+    close: boolean;
+    directories: boolean;
+    mcpHttp: boolean;
+    logout: boolean;
+  };
+  /** Sign-in methods the agent runs itself; terminal methods need a capability Pi does not offer. */
+  readonly signInMethods: readonly SignInMethod[];
   #connection: ClientConnection;
   #sessions: Map<string, AcpSession>;
   #inbox: Inbox;
@@ -141,7 +159,7 @@ export class AcpClient {
     sessions: Map<string, AcpSession>,
     inbox: Inbox,
     hooks: SessionHooks,
-    hello: Pick<AcpClient, "agent" | "accepts" | "offers">,
+    hello: Pick<AcpClient, "agent" | "accepts" | "offers" | "signInMethods">,
   ) {
     this.#connection = connection;
     this.#sessions = sessions;
@@ -150,6 +168,7 @@ export class AcpClient {
     this.agent = hello.agent;
     this.accepts = hello.accepts;
     this.offers = hello.offers;
+    this.signInMethods = hello.signInMethods;
   }
 
   static async connect(
@@ -187,7 +206,13 @@ export class AcpClient {
         close: Boolean(hello.agentCapabilities?.sessionCapabilities?.close),
         directories: Boolean(hello.agentCapabilities?.sessionCapabilities?.additionalDirectories),
         mcpHttp: hello.agentCapabilities?.mcpCapabilities?.http === true,
+        logout: Boolean(hello.agentCapabilities?.auth?.logout),
       },
+      signInMethods: (hello.authMethods ?? []).flatMap((method) =>
+        "type" in method
+          ? []
+          : [{ id: method.id, name: method.name, description: method.description ?? undefined }],
+      ),
     });
   }
 
@@ -240,6 +265,16 @@ export class AcpClient {
     } finally {
       this.#inbox.replays.delete(sessionId);
     }
+  }
+
+  async signIn(methodId: string): Promise<void> {
+    await this.#connection.agent
+      .request(methods.agent.authenticate, { methodId })
+      .catch(explain("sign in"));
+  }
+
+  async logOut(): Promise<void> {
+    await this.#connection.agent.request(methods.agent.logout, {}).catch(explain("sign out"));
   }
 
   /** Lets the agent free a session this client no longer uses. */
