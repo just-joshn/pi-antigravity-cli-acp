@@ -75,3 +75,14 @@ test("session labels are numbered when they repeat, and show what is known", () 
     ]),
   ).toStrictEqual(["Fix — 2026-11-25 10:00", "Fix — 2026-11-25 10:00 (2)", "Untitled"]);
 });
+
+test("/agy sessions does not reopen the session already in use", async () => {
+  const { ui, notes } = fakeUi(["hello — 2026-11-25 10:00"]);
+  const { session, stop } = await start({ ui });
+  await session.prompt("hello");
+  await session.prompt("/agy sessions");
+  expect(notes.at(-1)).toBe("info: That Antigravity session is the one in use here.");
+  await session.prompt("again");
+  const log = await stop();
+  expect([log.closes, log.loads]).toStrictEqual([[], []]);
+});

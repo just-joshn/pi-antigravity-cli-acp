@@ -290,7 +290,11 @@ export class Antigravity {
 
   /** The connection to the agent, starting the agent if needed, without opening a session. */
   connected(): Promise<AcpClient> {
-    this.#client ??= this.#connect();
+    this.#client ??= this.#connect().catch((error: unknown) => {
+      // A failed start is not kept: the next request tries again, for example once agy is installed.
+      this.#forget();
+      throw error;
+    });
     return this.#client;
   }
 
@@ -312,6 +316,12 @@ export class Antigravity {
     const trusted = pane?.isProjectTrusted() ?? false;
     const { where, notes } = workspaceFor(this.#pi, pane?.cwd ?? process.cwd(), trusted);
     for (const note of notes) this.#pane?.ui.notify(note, "warning");
+    for (const server of where.mcpServers ?? [])
+      if ("type" in server && !connected.offers.mcpHttp)
+        this.#pane?.ui.notify(
+          `MCP server ${server.name}: this agent takes no HTTP servers; it does not get it.`,
+          "warning",
+        );
     const conversation = await this.#begin(connected, anchor, where).catch(
       async (error: unknown) => {
         const title = "Antigravity needs you to sign in";

@@ -31,7 +31,7 @@ export async function answerElicitation(
 ): Promise<CreateElicitationResponse> {
   if (signal.aborted) return CANCEL;
   const options = { signal };
-  if ("url" in request && typeof request.url === "string") {
+  if (request.mode === "url" && "url" in request && typeof request.url === "string") {
     const picked = await dialogs.select(
       `${request.message}\n${request.url}`,
       ["Continue", "Decline"],
@@ -55,7 +55,7 @@ async function fillForm(
 ): Promise<CreateElicitationResponse> {
   const properties = isRecord(schema["properties"]) ? schema["properties"] : {};
   const required = Array.isArray(schema["required"]) ? schema["required"] : [];
-  const content: Record<string, ElicitationContentValue> = {};
+  const content: [string, ElicitationContentValue][] = [];
   for (const [key, property] of Object.entries(properties).slice(0, FIELD_LIMIT)) {
     if (!isRecord(property)) return DECLINE;
     const title = describe(key, property);
@@ -64,9 +64,10 @@ async function fillForm(
     const answer = await ask(field, dialogs, signal);
     if (answer === "cancel") return CANCEL;
     if (answer === "unsupported") return DECLINE;
-    if (answer !== "skip") content[key] = answer.value;
+    if (answer !== "skip") content.push([key, answer.value]);
   }
-  return { action: "accept", content };
+  // fromEntries defines each key as its own field, even one named __proto__.
+  return { action: "accept", content: Object.fromEntries(content) };
 }
 
 function describe(key: string, property: Record<string, unknown>): string {

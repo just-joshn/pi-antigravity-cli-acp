@@ -131,7 +131,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 
 - **Reference:** `session/new` with the workspace and MCP servers.
 - **Applies:** yes. **ACP:** `session/new`. **Pi:** provider stream.
-- **Implementation:** on the first message, in Pi's working directory, with `mcpServers: []`.
+- **Implementation:** on the first message, in Pi's working directory, with the MCP servers from `--agy-mcp` (none by default) and the directories from `--agy-dir` when the agent accepts them.
 - **Acceptance:** one agent session per Pi session; settings, usage and commands sent before the reply are kept.
 - **Verification:** `tests/client.test.ts`, `tests/index.test.ts`; the live greeting step in `tests/live-acp.py`.
 - **Status:** verified. **Limits:** see CTX-5.
@@ -225,7 +225,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 
 - **Reference:** Zed lists `available_commands_update` in its prompt's command menu.
 - **Applies:** yes. **ACP:** `available_commands_update`; commands run as prompt text `/name input`. **Pi:** `registerCommand` completions, `sendUserMessage`.
-- **Implementation:** `/agy <command> [input]` with completions and descriptions; the commands are cached for later sessions until the agent lists others. Routing through `/agy` avoids clashes with Pi's own commands; agent commands named `status` or `mode` are left out of `/agy` and typed directly.
+- **Implementation:** `/agy <command> [input]` with completions and descriptions; the commands are cached for later sessions until the agent lists others. Routing through `/agy` avoids clashes with Pi's own commands; agent commands named like `/agy`'s own subcommands (`status`, `mode`, `sessions`, `login`, `logout`) are left out of `/agy` and typed directly.
 - **Verification:** `tests/commands.test.ts`; live `/agy compact` step; the cached list after a live run had 24 commands.
 - **Status:** verified. **Limits:** in `pi -p`, Pi does not wait for a run a command starts (Pi `print-mode.js`), so there the command must be typed directly.
 
@@ -251,7 +251,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 
 - **Reference:** Zed handles form and URL elicitation.
 - **Applies:** if the agent asks; unknown for `agy` until `tests/live-probe.py` runs. **ACP:** `elicitation/create`, `elicitation/complete`. **Pi:** select and input dialogs.
-- **Implementation:** `src/elicit.ts`. A form offers Answer or Decline, then asks each field with Pi's dialogs (choices for enums and yes/no, text for strings and numbers within their limits, comma-separated multi-select), re-asking a wrong answer up to three times; Esc cancels. A URL question shows the link with Continue or Decline. Questions share the permission dialogs' queue and close with their turn; without a UI they are cancelled.
+- **Implementation:** `src/elicit.ts`. A form offers Answer or Decline, then asks each field with Pi's dialogs (choices for enums and yes/no, text for strings and numbers within their limits, comma-separated multi-select), asking again after a wrong answer, at most three times in all; Esc cancels. A URL question shows the link with Continue or Decline. Questions share the permission dialogs' queue and close with their turn; without a UI they are cancelled.
 - **Verification:** `tests/elicit.test.ts`.
 - **Status:** implemented_unverified. **Limits:** Pi does not open the link itself.
 
@@ -267,7 +267,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 
 - **Applies:** yes for agents that use them; `agy acp` reads and writes files itself, the registry agent uses the client.
 - **ACP:** `fs/read_text_file`, `fs/write_text_file`.
-- **Implementation:** reads by absolute path, refusing devices, pipes and files over 16 MiB; writes only inside the session's directory, checked after resolving links and again for the real parent after creating it, without following a link at the file.
+- **Implementation:** reads by absolute path, refusing devices, pipes and files over 16 MiB; writes only inside the session's directory and its `--agy-dir` directories, checked after resolving links and again for the real parent after creating it, without following a link at the file.
 - **Verification:** `tests/fs.test.ts`, `tests/client.test.ts`.
 - **Status:** implemented_unverified: `python3 tests/live-acp.py registry` was not run on this branch.
 
@@ -287,7 +287,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 
 - **Reference:** Zed advertises `terminal` and runs commands the agent asks for.
 - **Applies:** if the agent uses it; unknown for `agy` until `tests/live-probe.py` runs. **ACP:** `terminal/create`, `output`, `wait_for_exit`, `kill`, `release`.
-- **Implementation:** `src/terminal.ts`. Commands run without a shell in the session's directory or another absolute one, with the agent's environment additions; output is kept up to the agent's byte limit or 1 MiB, cut from the start. Kill sends SIGTERM, then SIGKILL after a second. A session reaches only its own terminals; closing a session or the connection releases them.
+- **Implementation:** `src/terminal.ts`. Commands run without a shell in the session's directory or another absolute one, with the agent's environment additions; output is kept up to the agent's byte limit, at most 1 MiB, cut from the start. Kill signals the command's process group (SIGTERM, then SIGKILL after a second), so what it started stops too; an exit is reported within a second even if a process it left behind keeps the output open. A session reaches only its own terminals; closing a session or the connection releases them.
 - **Verification:** `tests/terminal.test.ts`.
 - **Status:** implemented_unverified.
 

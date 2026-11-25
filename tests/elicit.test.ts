@@ -181,3 +181,21 @@ test("without a UI the question is cancelled; one for an unknown session too", a
   expect(asked, "a question outside any session is asked as well").toStrictEqual(["Outside"]);
   expect(replies).toStrictEqual(['{"action":"decline"}', '{"action":"cancel"}']);
 });
+
+test("only url mode is a link, and a field named __proto__ is kept as an answer", async () => {
+  const odd = {
+    requestId: 1,
+    mode: "custom",
+    message: "?",
+    url: "https://x.example",
+  } as CreateElicitationRequest;
+  expect(await answerElicitation(odd, scripted(["Continue"]).dialogs, signal)).toStrictEqual({
+    action: "decline",
+  });
+  const proto = form({ ["__proto__"]: { type: "string" } });
+  const reply = await answerElicitation(proto, scripted(["Answer", "x"]).dialogs, signal);
+  expect(reply.action).toBe("accept");
+  expect(Object.entries(("content" in reply && reply.content) || {})).toStrictEqual([
+    ["__proto__", "x"],
+  ]);
+});

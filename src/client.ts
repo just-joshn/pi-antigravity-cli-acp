@@ -79,7 +79,6 @@ function explain(action: string) {
   };
 }
 
-/** Answers the agent's requests for the sessions in `sessions`. */
 /** Runs the agent's commands for the sessions in `sessions`. */
 function terminalsFor(sessions: ReadonlyMap<string, AcpSession>) {
   return new Terminals((sessionId, terminalId, output) =>
@@ -119,6 +118,7 @@ function serveTerminals(
     );
 }
 
+/** Answers the agent's requests for the sessions in `sessions`. */
 function serve(
   stream: Stream,
   identity: ClientIdentity,
@@ -145,7 +145,7 @@ function serve(
     })
     .onRequest(methods.client.fs.readTextFile, ({ params }) => readTextFile(params))
     .onRequest(methods.client.fs.writeTextFile, ({ params }) =>
-      writeTextFile(params, sessions.get(params.sessionId)?.cwd),
+      writeTextFile(params, sessions.get(params.sessionId)?.workspaces ?? []),
     )
     .onNotification(methods.client.session.update, ({ params }) => {
       const session = sessions.get(params.sessionId);
@@ -257,7 +257,10 @@ export class AcpClient {
     };
     const hello = await connection.agent
       .request(methods.agent.initialize, introduction)
-      .catch(explain("start"));
+      .catch((error: unknown) => {
+        connection.close();
+        return explain("start")(error);
+      });
     if (hello.protocolVersion !== PROTOCOL_VERSION) {
       connection.close();
       throw new AcpError("This Antigravity agent speaks an ACP version this extension does not.");
@@ -289,7 +292,7 @@ export class AcpClient {
     const created = await this.#connection.agent
       .request(methods.agent.session.new, this.#place(where))
       .catch(explain("start a session"));
-    return this.#adopt(created.sessionId, created, where.cwd, 0);
+    return this.#adopt(created.sessionId, created, this.#place(where), 0);
   }
 
   /**
@@ -345,7 +348,7 @@ export class AcpClient {
         sessionId,
         ...this.#place(where),
       });
-      return this.#adopt(sessionId, loaded, where.cwd, replay.turns);
+      return this.#adopt(sessionId, loaded, this.#place(where), replay.turns);
     } catch (error) {
       this.#inbox.early.delete(sessionId);
       if (error instanceof RequestError && error.code === RESOURCE_NOT_FOUND) return undefined;
@@ -379,7 +382,7 @@ export class AcpClient {
   #adopt(
     sessionId: string,
     opened: { configOptions?: SessionConfigOption[] | null; _meta?: unknown },
-    cwd: string,
+    placed: NewSessionRequest,
     turns: number,
   ): AcpSession {
     const { agent } = this.#connection;
@@ -401,7 +404,8 @@ export class AcpClient {
         // oxlint-disable-next-line no-underscore-dangle -- ACP's name for protocol metadata
         tier: tierName(opened._meta),
         variants: modelVariants(opened),
-        cwd,
+        cwd: placed.cwd,
+        directories: placed.additionalDirectories ?? [],
         turns,
       },
       port,

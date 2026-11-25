@@ -66,21 +66,21 @@ async function canonical(path: string): Promise<string> {
 
 /**
  * Serves ACP `fs/write_text_file`, creating missing parent directories as an editor would.
- * Pi writes only inside the session's workspace; the agent's permission mode governs the rest.
+ * Pi writes only inside the session's workspaces: its directory and any extra ones it was given.
+ * The agent's permission mode governs the rest.
  */
 export async function writeTextFile(
   { path, content }: WriteTextFileRequest,
-  workspace: string | undefined,
+  workspaces: readonly string[],
 ) {
   requireAbsolute(path);
-  if (workspace === undefined) throw outsideWorkspace();
-  const root = await canonical(workspace);
-  requireInside(root, await canonical(path));
+  const roots = await Promise.all(workspaces.map(canonical));
+  requireInside(roots, await canonical(path));
   await mkdir(dirname(path), { recursive: true });
   // The agent can change the tree meanwhile: check the real parent again, and never follow a link
   // at the file itself.
   const target = join(await realpath(dirname(path)), basename(path));
-  requireInside(root, target);
+  requireInside(roots, target);
   // Windows has no O_NOFOLLOW; there, creating a symbolic link needs privileges the agent lacks.
   const noFollow = process.platform === "win32" ? 0 : constants.O_NOFOLLOW;
   const flags = constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | noFollow;
@@ -104,7 +104,11 @@ function outsideWorkspace() {
   );
 }
 
-function requireInside(root: string, path: string) {
-  const inside = relative(root, path);
-  if (inside === "" || inside.startsWith("..") || isAbsolute(inside)) throw outsideWorkspace();
+/** `path` must be strictly inside one of `roots`. */
+function requireInside(roots: readonly string[], path: string) {
+  const within = (root: string) => {
+    const inside = relative(root, path);
+    return inside !== "" && !inside.startsWith("..") && !isAbsolute(inside);
+  };
+  if (!roots.some(within)) throw outsideWorkspace();
 }

@@ -38,3 +38,18 @@ test("--agy-mcp gives the agent Pi's stdio MCP servers; without it the agent get
   await off.session.prompt("hello");
   expect((await off.stop()).sessions[0]?.mcpServers).toStrictEqual([]);
 });
+
+test("--agy-mcp says which HTTP servers an agent without HTTP support does not get", async () => {
+  const { ui, notes } = fakeUi();
+  const servers = { mcpServers: { docs: { url: "https://docs.example/mcp" } } };
+  const setup = async (dir: string) => {
+    await mkdir(join(dir, "pi"), { recursive: true });
+    await writeFile(join(dir, "pi", "mcp.json"), JSON.stringify(servers));
+  };
+  const { session, stop } = await start({ ui, flags: { "agy-mcp": true }, setup });
+  await session.prompt("hello");
+  expect(notes).toContain(
+    "warning: MCP server docs: this agent takes no HTTP servers; it does not get it.",
+  );
+  expect((await stop()).sessions[0]?.mcpServers).toStrictEqual([]);
+});

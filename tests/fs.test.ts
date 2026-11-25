@@ -30,7 +30,12 @@ const code = (promise: Promise<unknown>) =>
 
 const read = (path: string) => code(readTextFile({ sessionId: "s", path }));
 const writeIn = (workspace: string | undefined, path: string) =>
-  code(writeTextFile({ sessionId: "s", path, content: "x" }, workspace));
+  code(
+    writeTextFile(
+      { sessionId: "s", path, content: "x" },
+      workspace === undefined ? [] : [workspace],
+    ),
+  );
 
 test("reading returns the whole file, or limit lines from a 1-based line", async () => {
   const dir = await scratch();
@@ -83,7 +88,7 @@ test("writing stays inside the workspace, even through a symlink", async () => {
   expect(await write(join(work, "..", "out.txt"))).toBe(refused);
 
   expect(await write(join(work, "new", "deeper", "in.txt"))).toBeUndefined();
-  await writeTextFile({ sessionId: "s", path: join(work, "blank.txt"), content: "" }, work);
+  await writeTextFile({ sessionId: "s", path: join(work, "blank.txt"), content: "" }, [work]);
   expect(await readFile(join(work, "blank.txt"), "utf8")).toBe("");
   expect(await readFile(join(work, "new", "deeper", "in.txt"), "utf8")).toBe("x");
 });

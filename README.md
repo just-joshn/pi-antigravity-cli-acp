@@ -54,7 +54,7 @@ The agent's tool calls appear as Pi tool rows: `read`, `edit` with the changed l
 
 Permission modes are the agent's. `agy acp` has `default`, `accept-edits`, `auto` and `plan`. In `default` it asks before every edit and command. When Pi has nobody to ask, as in `pi -p`, requests are declined; start in a mode that does not ask if you want unattended edits.
 
-`agy` lists its own slash commands, including its skills, and `/agy` runs them as an ordinary message so they cannot clash with Pi's commands such as `/compact`. An agent command named `status` or `mode` is shadowed by `/agy`'s own; type it directly as `/status` or `/mode`. In `pi -p`, Pi exits before a run that a command starts, so type the agent's command directly instead, for example `pi -p "/compact"`.
+`agy` lists its own slash commands, including its skills, and `/agy` runs them as an ordinary message so they cannot clash with Pi's commands such as `/compact`. An agent command named `status`, `mode`, `sessions`, `login` or `logout` is shadowed by `/agy`'s own; type it directly, for example `/status`. In `pi -p`, Pi exits before a run that a command starts, so type the agent's command directly instead, for example `pi -p "/compact"`.
 
 ### Conversations
 
@@ -69,12 +69,12 @@ One Pi session drives one agent session. A follow-up sends only your new message
 
 ## Configure
 
-| Flag                 | Effect                                                                                                                                                        |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--agy-agent <name>` | Which agent to run; see below. Default `auto`.                                                                                                                |
-| `--agy-mode <id>`    | Permission mode for new agent sessions, such as `default`.                                                                                                    |
-| `--agy-dir <dirs>`   | More directories the agent may work in, separated like `PATH` and resolved from the workspace.                                                                |
-| `--agy-mcp`          | Also give the agent Pi's configured MCP servers (stdio only for `agy`). Servers Pi alone can run, such as ones with OAuth sign-in, are skipped with a notice. |
+| Flag                 | Effect                                                                                                                                                                                                                                             |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--agy-agent <name>` | Which agent to run; see below. Default `auto`.                                                                                                                                                                                                     |
+| `--agy-mode <id>`    | Permission mode for new agent sessions, such as `default`.                                                                                                                                                                                         |
+| `--agy-dir <dirs>`   | More directories the agent may work in, separated like `PATH` and resolved from the workspace.                                                                                                                                                     |
+| `--agy-mcp`          | Also give the agent Pi's configured MCP servers (stdio only for `agy`). Servers that cannot be passed are skipped with a notice: OAuth sign-in, `!command` values, an unset `${VAR}`, a `cwd`, SSE, and HTTP servers for an agent that takes none. |
 
 | `--agy-agent`    | Agent                                                         | Notes                                                                                                                                                             |
 | ---------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -121,9 +121,10 @@ bun run pack             # npm pack: pi-antigravity-acp-<version>.tgz
 
 The tests run without a Google account: a scripted ACP agent stands in for `agy`, both in memory and as a process on `PATH` under a real Pi session.
 
-Live checks use your signed-in agent and normal quota. They drive real Pi in RPC mode through a greeting, model and thinking-level selection, a question about which harness it runs in, a file read, an allowed edit, a denied command, a follow-up, a mode change, the context meter, an abort, `/agy compact`, and reopening a saved session after restarting Pi:
+Live checks use your signed-in agent and normal quota. They drive real Pi in RPC mode through a greeting, model and thinking-level selection, a question about which harness it runs in, a file read, an allowed edit, a denied command, a follow-up, a mode change, the context meter, an abort, `/agy compact`, reopening a saved session after restarting Pi, then `--agy-dir`, an image, a command's output in its tool row, the session title, a plan and `/agy sessions`:
 
 ```sh
 python3 tests/live-acp.py            # agy acp; its sessions go to ~/.gemini/antigravity-scratch
 python3 tests/live-acp.py registry   # the agent Zed installed; sessions join that agent's history
+python3 tests/live-probe.py          # which ACP features agy uses when a client offers them
 ```

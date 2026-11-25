@@ -50,6 +50,10 @@ export async function openSaved(link: Antigravity, ctx: ExtensionCommandContext)
   const picked = await ctx.ui.select("Open an Antigravity session", offered);
   const chosen = picked === undefined ? undefined : saved[offered.indexOf(picked)];
   if (!chosen) return;
+  if (chosen.id === link.live?.session.id) {
+    ctx.ui.notify("That Antigravity session is the one in use here.", "info");
+    return;
+  }
   const exchanges = await client.readTranscript(chosen.id, { cwd: ctx.cwd });
   if (!exchanges) {
     ctx.ui.notify("Antigravity no longer has that session.", "warning");

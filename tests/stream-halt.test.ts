@@ -6,7 +6,14 @@ import { haltTurn, NOT_RESENT } from "../src/stream.ts";
 import { quietHooks, resolvable } from "./support/harness.ts";
 
 const hooks: SessionHooks = quietHooks;
-const initial = { options: [], tier: undefined, variants: [], cwd: "/work", turns: 0 };
+const initial = {
+  options: [],
+  tier: undefined,
+  variants: [],
+  cwd: "/work",
+  directories: [],
+  turns: 0,
+};
 /** An agent that never answers a prompt and whose connection is gone. */
 const gone: AgentPort = {
   prompt: () => new Promise(() => {}),

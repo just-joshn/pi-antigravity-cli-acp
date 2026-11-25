@@ -94,6 +94,12 @@ export interface StartOptions {
   restore?: boolean;
 }
 
+/** Puts the scripted `agy` on the PATH of a scratch HOME. */
+export async function installAgy(home: string) {
+  const script = `#!/bin/sh\nexec "${process.execPath}" "${fakeAgy}" "$@"\n`;
+  await writeFile(join(home, "bin", "agy"), script, { mode: 0o755 });
+}
+
 /** A scratch HOME whose PATH holds only the scripted `agy`, away from any editor-installed agent. */
 async function scratchHome(options: StartOptions) {
   const dir = options.home ?? (await realpath(await mkdtemp(join(tmpdir(), "pi-acp-ext-"))));
@@ -102,10 +108,7 @@ async function scratchHome(options: StartOptions) {
   const logFile = join(dir, `agent-log-${randomUUID()}.json`);
   await Promise.all([mkdir(work, { recursive: true }), mkdir(bin, { recursive: true })]);
   await options.setup?.(dir);
-  if (options.agy ?? true)
-    await writeFile(join(bin, "agy"), `#!/bin/sh\nexec "${process.execPath}" "${fakeAgy}" "$@"\n`, {
-      mode: 0o755,
-    });
+  if (options.agy ?? true) await installAgy(dir);
   vi.stubEnv("PATH", bin);
   vi.stubEnv("HOME", dir);
   vi.stubEnv("PI_CODING_AGENT_DIR", agentDir);

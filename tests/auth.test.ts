@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { fakeUi, said, start } from "./support/pi.ts";
+import { fakeUi, installAgy, said, start } from "./support/pi.ts";
 
 test("a signed-out agent offers its sign-in methods, and the message goes through after sign-in", async () => {
   const { ui, dialogs } = fakeUi(["Log in with Google — Your Google account"]);
@@ -41,4 +41,15 @@ test("/agy login signs in with a chosen method; /agy logout asks first, then sig
   expect(notes.at(-1)).toBe("info: Signed out of Antigravity.");
   const log = await stop();
   expect([log.signIns, log.logouts]).toStrictEqual([["gemini-api-key"], 1]);
+});
+
+test("a failed start of the agent is not remembered: once agy is there, /agy works", async () => {
+  const { ui, notes } = fakeUi(["Gemini API key"]);
+  const { session, home, stop } = await start({ ui, agy: false });
+  await session.prompt("/agy login");
+  expect(notes.at(-1)).toMatch(/^error: .*not found on PATH/);
+  await installAgy(home);
+  await session.prompt("/agy login");
+  expect(notes.at(-1)).toBe("info: Signed in to Antigravity with Gemini API key.");
+  expect((await stop()).signIns).toStrictEqual(["gemini-api-key"]);
 });

@@ -1,11 +1,15 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { RequestError } from "@agentclientprotocol/sdk/unstable";
-import { expect, onTestFinished, test } from "vitest";
+import { expect, onTestFinished, test, vi } from "vitest";
 
 import { Terminals } from "../src/terminal.ts";
 import { said, start } from "./support/pi.ts";
 
 function terminals() {
-  const updates: [string, string, string][] = [];
+  const updates: [string, string, string | undefined][] = [];
   const all = new Terminals((sessionId, terminalId, output) =>
     updates.push([sessionId, terminalId, output]),
   );
@@ -90,3 +94,43 @@ test("a command the agent runs through Pi shows its output in the tool row", asy
   );
   expect((await stop()).initialize?.clientCapabilities?.terminal).toBe(true);
 });
+
+test("the agent cannot raise the output kept past 1 MiB", async () => {
+  const { all } = terminals();
+  const code = "process.stdout.write('x'.repeat(3 * 1024 * 1024))";
+  const { terminalId } = all.create({ sessionId: "s", ...node(code), outputByteLimit: 1e9 }, "/");
+  await all.waitForExit("s", terminalId);
+  const { output, truncated } = all.output("s", terminalId);
+  expect([output.length, truncated]).toStrictEqual([1024 * 1024, true]);
+});
+
+test("stopping a command stops what it started, and a child left behind does not hold up its exit", async () => {
+  const { all } = terminals();
+  const dir = await mkdtemp(join(tmpdir(), "pi-acp-term-"));
+  onTestFinished(() => rm(dir, { recursive: true, force: true }));
+  const pidFile = join(dir, "child");
+  const parent = `const c = require("node:child_process").spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "inherit" }); require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(c.pid)); setInterval(() => {}, 1000);`;
+  const { terminalId } = all.create({ sessionId: "s", ...node(parent) }, "/");
+  await vi.waitFor(async () => expect(await readFile(pidFile, "utf8")).toMatch(/\d/));
+  const child = Number(await readFile(pidFile, "utf8"));
+  all.release("s", terminalId);
+  await vi.waitFor(() => expect(alive(child)).toBe(false), { timeout: 3000 });
+
+  const daemon = `require("node:child_process").spawn(process.execPath, ["-e", "setTimeout(() => {}, 20000)"], { stdio: "inherit", detached: true }).unref();`;
+  const quick = all.create({ sessionId: "s", ...node(daemon) }, "/").terminalId;
+  const started = Date.now();
+  expect(await all.waitForExit("s", quick)).toStrictEqual({ exitCode: 0, signal: null });
+  expect(
+    Date.now() - started,
+    "the exit is reported though the daemon keeps the output open",
+  ).toBeLessThan(3000);
+});
+
+function alive(pid: number) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}

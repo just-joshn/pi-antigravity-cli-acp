@@ -148,6 +148,8 @@ export class AcpSession {
   readonly tier: string | undefined;
   /** The workspace directory the session was opened in. */
   readonly cwd: string;
+  /** Where Pi writes files for the agent: the session's directory and its extra ones. */
+  readonly workspaces: readonly string[];
   /** Model ids the agent lists with the thinking level spelled out, such as `gemini-x-high`. */
   readonly variants: readonly string[];
   #title: string | undefined;
@@ -172,6 +174,7 @@ export class AcpSession {
       tier: string | undefined;
       variants: string[];
       cwd: string;
+      directories: readonly string[];
       /** Prompt turns the session already had, when it was reopened. */
       turns: number;
     },
@@ -182,6 +185,7 @@ export class AcpSession {
     this.tier = initial.tier;
     this.variants = initial.variants;
     this.cwd = initial.cwd;
+    this.workspaces = [initial.cwd, ...initial.directories];
     this.#turns = initial.turns;
     this.#options = initial.options;
     this.#port = port;
@@ -269,6 +273,7 @@ export class AcpSession {
   /** Closes open permission dialogs; the session is being dropped. */
   dispose() {
     this.#dialogs.abort();
+    this.#settleTools();
   }
 
   /** Asks the agent to stop the turn in progress. The turn still ends with its own event. */
@@ -330,6 +335,14 @@ export class AcpSession {
     } else if (update.sessionUpdate === "config_option_update") {
       this.#options = update.configOptions;
       this.#hooks.changed();
+    } else if (update.sessionUpdate === "current_mode_update") {
+      // The agent changed its own mode; the mode setting must say so, or selecting it again is skipped.
+      this.#options = this.#options.map((option) =>
+        option.type === "select" && (option.category ?? option.id) === "mode"
+          ? { ...option, currentValue: update.currentModeId }
+          : option,
+      );
+      this.#hooks.changed();
     } else if (isPlanUpdate(update)) {
       this.#plan = nextPlan(this.#plan, update);
       this.#hooks.changed();
@@ -337,7 +350,8 @@ export class AcpSession {
       this.#commands = update.availableCommands.slice(0, COMMAND_LIMIT).map(agentCommand);
       this.#hooks.changed();
     } else if (update.sessionUpdate === "session_info_update") {
-      if (update.title) this.#title = update.title.slice(0, TITLE_LIMIT);
+      if (update.title !== undefined)
+        this.#title = update.title?.slice(0, TITLE_LIMIT) || undefined;
       this.#hooks.changed();
     }
   }
@@ -401,8 +415,13 @@ export class AcpSession {
       .join("\n");
   }
 
-  /** New output of a client terminal; tool calls that show it are updated. */
-  terminalOutput(terminalId: string, output: string) {
+  /** New output of a client terminal, or undefined once it is released; tool calls showing it are updated. */
+  terminalOutput(terminalId: string, output: string | undefined) {
+    // A released terminal's last output stays in the tool calls that showed it.
+    if (output === undefined) {
+      this.#terminals.delete(terminalId);
+      return;
+    }
     this.#terminals.set(terminalId, output);
     for (const tool of this.#tools.values()) {
       const shows = tool.content.some(

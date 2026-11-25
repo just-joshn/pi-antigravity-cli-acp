@@ -28,9 +28,10 @@ export function workspaceFor(pi: ExtensionAPI, cwd: string, projectTrusted: bool
   const directories = (typeof listed === "string" ? listed.split(delimiter) : [])
     .filter((entry) => entry.trim() !== "")
     .map((entry) => resolve(cwd, entry));
-  for (const missing of directories.filter((dir) => !isDirectory(dir)))
+  const found = directories.filter(isDirectory);
+  for (const missing of directories.filter((dir) => !found.includes(dir)))
     notes.push(`--agy-dir ${missing} is not a directory, so the agent does not get it.`);
-  const where: Workspace = { cwd, directories: directories.filter(isDirectory) };
+  const where: Workspace = { cwd, directories: found };
   if (pi.getFlag("agy-mcp") !== true) return { where, notes };
   const mcp = readPiMcpServers({
     agentDir: getAgentDir(),

@@ -293,3 +293,18 @@ test("Pi writes files for the agent only inside the session's workspace", async 
   expect(allowed.at(-1)?.type).toBe("end");
   expect(await readFile(join(work, "deep", "inside.txt"), "utf8")).toBe("y");
 });
+
+test("Pi also writes for the agent inside the extra directories its session was given", async () => {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-acp-fs-")));
+  onTestFinished(() => rm(dir, { recursive: true, force: true }));
+  const [work, extra] = [join(dir, "work"), join(dir, "extra")];
+  await Promise.all([mkdir(work), mkdir(extra)]);
+  const { client, close } = await connect({
+    script: () => [{ write: [join(extra, "x.txt"), "z"] }],
+  });
+  onTestFinished(close);
+  const session = await client.newSession({ cwd: work, directories: [extra] });
+  const events = await collect(session.startTurn([{ type: "text", text: "write" }]));
+  expect(events.at(-1)?.type).toBe("end");
+  expect(await readFile(join(extra, "x.txt"), "utf8")).toBe("z");
+});
