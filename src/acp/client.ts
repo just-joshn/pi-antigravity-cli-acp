@@ -29,18 +29,18 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 function tierName(meta: unknown): string | undefined {
-  const antigravity = record(meta) ? meta.antigravity : undefined;
-  const tier = record(antigravity) ? antigravity.tier : undefined;
-  return record(tier) && typeof tier.name === "string" ? tier.name : undefined;
+  const antigravity = record(meta) ? meta["antigravity"] : undefined;
+  const tier = record(antigravity) ? antigravity["tier"] : undefined;
+  return record(tier) && typeof tier["name"] === "string" ? tier["name"] : undefined;
 }
 
 /** Both Antigravity servers also list each model once per thinking level, outside the typed schema. */
 function modelVariants(created: unknown): string[] {
-  const models = record(created) ? created.models : undefined;
+  const models = record(created) ? created["models"] : undefined;
   const available =
-    record(models) && Array.isArray(models.availableModels) ? models.availableModels : [];
+    record(models) && Array.isArray(models["availableModels"]) ? models["availableModels"] : [];
   return available.flatMap((entry: unknown) =>
-    record(entry) && typeof entry.modelId === "string" ? [entry.modelId] : [],
+    record(entry) && typeof entry["modelId"] === "string" ? [entry["modelId"]] : [],
   );
 }
 

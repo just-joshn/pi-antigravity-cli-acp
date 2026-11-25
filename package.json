@@ -1,14 +1,8 @@
 {
   "name": "pi-google-ai-oauth",
-  "type": "module",
-  "module": "index.ts",
   "keywords": [
     "pi-package"
   ],
-  "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org/"
-  },
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -17,6 +11,12 @@
   "files": [
     "src"
   ],
+  "type": "module",
+  "module": "index.ts",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "scripts": {
     "format": "bun fmt",
     "format:check": "bun fmt --check",
@@ -43,6 +43,7 @@
   "peerDependencies": {
     "@earendil-works/pi-ai": "^1.6.0",
     "@earendil-works/pi-coding-agent": "^1.6.0",
+    "@earendil-works/pi-tui": "^1.6.0",
     "typebox": "*"
   },
   "engines": {

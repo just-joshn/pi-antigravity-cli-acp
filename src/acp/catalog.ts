@@ -96,23 +96,23 @@ function strings(value: unknown): value is string[] {
 }
 
 function parseCatalog(value: unknown): Catalog | undefined {
-  if (!record(value) || !Array.isArray(value.models) || !Array.isArray(value.modes))
+  if (!record(value) || !Array.isArray(value["models"]) || !Array.isArray(value["modes"]))
     return undefined;
   const models: CatalogModel[] = [];
-  for (const model of value.models) {
-    if (!record(model) || typeof model.id !== "string" || typeof model.name !== "string")
+  for (const model of value["models"]) {
+    if (!record(model) || typeof model["id"] !== "string" || typeof model["name"] !== "string")
       return undefined;
-    if (!strings(model.efforts)) return undefined;
-    models.push({ id: model.id, name: model.name, efforts: model.efforts });
+    if (!strings(model["efforts"])) return undefined;
+    models.push({ id: model["id"], name: model["name"], efforts: model["efforts"] });
   }
   const modes: Choice[] = [];
-  for (const mode of value.modes) {
-    if (!record(mode) || typeof mode.value !== "string" || typeof mode.name !== "string")
+  for (const mode of value["modes"]) {
+    if (!record(mode) || typeof mode["value"] !== "string" || typeof mode["name"] !== "string")
       return undefined;
-    const description = typeof mode.description === "string" ? mode.description : undefined;
-    modes.push({ value: mode.value, name: mode.name, description });
+    const description = typeof mode["description"] === "string" ? mode["description"] : undefined;
+    modes.push({ value: mode["value"], name: mode["name"], description });
   }
-  const size = value.contextWindow;
+  const size = value["contextWindow"];
   return {
     models,
     modes,
@@ -123,7 +123,6 @@ function parseCatalog(value: unknown): Catalog | undefined {
 /** Reads a saved catalog. A missing or malformed file yields the empty catalog. */
 export function readCatalog(file: string): Catalog {
   try {
-    // oxlint-disable-next-line node/no-sync -- Pi needs the model list while the extension loads
     return parseCatalog(JSON.parse(readFileSync(file, "utf8"))) ?? emptyCatalog;
   } catch {
     return emptyCatalog;
@@ -131,8 +130,6 @@ export function readCatalog(file: string): Catalog {
 }
 
 export function writeCatalog(file: string, catalog: Catalog) {
-  /* oxlint-disable node/no-sync -- a small cache file, rewritten only when the agent's offer changes */
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, `${JSON.stringify(catalog, null, 2)}\n`);
-  /* oxlint-enable node/no-sync */
 }

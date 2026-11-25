@@ -41,10 +41,9 @@ const { log } = serveAgent(
   { script },
 );
 const save = () => {
-  const file = process.env.FAKE_AGY_LOG;
+  const file = process.env["FAKE_AGY_LOG"];
   if (!file) return;
   const record = JSON.stringify({ ...log, argv: process.argv.slice(2), cwd: process.cwd() });
-  // oxlint-disable-next-line node/no-sync -- runs in the exit handler, which cannot wait
   writeFileSync(file, record);
 };
 // oxlint-disable-next-line unicorn/no-process-exit -- a test double; exiting runs the handler that saves its log

@@ -1,4 +1,3 @@
-/* oxlint-disable node/no-sync -- a one-time lookup of a few paths before the agent starts */
 import { spawn } from "node:child_process";
 import { accessSync, constants, readdirSync, readFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
@@ -37,10 +36,10 @@ function executable(file: string): boolean {
 
 /** Where Zed keeps agents installed from the ACP registry. */
 export function registryRoot(env: Env, platform: string): string {
-  const home = env.HOME ?? env.USERPROFILE ?? "";
-  let data = env.XDG_DATA_HOME ?? join(home, ".local", "share");
+  const home = env["HOME"] ?? env["USERPROFILE"] ?? "";
+  let data = env["XDG_DATA_HOME"] ?? join(home, ".local", "share");
   if (platform === "darwin") data = join(home, "Library", "Application Support");
-  else if (platform === "win32") data = env.LOCALAPPDATA ?? join(home, "AppData", "Local");
+  else if (platform === "win32") data = env["LOCALAPPDATA"] ?? join(home, "AppData", "Local");
   return join(data, platform === "linux" ? "zed" : "Zed", "external_agents", "registry");
 }
 
@@ -56,14 +55,14 @@ function registryCommand(
 ): { cmd: string; args: string[] } | undefined {
   try {
     const registry: unknown = JSON.parse(readFileSync(join(root, "registry.json"), "utf8"));
-    const agents = record(registry) && Array.isArray(registry.agents) ? registry.agents : [];
-    const entry: unknown = agents.find((agent) => record(agent) && agent.id === REGISTRY_ID);
-    const distribution = record(entry) ? entry.distribution : undefined;
-    const binaries = record(distribution) ? distribution.binary : undefined;
+    const agents = record(registry) && Array.isArray(registry["agents"]) ? registry["agents"] : [];
+    const entry: unknown = agents.find((agent) => record(agent) && agent["id"] === REGISTRY_ID);
+    const distribution = record(entry) ? entry["distribution"] : undefined;
+    const binaries = record(distribution) ? distribution["binary"] : undefined;
     const binary = record(binaries) ? binaries[platform] : undefined;
-    if (!record(binary) || typeof binary.cmd !== "string") return undefined;
-    const args = Array.isArray(binary.args) ? binary.args : [];
-    return { cmd: binary.cmd, args: args.filter((arg) => typeof arg === "string") };
+    if (!record(binary) || typeof binary["cmd"] !== "string") return undefined;
+    const args = Array.isArray(binary["args"]) ? binary["args"] : [];
+    return { cmd: binary["cmd"], args: args.filter((arg) => typeof arg === "string") };
   } catch {
     return undefined;
   }
@@ -97,7 +96,9 @@ export function findRegistryAgent(root: string, platform: string): AgentCommand 
 }
 
 function onPath(name: string, env: Env): boolean {
-  return (env.PATH ?? "").split(delimiter).some((dir) => dir !== "" && executable(join(dir, name)));
+  return (env["PATH"] ?? "")
+    .split(delimiter)
+    .some((dir) => dir !== "" && executable(join(dir, name)));
 }
 
 /** Picks the agent to run. `auto` prefers the installed CLI over an editor's registry copy. */
