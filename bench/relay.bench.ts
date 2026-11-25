@@ -1,7 +1,8 @@
 /**
  * The extension's own cost, with the model and network replaced by a scripted agent in the same
- * process. Each case is paired with the bare ACP SDK doing the same exchange, so the difference
- * is what the extension adds.
+ * process. The paired cases run the same exchange through the bare ACP SDK, which only counts the
+ * updates, and through the extension into Pi's provider events. The difference is what the
+ * extension adds, including building Pi's events and assistant message, which any Pi provider does.
  */
 import {
   type AnyMessage,
@@ -11,9 +12,9 @@ import {
   PROTOCOL_VERSION,
 } from "@agentclientprotocol/sdk/unstable";
 import { normalizeContext } from "@earendil-works/pi-ai";
-import { test } from "vitest";
+import { expect, test } from "vitest";
 
-import { emptyCatalog, piModels } from "../src/catalog.ts";
+import { AGENT_DEFAULT, emptyCatalog, piModels } from "../src/catalog.ts";
 import { Conversation } from "../src/conversation.ts";
 import { createStream } from "../src/stream.ts";
 import { type FakeAgentOptions, serveAgent, type Step } from "../tests/support/fake-agent.ts";
@@ -33,9 +34,8 @@ const toolTurn: Step[] = [
   },
   { say: "done" },
 ];
-const model = piModels({ ...emptyCatalog, models: [{ id: "g", name: "G", efforts: [] }] }).find(
-  (entry) => entry.id === "g",
-);
+/** `default` leaves the agent on its own model, so the turn needs no model change. */
+const model = piModels(emptyCatalog).find((entry) => entry.id === AGENT_DEFAULT);
 const prompt = normalizeContext({
   systemPrompt: "",
   messages: [{ role: "user", content: "go", timestamp: 1 }],
@@ -68,7 +68,7 @@ async function sdkTurn(steps: Step[]) {
 }
 
 /** The extension: the same prompt through Pi's provider stream, every event consumed. */
-async function extensionTurn(options: FakeAgentOptions) {
+async function extensionTurn(options: FakeAgentOptions): Promise<string> {
   const { client: acp, close } = await connect(options);
   let conversation: Conversation | undefined;
   const open = async () =>
@@ -82,11 +82,19 @@ async function extensionTurn(options: FakeAgentOptions) {
   });
   if (!model) throw new Error("no model");
   const reply = stream(model, prompt);
-  for await (const event of reply) if (event.type === "error") throw new Error("the turn failed");
+  for await (const event of reply)
+    if (event.type === "error") throw new Error(`the turn failed: ${event.error.errorMessage}`);
   close();
+  const message = await reply.result();
+  return message.content.map((block) => (block.type === "text" ? block.text : "")).join("");
 }
 
 test(`${CHUNKS} streamed text chunks`, async ({ bench }) => {
+  // Both arms must do the whole exchange, or a dropped update would read as a speed-up.
+  expect(await sdkTurn(chunks)).toBeGreaterThanOrEqual(CHUNKS);
+  expect(await extensionTurn({ script: () => chunks })).toBe(
+    chunks.map((c) => ("say" in c ? c.say : "")).join(""),
+  );
   await bench.compare(
     bench("ACP SDK alone", async () => {
       await sdkTurn(chunks);
@@ -98,6 +106,8 @@ test(`${CHUNKS} streamed text chunks`, async ({ bench }) => {
 });
 
 test("a tool call with 200 KB of output", async ({ bench }) => {
+  expect(await sdkTurn(toolTurn)).toBeGreaterThanOrEqual(toolTurn.length);
+  expect(await extensionTurn({ script: () => toolTurn })).toBe("done");
   await bench.compare(
     bench("ACP SDK alone", async () => {
       await sdkTurn(toolTurn);
@@ -108,6 +118,7 @@ test("a tool call with 200 KB of output", async ({ bench }) => {
   );
 });
 
+// Unpaired: the SDK alone has no session to reopen. This is the client's replay counting.
 test("reopening a saved session of 500 turns", async ({ bench }) => {
   const saved = Array.from({ length: 500 }, (_, i): ContentBlock[] => [
     { type: "text", text: `prompt ${i}` },

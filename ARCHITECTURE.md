@@ -10,7 +10,7 @@ pi-antigravity-acp makes Pi an ACP client of the Antigravity agent. This page ex
 | Pi                      | The terminal UI, the transcript the user sees, model selection, dialogs and the session files.                                       |
 | This extension          | The ACP connection, the agent process, the mapping between a Pi session and an agent session, and showing agent activity in Pi's UI. |
 
-The extension registers an `antigravity` provider, because Pi's model picker, thinking levels and streaming only exist for providers. It does not treat the agent as a model API: it sends only the user's new words, never Pi's system prompt or tools, and Pi never executes the agent's tools. The agent runs one turn per prompt; Pi's agent loop only displays it.
+The extension registers an `antigravity` provider, because Pi's model picker, thinking levels and streaming only exist for providers. It does not treat the agent as a model API: it sends the user's new message, plus earlier conversation as context only when the agent session has not seen it, never Pi's system prompt or tools, and Pi never executes the agent's tools. The agent runs one turn per prompt; Pi's agent loop only displays it.
 
 ## Modules
 
@@ -26,6 +26,7 @@ The extension registers an `antigravity` provider, because Pi's model picker, th
 | `tool.ts`, `render.ts` | The mirror tool `antigravity_tool`, which shows the agent's tool calls as Pi tool rows, and how those rows render.                       |
 | `catalog.ts`           | The agent's models, modes and commands as Pi models, cached in `antigravity/catalog.json` under Pi's agent directory.                    |
 | `command.ts`           | `/agy status`, `/agy mode` and `/agy <agent command>`.                                                                                   |
+| `guards.ts`            | `isRecord`, which narrows untyped input such as agent metadata and saved catalogs.                                                       |
 | `fs.ts`                | The agent's file requests: reads by absolute path, writes only inside the session's working directory.                                   |
 
 ## A prompt, end to end
@@ -61,12 +62,12 @@ Esc aborts Pi's request. The extension sends `session/cancel`, aborts any open p
 
 ## Performance
 
-`bun run bench` runs the same exchange with the bare ACP SDK and through the extension, with a scripted agent in the same process instead of a model. On an Apple M2 Max with Node 24.22:
+`bun run bench` runs the same exchange with the bare ACP SDK, which only counts the updates, and through the extension into Pi's provider events, with a scripted agent in the same process instead of a model. Before timing, it checks that both did the whole exchange. Two local runs on an Apple M2 Max with Node 24.22, mean time per exchange:
 
-| Workload                               | Bare SDK | Extension to Pi events |
-| -------------------------------------- | -------- | ---------------------- |
-| 1,000 streamed text chunks             | 4.78 ms  | 5.70 ms                |
-| A tool call with 200 KB of output      | 0.164 ms | 0.178 ms               |
-| Reopening a saved session of 500 turns | n/a      | 4.52 ms                |
+| Workload                               | Bare SDK           | Extension to Pi events |
+| -------------------------------------- | ------------------ | ---------------------- |
+| 1,000 streamed text chunks             | 5.00 and 5.30 ms   | 6.00 and 6.15 ms       |
+| A tool call with 200 KB of output      | 0.168 and 0.172 ms | 0.178 and 0.194 ms     |
+| Reopening a saved session of 500 turns | n/a                | 4.70 and 4.71 ms       |
 
-The extension adds about 0.9 µs per streamed chunk. Updates are handled as they arrive, without polling or batching, except that tool calls the agent starts within 25 ms of each other are shown together. Updates that arrive before their session exists are kept, at most 64 per session.
+The extension, including building Pi's events and assistant message, adds about 1 µs per streamed chunk and about 20 µs for a 200 KB tool result. Updates are handled as they arrive, without polling or batching, except that tool calls the agent starts within 25 ms of each other are shown together. Updates that arrive before their session exists are kept, at most 64 per session.

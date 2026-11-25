@@ -23,8 +23,8 @@ Zed (8aeb64f) advertises to agents: `fs` read and write, `terminal`, `auth.termi
 
 | Status                 | Count |
 | ---------------------- | ----- |
-| verified               | 18    |
-| implemented_unverified | 14    |
+| verified               | 15    |
+| implemented_unverified | 17    |
 | not_started            | 7     |
 | not_applicable         | 1     |
 | upstream_blocked       | 0     |
@@ -47,7 +47,7 @@ Zed (8aeb64f) advertises to agents: `fs` read and write, `terminal`, `auth.termi
 | SESS-7  | Cancellation                             | verified               |
 | SESS-8  | Steering mid-turn                        | implemented_unverified |
 | SESS-9  | Model, thinking level and mode           | verified               |
-| AUTH-1  | Use the existing sign-in                 | verified               |
+| AUTH-1  | Use the existing sign-in                 | implemented_unverified |
 | AUTH-2  | Sign in, choose a method, log out        | not_started            |
 | AG-1    | Account-specific models                  | verified               |
 | AG-2    | The agent's slash commands               | verified               |
@@ -71,8 +71,8 @@ Zed (8aeb64f) advertises to agents: `fs` read and write, `terminal`, `auth.termi
 | CTX-8   | Usage and session metadata               | verified               |
 | LIFE-1  | Process lifecycle, reload and shutdown   | verified               |
 | LIFE-2  | No repeated turns after a failure        | implemented_unverified |
-| PKG-1   | Install through Pi's package mechanism   | verified               |
-| PERF-1  | Measured extension overhead              | verified               |
+| PKG-1   | Install through Pi's package mechanism   | implemented_unverified |
+| PERF-1  | Measured extension overhead              | implemented_unverified |
 
 Not all applicable capabilities are verified, so parity is not claimed.
 
@@ -95,7 +95,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 - **Applies:** yes, limited to what this client implements. **ACP:** `initialize.clientCapabilities`.
 - **Implementation:** advertises `fs.readTextFile` and `fs.writeTextFile`, and `terminal: false`. Nothing else, because nothing else is implemented.
 - **Acceptance:** every advertised capability is implemented.
-- **Verification:** `tests/client.test.ts` ("introduces itself as Pi and offers file access but no terminal").
+- **Verification:** `tests/client.test.ts` ("the client introduces itself as Pi and offers file access but no terminal").
 - **Status:** verified. **Evidence:** test plus live runs. **Limits:** see TOOL-5, AG-6, CTX-7.
 
 ### PROTO-3 JSON-RPC framing and request correlation
@@ -131,7 +131,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 - **Applies:** yes. **ACP:** `session/new`. **Pi:** provider stream.
 - **Implementation:** on the first message, in Pi's working directory, with `mcpServers: []`.
 - **Acceptance:** one agent session per Pi session; settings, usage and commands sent before the reply are kept.
-- **Verification:** `tests/client.test.ts`, `tests/index.test.ts`; live.
+- **Verification:** `tests/client.test.ts`, `tests/index.test.ts`; the live greeting step in `tests/live-acp.py`.
 - **Status:** verified. **Limits:** see CTX-5.
 
 ### SESS-2 Reopen a saved session
@@ -141,7 +141,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 - **Implementation:** each assistant message carries `<agent session>/<turn>.<part>`. When Pi reopens a session, the extension loads the named agent session, counts the prompts the agent replays and continues only if the count matches. Otherwise it closes the loaded session and starts a new one with the visible history. Nothing is resent.
 - **Acceptance:** after restarting Pi, `--continue` reaches the same agent conversation without resending history; a mismatch never mixes conversations.
 - **Verification:** `tests/restore.test.ts` (reopen, missing, diverged, no load support, reload, fresh session); `tests/client-handshake.test.ts`; live `restore()` step in `tests/live-acp.py`; `bun run verify:package`.
-- **Status:** verified. **Evidence:** live run reopened agent session `32087d80…` and recalled the code word; a manual `pi -p` then `pi -c -p` run stamped turns 1 and 2 on the same agent session. **Limits:** none.
+- **Status:** verified. **Evidence:** live run reopened agent session `32087d80…` and recalled the code word; a manual `pi -p` then `pi -c -p` run stamped turns 1 and 2 on the same agent session. **Limits:** the check compares turn counts, not prompt text. Two Pi processes continuing the same saved agent session at the same time could both pass it and interleave their prompts there.
 
 ### SESS-3 `session/resume`
 
@@ -169,7 +169,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 - **Reference:** Zed renders message, thought, tool and plan updates as they arrive.
 - **Applies:** yes. **ACP:** `session/prompt`, `session/update`. **Pi:** provider stream events.
 - **Implementation:** only new user messages are sent; updates are relayed in order as Pi text, thinking and tool-call events.
-- **Verification:** `tests/client.test.ts`, `tests/stream.test.ts`; live steps.
+- **Verification:** `tests/client.test.ts`, `tests/stream.test.ts`; the live greeting and harness-question steps in `tests/live-acp.py`.
 - **Status:** verified.
 
 ### SESS-7 Cancellation
@@ -200,7 +200,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 
 - **Reference:** Zed starts the agent, which uses its stored sign-in.
 - **Applies:** yes. **Implementation:** the extension starts `agy acp` and never touches credentials.
-- **Verification:** all live steps ran on the existing sign-in. **Status:** verified.
+- **Verification:** all live steps ran on the existing sign-in. **Status:** implemented_unverified: no automated test checks that credentials are never read.
 
 ### AUTH-2 Sign in, choose a method, log out
 
@@ -220,7 +220,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 
 - **Reference:** Zed lists `available_commands_update` in its prompt's command menu.
 - **Applies:** yes. **ACP:** `available_commands_update`; commands run as prompt text `/name input`. **Pi:** `registerCommand` completions, `sendUserMessage`.
-- **Implementation:** `/agy <command> [input]` with completions and descriptions; the commands are cached for later sessions. Routing through `/agy` avoids clashes with Pi's own commands.
+- **Implementation:** `/agy <command> [input]` with completions and descriptions; the commands are cached for later sessions until the agent lists others. Routing through `/agy` avoids clashes with Pi's own commands; agent commands named `status` or `mode` are left out of `/agy` and typed directly.
 - **Verification:** `tests/commands.test.ts`; live `/agy compact` step; the cached list after a live run had 24 commands.
 - **Status:** verified. **Limits:** in `pi -p`, Pi does not wait for a run a command starts (Pi `print-mode.js`), so there the command must be typed directly.
 
@@ -349,10 +349,10 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 
 - **Implementation:** package `pi-antigravity-acp` with a `pi.extensions` manifest; `zod`, a required peer of the ACP SDK, is a dependency because Pi does not install peers.
 - **Verification:** `bun run verify:package` packs, installs with `pi install`, prompts, restarts and continues, and shuts down, with the scripted agent.
-- **Status:** verified. **Limits:** not published to npm, so `pi install npm:pi-antigravity-acp` is untested; `pi install npm:<tarball path>` did not load the package in Pi 1.6.1.
+- **Status:** implemented_unverified: the installed package was driven by the scripted agent, not the real one. **Limits:** not published to npm, so `pi install npm:pi-antigravity-acp` is untested; `pi install npm:<tarball path>` did not load the package in Pi 1.6.1.
 
 ### PERF-1 Measured extension overhead
 
 - **Implementation:** `bun run bench` compares the bare SDK with the extension on the same exchange.
-- **Evidence:** about 0.9 µs per streamed chunk; see [ARCHITECTURE.md](ARCHITECTURE.md#performance).
-- **Status:** verified.
+- **Evidence:** about 1 µs per streamed chunk and 20 µs per 200 KB tool result, from two local runs; see [ARCHITECTURE.md](ARCHITECTURE.md#performance). Not compared with Zed, and not measured against the real agent.
+- **Status:** implemented_unverified.

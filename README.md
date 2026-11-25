@@ -2,13 +2,13 @@
 
 Use Google's Antigravity agent from Pi the way Zed does. **Pi is the [ACP](https://agentclientprotocol.com/) client and Antigravity is the agent.** You pick an Antigravity model in Pi's model picker and type normally. The agent keeps the conversation, runs its own tools and asks Pi's user for permission.
 
-Pi sends the agent your words and nothing else: no Pi system prompt, no Pi tool list. Asked which harness it runs in, the model answers "Antigravity", because that is what it runs in. Pi introduces itself to the agent as `pi` in the ACP handshake.
+Pi sends the agent your new message, plus the earlier conversation as context when the agent has not seen it, and nothing else: no Pi system prompt, no Pi tool list. Asked which harness it runs in, the model answers "Antigravity", because that is what it runs in. Pi introduces itself to the agent as `pi` in the ACP handshake.
 
 [ARCHITECTURE.md](ARCHITECTURE.md) explains how the pieces fit. [PARITY.md](PARITY.md) compares each Antigravity ACP capability with Zed's client and records the evidence.
 
 ## Install
 
-You need Pi 1.6 or later, Node.js 22.19 or later, and the Antigravity CLI (`agy`) on `PATH`.
+You need Pi 1.6 or later, Node.js 22.19 or later, and either the Antigravity CLI (`agy`) on `PATH` or the Antigravity agent Zed installs from the ACP registry.
 
 From a checkout:
 
@@ -31,24 +31,26 @@ pi --model antigravity/default
 
 Say hello. `antigravity/default` uses whichever model the agent is set to. After the first reply, `/model` lists the agent's own models under `antigravity`, for example `gemini-4-hydrogen` and `gemini-3.8-flash`. Pi remembers the list, so later runs can start on one directly with `--model antigravity/gemini-3.8-flash`.
 
-| Control              | In Pi                                                                                             |
-| -------------------- | ------------------------------------------------------------------------------------------------- |
-| Model                | `/model`, Ctrl+P, or `--model antigravity/<id>`                                                   |
-| Thinking level       | Shift+Tab, or `--thinking <level>`. Pi offers only the levels the agent has for that model.       |
-| Permission requests  | A dialog with the agent's own choices, such as Allow and Deny. Esc declines.                      |
-| Permission mode      | `/agy mode` to choose, `/agy mode <id>` to set, `--agy-mode <id>` at launch. Shown in the footer. |
-| The agent's commands | `/agy <command> [input]`, for example `/agy goal ship the fix` or `/agy compact`. Tab completes.  |
-| Plan                 | While the agent works through a plan, its steps show above the editor.                            |
-| Context              | Pi's footer shows the agent's context use. `/agy status` gives the exact numbers.                 |
-| Stop                 | Esc cancels the agent's turn.                                                                     |
+| Control              | In Pi                                                                                               |
+| -------------------- | --------------------------------------------------------------------------------------------------- |
+| Model                | `/model`, Ctrl+P, or `--model antigravity/<id>`                                                     |
+| Thinking level       | Shift+Tab, or `--thinking <level>`. Pi offers only the levels the agent has for that model.         |
+| Permission requests  | A dialog with the agent's own choices, such as Allow and Deny. Esc picks the agent's reject choice. |
+| Permission mode      | `/agy mode` to choose, `/agy mode <id>` to set, `--agy-mode <id>` at launch. Shown in the footer.   |
+| The agent's commands | `/agy <command> [input]`, for example `/agy goal ship the fix` or `/agy compact`. Tab completes.    |
+| Plan                 | While the agent works through a plan, its steps show above the editor.                              |
+| Context              | Pi's footer shows the agent's context use. `/agy status` gives the exact numbers.                   |
+| Stop                 | Esc cancels the agent's turn.                                                                       |
 
 `/agy status` also shows the agent's version, the quota tier it reports for your account, and the agent session id.
 
-The agent's tool calls appear as Pi tool rows: `read`, `edit` with the changed line counts, `$` for commands with their output. Ctrl+O expands them.
+The agent's tool calls appear as Pi tool rows: `read`, `edit` with the changed line counts, `$` for commands with their output, up to 20,000 characters. Ctrl+O expands them. The `antigravity_tool` tool behind these rows is turned on while an antigravity model is selected and off otherwise.
+
+`antigravity/default` has no thinking levels in Pi; pick one of the agent's models to choose one.
 
 Permission modes are the agent's. `agy acp` has `default`, `accept-edits`, `auto` and `plan`. In `default` it asks before every edit and command. When Pi has nobody to ask, as in `pi -p`, requests are declined; start in a mode that does not ask if you want unattended edits.
 
-`agy` lists its own slash commands, including its skills, and `/agy` runs them as an ordinary message so they cannot clash with Pi's commands such as `/compact`. In `pi -p`, Pi exits before a run that a command starts, so type the agent's command directly instead, for example `pi -p "/compact"`.
+`agy` lists its own slash commands, including its skills, and `/agy` runs them as an ordinary message so they cannot clash with Pi's commands such as `/compact`. An agent command named `status` or `mode` is shadowed by `/agy`'s own; type it directly as `/status` or `/mode`. In `pi -p`, Pi exits before a run that a command starts, so type the agent's command directly instead, for example `pi -p "/compact"`.
 
 ### Conversations
 
@@ -57,7 +59,9 @@ One Pi session drives one agent session. A follow-up sends only your new message
 - **Reopening a Pi session** (`pi -c`, `/resume`, a restart or `/reload`) reopens the same agent conversation with ACP's `session/load`, if the agent still has it at the same point. Nothing is resent.
 - If the agent no longer has that conversation, or it went on without this Pi session, or Pi's conversation has history the agent never saw (for example after switching from another model), Pi starts a new agent session and supplies the visible conversation as context with your message.
 - **Rewinding or branching in Pi** starts a new agent session with the visible conversation as context. The one it replaces is closed.
-- A message typed while the agent is working is delivered after the running tools finish. It cancels the rest of that turn.
+- A message typed while the agent is working is delivered when Pi's running tool rows finish. It cancels the rest of the agent's turn and is sent next.
+- If a turn fails after the message reached the agent, for example because the agent process died, Pi's automatic retry does not send it again: what the agent did is unknown. Send it again yourself if needed.
+- History sent as context is limited to the most recent 24,000 characters, with each tool result cut to 600.
 
 ## Configure
 
@@ -105,7 +109,7 @@ bun install --frozen-lockfile
 bun run check            # formatter, oxlint, tsc, vitest with a per-file 80% coverage gate
 bun run bench            # the extension's own overhead against the bare ACP SDK
 bun run verify:package   # pack, install with pi install, prompt, restart and continue, shut down
-bun run pack             # build pi-antigravity-acp-<version>.tgz
+bun run pack             # npm pack: pi-antigravity-acp-<version>.tgz
 ```
 
 The tests run without a Google account: a scripted ACP agent stands in for `agy`, both in memory and as a process on `PATH` under a real Pi session.
