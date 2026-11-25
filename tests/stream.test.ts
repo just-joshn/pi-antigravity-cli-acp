@@ -15,7 +15,12 @@ import { runMirror, TOOL_NAME } from "../src/tool.ts";
 import { allow, defaultModels, type FakeAgentOptions, type Step } from "./support/fake-agent.ts";
 import { connect, deferred } from "./support/harness.ts";
 
-const catalog: Catalog = { models: defaultModels, modes: [], contextWindow: 1_000_000 };
+const catalog: Catalog = {
+  models: defaultModels,
+  modes: [],
+  commands: [],
+  contextWindow: 1_000_000,
+};
 function pick(id: string) {
   const found = piModels(catalog).find((entry) => entry.id === id);
   expect.assert(found, `no model ${id}`);

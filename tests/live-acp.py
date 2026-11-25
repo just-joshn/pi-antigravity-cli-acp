@@ -27,63 +27,73 @@ AGENT = sys.argv[1] if len(sys.argv) > 1 else "cli"
 EDIT_MODE = {"cli": "accept-edits", "registry": "auto_edit"}[AGENT]
 
 
-def check(pipe, work):
-    pending = queue.Queue()
-    answers = []  # labels to pick for upcoming permission dialogs
-    asked = []  # (title, options) of every dialog shown
-    statuses = []
+class Rpc:
+    """Pi in RPC mode: sends commands, answers dialogs and waits for events."""
 
-    def reader():
-        for line in pipe.stdout:
-            pending.put(json.loads(line))
-        pending.put(None)
+    def __init__(self, pipe):
+        self.pipe = pipe
+        self.pending = queue.Queue()
+        self.answers = []  # labels to pick for upcoming permission dialogs
+        self.asked = []  # (title, options) of every dialog shown
+        self.statuses = []
+        threading.Thread(target=self._read, daemon=True).start()
 
-    threading.Thread(target=reader, daemon=True).start()
+    def _read(self):
+        for line in self.pipe.stdout:
+            self.pending.put(json.loads(line))
+        self.pending.put(None)
 
-    def send(payload):
-        pipe.stdin.write(json.dumps(payload) + "\n")
-        pipe.stdin.flush()
+    def send(self, payload):
+        self.pipe.stdin.write(json.dumps(payload) + "\n")
+        self.pipe.stdin.flush()
 
-    def until(matches, timeout=200):
+    def until(self, matches, timeout=200):
         end = time.monotonic() + timeout
         events = []
         while True:
-            e = pending.get(timeout=max(0.1, end - time.monotonic()))
+            e = self.pending.get(timeout=max(0.1, end - time.monotonic()))
             if e is None:
                 raise RuntimeError("Pi closed stdout unexpectedly")
             events.append(e)
             if e.get("type") == "extension_ui_request":
                 if e.get("method") == "select":
-                    asked.append((e.get("title", ""), e.get("options", [])))
-                    choice = answers.pop(0) if answers else None
+                    self.asked.append((e.get("title", ""), e.get("options", [])))
+                    choice = self.answers.pop(0) if self.answers else None
                     reply = {"value": choice} if choice else {"cancelled": True}
-                    send({"type": "extension_ui_response", "id": e["id"], **reply})
+                    self.send({"type": "extension_ui_response", "id": e["id"], **reply})
                 elif e.get("method") == "setStatus":
-                    statuses.append(e.get("statusText") or e.get("text") or "")
+                    self.statuses.append(e.get("statusText") or e.get("text") or "")
                 continue
             if e.get("type") == "response" and not e.get("success"):
                 raise RuntimeError(f"Pi RPC {e.get('command')} failed: {e.get('error')}")
             if matches(e):
                 return events
 
-    def request(command, **fields):
-        send({"type": command, "id": command, **fields})
-        return until(lambda e: e.get("type") == "response" and e.get("id") == command)[-1].get("data")
+    def request(self, command, **fields):
+        self.send({"type": command, "id": command, **fields})
+        return self.until(lambda e: e.get("type") == "response" and e.get("id") == command)[-1].get("data")
 
-    def turn(text):
-        send({"type": "prompt", "id": "prompt", "message": text})
-        events = until(lambda e: e.get("type") == "agent_end")
-        messages = request("get_messages")["messages"]
+    def turn(self, text):
+        self.send({"type": "prompt", "id": "prompt", "message": text})
+        events = self.until(lambda e: e.get("type") == "agent_end")
+        messages = self.request("get_messages")["messages"]
         last = messages[-1]
         assert last["role"] == "assistant" and last["provider"] == PROVIDER, last.get("provider")
         said = "".join(c["text"] for c in last["content"] if c["type"] == "text")
         return events, messages, last, said
 
+
+def ok(text):
+    print("PASS:", text, flush=True)
+
+
+def check(pipe, work):
+    rpc = Rpc(pipe)
+    send, until, request, turn = rpc.send, rpc.until, rpc.request, rpc.turn
+    answers, asked, statuses = rpc.answers, rpc.asked, rpc.statuses
+
     def models():
         return [m["id"] for m in request("get_available_models")["models"] if m["provider"] == PROVIDER]
-
-    def ok(text):
-        print("PASS:", text, flush=True)
 
     assert "default" in models(), "the antigravity provider is not registered"
     request("set_model", provider=PROVIDER, modelId="default")
@@ -165,7 +175,31 @@ def check(pipe, work):
     # responseId is "<agent session>/<turn>.<part>": the agent confirmed the cancel, so its session lives on.
     assert aborted["responseId"].split("/")[0] == last["responseId"].split("/")[0], (aborted["responseId"], last["responseId"])
     ok("abort stopped a streaming reply and the next prompt was answered by the same agent session")
+
+    events, messages, last, said = turn("/agy compact")
+    asked_for = [m for m in messages if m["role"] == "user"][-1]["content"]
+    assert asked_for in ("/compact", [{"type": "text", "text": "/compact"}]), asked_for
+    assert last["stopReason"] == "stop", last.get("errorMessage")
+    ok(f"/agy compact ran the agent's own /compact as a prompt: {said.strip()[:70]!r}")
     print("status line updates seen:", sorted(set(s for s in statuses if s)), flush=True)
+
+
+def restore(start):
+    """Quits Pi and reopens its saved session: the agent conversation continues where it was."""
+    word = "pelican-" + secrets.token_hex(4)
+    first = Rpc(start([]))
+    first.request("set_model", provider=PROVIDER, modelId="default")
+    _, _, before, _ = first.turn(f"Remember the code word {word}. Reply only: noted")
+    first.pipe.stdin.close()
+    first.pipe.wait(timeout=30)
+    again = Rpc(start(["--continue"]))
+    _, _, after, said = again.turn("What was the code word? Reply with just the word.")
+    again.pipe.stdin.close()
+    again.pipe.wait(timeout=30)
+    agent_session = before["responseId"].split("/")[0]
+    assert word in said.lower(), said
+    assert after["responseId"].startswith(agent_session + "/"), (before["responseId"], after["responseId"])
+    ok(f"after restarting Pi, --continue reopened agent session {agent_session} and it recalled {word}")
 
 
 if __name__ == "__main__":
@@ -183,8 +217,13 @@ if __name__ == "__main__":
             shim.write_text(f'#!/bin/sh\nexec "{real}" "$@" --app-data-dir antigravity-scratch\n')
             shim.chmod(0o755)
             env["PATH"] = f"{tools}{os.pathsep}{env['PATH']}"
-        command = ["pi", "--mode", "rpc", "--offline", "--no-session", "--no-extensions", "--no-context-files", "--no-skills", "--no-mcp", "--no-prompt-templates", "--no-themes", "-e", str(ENTRY), "--agy-agent", AGENT]
-        pi = subprocess.Popen(command, cwd=work, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        base = ["pi", "--mode", "rpc", "--offline", "--no-extensions", "--no-context-files", "--no-skills", "--no-mcp", "--no-prompt-templates", "--no-themes", "-e", str(ENTRY), "--agy-agent", AGENT]
+
+        def start(extra):
+            command = [*base, *extra]
+            return subprocess.Popen(command, cwd=work, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+
+        pi = start(["--no-session"])
         try:
             check(pi, work)
         finally:
@@ -194,3 +233,4 @@ if __name__ == "__main__":
             except subprocess.TimeoutExpired:
                 pi.kill()
                 pi.wait()
+        restore(lambda extra: start(["--session-dir", str(root / "sessions"), *extra]))

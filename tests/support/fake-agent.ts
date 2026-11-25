@@ -2,6 +2,7 @@
 import {
   agent,
   type AgentContext,
+  type AvailableCommand,
   type ContentBlock,
   type InitializeRequest,
   methods,
@@ -53,6 +54,8 @@ export interface FakeAgentOptions {
   embeddedContext?: boolean;
   /** Report no quota tier, no settings and no context usage when a session starts. */
   plain?: boolean;
+  /** Commands the agent lists for its sessions. */
+  commands?: AvailableCommand[];
   /** Offer session/load and session/close, as `agy` does. */
   restore?: boolean;
   /** Saved conversations by session id, each a list of prompts; kept across agent processes. */
@@ -74,6 +77,10 @@ export interface AgentLog {
 
 export const allow: PermissionOption = { kind: "allow_once", optionId: "allow", name: "Allow" };
 export const deny: PermissionOption = { kind: "reject_once", optionId: "deny", name: "Deny" };
+export const defaultCommands: AvailableCommand[] = [
+  { name: "goal", description: "Run until the goal is done.", input: { hint: "the goal" } },
+  { name: "compact", description: "Compact the conversation now." },
+];
 export const defaultModels: FakeModel[] = [
   { id: "gemini-a", name: "Gemini A", efforts: ["low", "medium", "high"] },
   { id: "gemini-b", name: "Gemini B", efforts: ["low", "high", "xhigh"] },
@@ -236,6 +243,11 @@ async function openSession(
   // The real servers report context usage before session/new returns.
   const usage = { sessionUpdate: "usage_update" as const, used: 0, size: 1_000_000 };
   await client.notify(methods.client.session.update, { sessionId, update: usage });
+  const availableCommands = options.commands ?? defaultCommands;
+  await client.notify(methods.client.session.update, {
+    sessionId,
+    update: { sessionUpdate: "available_commands_update", availableCommands },
+  });
   const reply: NewSessionResponse & { models?: unknown } = {
     sessionId,
     configOptions: configOptions(offer, state),
@@ -263,79 +275,116 @@ async function replay(client: AgentContext, sessionId: string, prompts: ContentB
   }
 }
 
+function hello(options: FakeAgentOptions) {
+  const image = options.image ?? true;
+  const embeddedContext = options.embeddedContext ?? true;
+  const restore = options.restore ?? true;
+  return {
+    protocolVersion: 1,
+    agentInfo: { name: "fake-agent", title: "Fake Agent", version: "0.0.1" },
+    agentCapabilities: {
+      promptCapabilities: { image, embeddedContext },
+      ...(restore ? { loadSession: true, sessionCapabilities: { close: {} } } : {}),
+    },
+    authMethods: [],
+  };
+}
+
+const emptyLog = (): AgentLog => ({
+  sessions: [],
+  prompts: [],
+  config: [],
+  cancels: 0,
+  outcomes: [],
+  loads: [],
+  closes: [],
+});
+
+/** The fake agent's state across requests. */
+interface Agent {
+  offer: Offer;
+  options: FakeAgentOptions;
+  log: AgentLog;
+  history: Record<string, ContentBlock[][]>;
+  sessions: Map<string, SessionState>;
+  cancel: (() => void) | undefined;
+  prompts: number;
+}
+
+async function load(state: Agent, sessionId: string, client: AgentContext) {
+  state.log.loads.push(sessionId);
+  const prompts = state.history[sessionId];
+  if (!prompts) throw RequestError.resourceNotFound(sessionId);
+  await replay(client, sessionId, prompts);
+  return openSession(state.offer, state.options, state.sessions, sessionId, client);
+}
+
+function setOption(state: Agent, sessionId: string, configId: string, value: unknown) {
+  const current = state.sessions.get(sessionId);
+  if (!current || typeof value !== "string") throw new Error("bad config request");
+  state.log.config.push([configId, value]);
+  const next = configure(state.offer, current, configId, value);
+  state.sessions.set(sessionId, next);
+  return { configOptions: configOptions(state.offer, next) };
+}
+
+async function answer(
+  state: Agent,
+  sessionId: string,
+  blocks: ContentBlock[],
+  client: AgentContext,
+) {
+  state.log.prompts.push(blocks);
+  state.history[sessionId]?.push(blocks);
+  const cancelled = new Promise<void>((resolve) => {
+    state.cancel = resolve;
+  });
+  const pb = { client, sessionId, log: state.log, cancelled };
+  const steps = state.options.script(blocks, state.prompts++);
+  return { stopReason: (await play(pb, steps)) ?? "end_turn", usage: TURN_USAGE };
+}
+
 /** Serves a scripted ACP agent on `stream` and records what the client sent. */
 export function serveAgent(stream: Stream, options: FakeAgentOptions) {
-  const offer = offerOf(options);
-  const log: AgentLog = {
-    sessions: [],
-    prompts: [],
-    config: [],
-    cancels: 0,
-    outcomes: [],
-    loads: [],
-    closes: [],
+  const log = emptyLog();
+  const state: Agent = {
+    offer: offerOf(options),
+    options,
+    log,
+    history: options.history ?? {},
+    sessions: new Map(),
+    cancel: undefined,
+    prompts: 0,
   };
-  const history = options.history ?? {};
-  const restore = options.restore ?? true;
-  const sessions = new Map<string, SessionState>();
-  let cancel: (() => void) | undefined;
-  let count = 0;
-
   const connection = agent({ name: "fake-agent" })
     .onRequest(methods.agent.initialize, ({ params }) => {
       log.initialize = params;
-      const image = options.image ?? true;
-      const embeddedContext = options.embeddedContext ?? true;
-      return {
-        protocolVersion: 1,
-        agentInfo: { name: "fake-agent", title: "Fake Agent", version: "0.0.1" },
-        agentCapabilities: {
-          promptCapabilities: { image, embeddedContext },
-          ...(restore ? { loadSession: true, sessionCapabilities: { close: {} } } : {}),
-        },
-        authMethods: [],
-      };
+      return hello(options);
     })
     .onRequest(methods.agent.session.new, ({ params, client }) => {
       log.sessions.push(params);
       const sessionId = `${options.idPrefix ?? ""}s${log.sessions.length}`;
-      history[sessionId] = [];
-      return openSession(offer, options, sessions, sessionId, client);
+      state.history[sessionId] = [];
+      return openSession(state.offer, options, state.sessions, sessionId, client);
     })
-    .onRequest(methods.agent.session.load, async ({ params, client }) => {
-      log.loads.push(params.sessionId);
-      const prompts = history[params.sessionId];
-      if (!prompts) throw RequestError.resourceNotFound(params.sessionId);
-      await replay(client, params.sessionId, prompts);
-      return openSession(offer, options, sessions, params.sessionId, client);
-    })
+    .onRequest(methods.agent.session.load, ({ params, client }) =>
+      load(state, params.sessionId, client),
+    )
     .onRequest(methods.agent.session.close, ({ params }) => {
       log.closes.push(params.sessionId);
-      sessions.delete(params.sessionId);
+      state.sessions.delete(params.sessionId);
       return {};
     })
-    .onRequest(methods.agent.session.setConfigOption, ({ params }) => {
-      const current = sessions.get(params.sessionId);
-      if (!current || typeof params.value !== "string") throw new Error("bad config request");
-      log.config.push([params.configId, params.value]);
-      const next = configure(offer, current, params.configId, params.value);
-      sessions.set(params.sessionId, next);
-      return { configOptions: configOptions(offer, next) };
-    })
+    .onRequest(methods.agent.session.setConfigOption, ({ params }) =>
+      setOption(state, params.sessionId, params.configId, params.value),
+    )
     .onNotification(methods.agent.session.cancel, () => {
       log.cancels += 1;
-      cancel?.();
+      state.cancel?.();
     })
-    .onRequest(methods.agent.session.prompt, async ({ params, client }) => {
-      log.prompts.push(params.prompt);
-      history[params.sessionId]?.push(params.prompt);
-      const cancelled = new Promise<void>((resolve) => {
-        cancel = resolve;
-      });
-      const pb = { client, sessionId: params.sessionId, log, cancelled };
-      const stopReason = (await play(pb, options.script(params.prompt, count++))) ?? "end_turn";
-      return { stopReason, usage: TURN_USAGE };
-    })
+    .onRequest(methods.agent.session.prompt, ({ params, client }) =>
+      answer(state, params.sessionId, params.prompt, client),
+    )
     .connect(stream);
 
   return { log, close: () => connection.close() };

@@ -73,6 +73,17 @@ export class Antigravity {
     return this.#catalog.modes;
   }
 
+  /** The agent's own slash commands, from the live session or the last one. */
+  get commands() {
+    const live = this.#live?.session.commands ?? [];
+    return live.length ? live : this.#catalog.commands;
+  }
+
+  /** Whether the model Pi uses now is one of this extension's. */
+  get selected() {
+    return selected(this.#pane);
+  }
+
   /** The connected agent's name and version, if it has started. */
   async agentInfo() {
     return (await this.#client)?.agent;

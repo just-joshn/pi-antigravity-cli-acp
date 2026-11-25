@@ -73,6 +73,7 @@ test("Pi models mark thinking levels the agent lacks as unsupported", () => {
       { id: "fixed", name: "Fixed", efforts: [] },
     ],
     modes: [],
+    commands: [],
     contextWindow: 2000,
   });
   expect(models.map((model) => [model.id, model.reasoning, model.contextWindow])).toStrictEqual([
@@ -104,6 +105,10 @@ test("a saved catalog round-trips; a missing or malformed one is ignored", async
   const catalog = {
     models: [{ id: "g", name: "G", efforts: ["low"] }],
     modes: [{ value: "default", name: "Default", description: "Ask first" }],
+    commands: [
+      { name: "goal", description: "Run to the end", hint: "the goal" },
+      { name: "compact", description: "Compact now", hint: undefined },
+    ],
     contextWindow: 123,
   };
   writeCatalog(file, catalog);
@@ -128,8 +133,24 @@ test("a saved catalog round-trips; a missing or malformed one is ignored", async
   expect(readCatalog(file)).toStrictEqual({
     models: [],
     modes: [{ value: "m", name: "M", description: undefined }],
+    commands: [],
     contextWindow: emptyCatalog.contextWindow,
   });
+});
+
+test("saved agent commands that are missing or malformed are dropped, not the catalog", async () => {
+  const file = join(await scratch(), "catalog.json");
+  const commands = async (value: unknown) => {
+    await writeFile(file, JSON.stringify({ models: [], modes: [], commands: value }));
+    return readCatalog(file).commands;
+  };
+  expect(await commands(undefined)).toStrictEqual([]);
+  expect(await commands("goal")).toStrictEqual([]);
+  expect(await commands([null])).toStrictEqual([]);
+  expect(await commands([{ name: "goal" }])).toStrictEqual([]);
+  expect(await commands([{ name: "goal", description: "d", hint: 3 }])).toStrictEqual([
+    { name: "goal", description: "d", hint: undefined },
+  ]);
 });
 
 test("a saved catalog with no models or modes is valid, and its context window must be positive", async () => {
@@ -143,5 +164,10 @@ test("a saved catalog with no models or modes is valid, and its context window m
   expect(await window("2000")).toBe(emptyCatalog.contextWindow);
   expect(await window(0)).toBe(emptyCatalog.contextWindow);
   expect(await window(1)).toBe(1);
-  expect(readCatalog(file)).toStrictEqual({ models: [], modes: [], contextWindow: 1 });
+  expect(readCatalog(file)).toStrictEqual({
+    models: [],
+    modes: [],
+    commands: [],
+    contextWindow: 1,
+  });
 });

@@ -3,6 +3,8 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import type { Antigravity } from "./antigravity.ts";
 import { AcpError, reasonOf } from "./client.ts";
 
+const USAGE = "Usage: /agy status, /agy mode [id], or /agy <agent command> [input]";
+
 /** Sets the agent's permission mode, asking the user to pick one when `requested` is undefined. */
 async function chooseMode(link: Antigravity, requested: string | undefined, ctx: ExtensionContext) {
   const { session } = await link.open();
@@ -53,22 +55,54 @@ async function showAgent(link: Antigravity, ctx: ExtensionContext) {
   ctx.ui.notify(lines.filter(Boolean).join("\n"), "info");
 }
 
-/** `/agy status` and `/agy mode [id]`. */
+/** Sends `/name input` to the agent as an ordinary user message, as if typed at the prompt. */
+function runAgentCommand(
+  pi: ExtensionAPI,
+  link: Antigravity,
+  typed: string,
+  ctx: ExtensionContext,
+) {
+  const name = typed.split(/\s/, 1)[0];
+  if (!link.selected) {
+    ctx.ui.notify(
+      `/agy ${name} runs in the Antigravity agent. Select an antigravity model with /model first.`,
+      "warning",
+    );
+    return;
+  }
+  if (ctx.isIdle()) pi.sendUserMessage(`/${typed}`);
+  else pi.sendUserMessage(`/${typed}`, { deliverAs: "followUp" });
+}
+
+function completions(link: Antigravity, prefix: string) {
+  const own = ["status", "mode", ...link.modes.map((mode) => `mode ${mode.value}`)].map(
+    (value) => ({ value, label: value }),
+  );
+  const agents = link.commands.map((command) => ({
+    value: command.name,
+    label: command.name,
+    description: command.hint ? `${command.description} (${command.hint})` : command.description,
+  }));
+  const matches = [...own, ...agents].filter((option) => option.value.startsWith(prefix));
+  return matches.length ? matches : null;
+}
+
+/** `/agy status`, `/agy mode [id]` and the agent's own commands as `/agy <command> [input]`. */
 export function registerAgyCommand(pi: ExtensionAPI, link: Antigravity) {
   pi.registerCommand("agy", {
-    description: "Antigravity agent: /agy status, or /agy mode [id] to change its permission mode",
-    getArgumentCompletions(prefix) {
-      const options = ["status", "mode", ...link.modes.map((mode) => `mode ${mode.value}`)];
-      const matches = options.filter((option) => option.startsWith(prefix));
-      return matches.length ? matches.map((value) => ({ value, label: value })) : null;
-    },
+    description:
+      "Antigravity agent: /agy status, /agy mode [id], or /agy <agent command> [input] to run one of its commands",
+    getArgumentCompletions: (prefix) => completions(link, prefix),
     async handler(args, ctx) {
       link.commandStarted(ctx);
-      const [command, value] = args.trim().split(/\s+/);
+      const typed = args.trim();
+      const [command, value] = typed.split(/\s+/);
       try {
         if (command === "mode") await chooseMode(link, value, ctx);
         else if (!command || command === "status") await showAgent(link, ctx);
-        else ctx.ui.notify("Usage: /agy status, or /agy mode [id]", "warning");
+        else if (link.commands.some((known) => known.name === command))
+          runAgentCommand(pi, link, typed, ctx);
+        else ctx.ui.notify(USAGE, "warning");
       } catch (error) {
         ctx.ui.notify(
           error instanceof AcpError

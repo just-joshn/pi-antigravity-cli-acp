@@ -1,4 +1,5 @@
 import type {
+  AvailableCommand,
   ContentBlock,
   PermissionOption,
   PromptResponse,
@@ -16,6 +17,18 @@ import { isRecord } from "./guards.ts";
 
 /** The agent settings a client can change, named by ACP's config-option categories. */
 export type OptionCategory = "model" | "thought_level" | "mode";
+
+/** A command the agent runs when a prompt starts with `/name`. */
+export interface AgentCommand {
+  name: string;
+  description: string;
+  /** What to type after the command, when it takes input. */
+  hint: string | undefined;
+}
+
+function agentCommand(command: AvailableCommand): AgentCommand {
+  return { name: command.name, description: command.description, hint: command.input?.hint };
+}
 
 export interface Choice {
   value: string;
@@ -126,6 +139,7 @@ export class AcpSession {
   #turns = 0;
   #options: SessionConfigOption[];
   #usage: { used: number; size: number } | undefined;
+  #commands: readonly AgentCommand[] = [];
   #tools = new Map<string, ToolView>();
   #watchers = new Map<string, Set<(tool: ToolView) => void>>();
   #turn: Turn | undefined;
@@ -162,6 +176,11 @@ export class AcpSession {
 
   get turn() {
     return this.#turn;
+  }
+
+  /** The commands the agent last listed for this session. */
+  get commands() {
+    return this.#commands;
   }
 
   get title() {
@@ -281,6 +300,9 @@ export class AcpSession {
       this.#hooks.changed();
     } else if (update.sessionUpdate === "config_option_update") {
       this.#options = update.configOptions;
+      this.#hooks.changed();
+    } else if (update.sessionUpdate === "available_commands_update") {
+      this.#commands = update.availableCommands.map(agentCommand);
       this.#hooks.changed();
     } else if (update.sessionUpdate === "session_info_update") {
       if (update.title) this.#title = update.title;

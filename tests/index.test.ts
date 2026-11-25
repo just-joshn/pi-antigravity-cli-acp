@@ -155,7 +155,9 @@ test("/agy mode without an id offers the agent's modes, and /agy status reports 
     expect.stringMatching(/^Agent session: p\d+-s1$/),
   ]);
   await session.prompt("/agy bogus");
-  expect(notes.at(-1)).toBe("warning: Usage: /agy status, or /agy mode [id]");
+  expect(notes.at(-1)).toBe(
+    "warning: Usage: /agy status, /agy mode [id], or /agy <agent command> [input]",
+  );
   const log = await stop();
   expect(log.config).toStrictEqual([["mode", "auto"]]);
 });
