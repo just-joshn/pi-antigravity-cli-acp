@@ -16,6 +16,11 @@ import { AcpSession, type AgentPort, type SessionHooks } from "./session.ts";
 /** A failure the user can act on. Its message is shown as is. */
 export class AcpError extends Error {}
 
+/** The start of an error's message, to show the user why something failed. */
+export function reasonOf(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message.slice(0, 300) : fallback;
+}
+
 export interface ClientIdentity {
   name: string;
   title: string;
@@ -47,8 +52,7 @@ function explain(action: string) {
       throw new AcpError(
         "Antigravity needs you to sign in. Run `agy` in a terminal, sign in, then try again.",
       );
-    const reason = error instanceof Error ? error.message.slice(0, 300) : "the agent stopped";
-    throw new AcpError(`Antigravity could not ${action}: ${reason}`);
+    throw new AcpError(`Antigravity could not ${action}: ${reasonOf(error, "the agent stopped")}`);
   };
 }
 

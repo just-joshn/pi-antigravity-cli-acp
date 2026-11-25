@@ -474,3 +474,30 @@ test("/agy mode without an id does nothing when there is nobody to ask", async (
   expect(log.sessions.length, "the agent session still starts").toBe(1);
   expect(log.config).toStrictEqual([]);
 });
+
+test("an unknown --agy-agent falls back to auto, and an empty --agy-mode is ignored", async () => {
+  const { session, stop } = await start({ flags: { "agy-agent": "bogus", "agy-mode": "" } });
+  await session.prompt("hello");
+  const log = await stop();
+  expect(log.argv).toStrictEqual(["acp"]);
+  expect(log.config).toStrictEqual([]);
+});
+
+test("/agy alone shows the status, and extra spaces around its arguments are ignored", async () => {
+  const { ui, notes } = fakeUi();
+  const { session, stop } = await start({ ui });
+  await session.prompt("/agy");
+  expect(notes.at(-1)).toMatch(/No Antigravity session yet/);
+  await session.prompt("/agy   mode   auto  ");
+  expect(notes.at(-1)).toBe("info: Antigravity permission mode: auto");
+  expect((await stop()).config).toStrictEqual([["mode", "auto"]]);
+});
+
+test("/agy reports an unexpected failure with its reason", async () => {
+  const { ui, notes } = fakeUi();
+  const { session } = await start({
+    ui: { ...ui, select: () => Promise.reject(new Error("dialog closed")) },
+  });
+  await session.prompt("/agy mode");
+  expect(notes.at(-1)).toBe("error: The Antigravity agent could not be reached: dialog closed");
+});

@@ -42,6 +42,16 @@ test("reading returns the whole file, or limit lines from a 1-based line", async
   expect(await lines(0, 1), "line 0 reads from the start").toBe("one");
 });
 
+test("reading an empty file, or zero lines, gives empty text", async () => {
+  const dir = await scratch();
+  const path = join(dir, "empty.txt");
+  await writeFile(path, "");
+  expect((await readTextFile({ sessionId: "s", path })).content).toBe("");
+  await writeFile(path, "one\ntwo");
+  expect((await readTextFile({ sessionId: "s", path, line: 1, limit: 0 })).content).toBe("");
+  expect((await readTextFile({ sessionId: "s", path, line: 9 })).content).toBe("");
+});
+
 test("reading refuses relative paths and reports missing or unreadable files", async () => {
   const dir = await scratch();
   expect(await read("relative.txt")).toBe(RequestError.invalidParams().code);
@@ -64,5 +74,16 @@ test("writing stays inside the workspace, even through a symlink", async () => {
   expect(await write(join(work, "..", "out.txt"))).toBe(refused);
 
   expect(await write(join(work, "new", "deeper", "in.txt"))).toBeUndefined();
+  await writeTextFile({ sessionId: "s", path: join(work, "blank.txt"), content: "" }, work);
+  expect(await readFile(join(work, "blank.txt"), "utf8")).toBe("");
   expect(await readFile(join(work, "new", "deeper", "in.txt"), "utf8")).toBe("x");
+});
+
+test("a file that cannot be read is named in the error with the reason", async () => {
+  const dir = await scratch();
+  const failure = await readTextFile({ sessionId: "s", path: dir }).catch(
+    (error: unknown) => error,
+  );
+  expect.assert(failure instanceof RequestError);
+  expect(failure.message).toContain(`${dir} could not be read (EISDIR)`);
 });

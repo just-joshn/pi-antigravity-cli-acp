@@ -143,3 +143,29 @@ test("a failed prompt reports the agent's message with any details it attached",
   });
   expect(await failure(), "no data").toStrictEqual({ type: "failed", message: "Internal error" });
 });
+
+test("a tier or per-level model list of the wrong shape is ignored", async () => {
+  const replies = [
+    { _meta: { antigravity: { tier: { name: 5 } } }, models: { availableModels: "none" } },
+    {
+      _meta: { antigravity: { tier: "Pro" } },
+      models: { availableModels: [null, { modelId: 3 }] },
+    },
+    { _meta: { antigravity: null }, models: { availableModels: [{ modelId: "g-high" }] } },
+  ];
+  let count = 0;
+  const client = await meet((b) =>
+    b
+      .onRequest(methods.agent.initialize, () => hello)
+      .onRequest(methods.agent.session.new, () => ({
+        sessionId: `s${++count}`,
+        ...replies[count - 1],
+      })),
+  );
+  const sessions = await Promise.all(replies.map(() => client.newSession("/work")));
+  expect(sessions.map((session) => [session.tier, session.variants])).toStrictEqual([
+    [undefined, []],
+    [undefined, []],
+    [undefined, ["g-high"]],
+  ]);
+});

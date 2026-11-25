@@ -12,7 +12,7 @@ import {
 } from "@earendil-works/pi-ai";
 
 import { AGENT_DEFAULT, effortFor, PROVIDER } from "./catalog.ts";
-import { AcpError } from "./client.ts";
+import { AcpError, reasonOf } from "./client.ts";
 import type { Conversation } from "./conversation.ts";
 import type { AcpSession, ToolView, Turn, TurnEvent } from "./session.ts";
 import { TOOL_NAME, toolArguments } from "./tool.ts";
@@ -286,8 +286,6 @@ type EndEvent = Extract<TurnEvent, { type: "end" | "failed" }>;
 
 const OUTSIDE_CONVERSATION =
   "Antigravity keeps its own context, so it only answers messages in the conversation. Summaries and other background requests are not available with this model.";
-const AGENT_STOPPED =
-  "The Antigravity agent stopped unexpectedly. Check that `agy` works in a terminal.";
 
 /** One Pi request: plans the agent turn, then relays its events into one assistant message. */
 class Reply {
@@ -425,7 +423,7 @@ class Reply {
       ? "Antigravity request cancelled."
       : error instanceof AcpError
         ? error.message
-        : AGENT_STOPPED;
+        : `The Antigravity agent stopped unexpectedly (${reasonOf(error, "no reason given")}). Check that \`agy\` works in a terminal.`;
     this.draft.events.push({ type: "error", reason: message.stopReason, error: message });
   }
 }

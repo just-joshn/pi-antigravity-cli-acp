@@ -110,6 +110,9 @@ test("a saved catalog round-trips; a missing or malformed one is ignored", async
   expect(readCatalog(file)).toStrictEqual(catalog);
   const bad = [
     "{",
+    "",
+    "null",
+    '"text"',
     "[]",
     '{"models":[{"id":1,"name":"x","efforts":[]}],"modes":[]}',
     '{"models":[{"id":"x","name":"x","efforts":[1]}],"modes":[]}',
@@ -127,4 +130,18 @@ test("a saved catalog round-trips; a missing or malformed one is ignored", async
     modes: [{ value: "m", name: "M", description: undefined }],
     contextWindow: emptyCatalog.contextWindow,
   });
+});
+
+test("a saved catalog with no models or modes is valid, and its context window must be positive", async () => {
+  const file = join(await scratch(), "catalog.json");
+  const window = async (contextWindow: unknown) => {
+    await writeFile(file, JSON.stringify({ models: [], modes: [], contextWindow }));
+    return readCatalog(file).contextWindow;
+  };
+  expect(await window(undefined)).toBe(emptyCatalog.contextWindow);
+  expect(await window(null)).toBe(emptyCatalog.contextWindow);
+  expect(await window("2000")).toBe(emptyCatalog.contextWindow);
+  expect(await window(0)).toBe(emptyCatalog.contextWindow);
+  expect(await window(1)).toBe(1);
+  expect(readCatalog(file)).toStrictEqual({ models: [], modes: [], contextWindow: 1 });
 });

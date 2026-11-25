@@ -129,7 +129,9 @@ test("a missing or malformed registry listing falls back to the default server b
     // oxlint-disable-next-line no-await-in-loop -- two small fixture files
     await writeFile(join(installed, name), "#!/bin/sh\n", { mode: 0o755 });
   const listings: unknown[] = [
+    null,
     "not an object",
+    { agents: [null, { id: "antigravity-acp", distribution: null }] },
     { agents: "not a list" },
     { agents: [{ id: "antigravity-acp" }] },
     { agents: [{ id: "antigravity-acp", distribution: { binary: { "windows-x86_64": {} } } }] },

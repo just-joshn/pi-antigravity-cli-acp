@@ -1,7 +1,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 import type { Antigravity } from "./antigravity.ts";
-import { AcpError } from "./client.ts";
+import { AcpError, reasonOf } from "./client.ts";
 
 /** Sets the agent's permission mode, asking the user to pick one when `requested` is undefined. */
 async function chooseMode(link: Antigravity, requested: string | undefined, ctx: ExtensionContext) {
@@ -71,7 +71,9 @@ export function registerAgyCommand(pi: ExtensionAPI, link: Antigravity) {
         else ctx.ui.notify("Usage: /agy status, or /agy mode [id]", "warning");
       } catch (error) {
         ctx.ui.notify(
-          error instanceof AcpError ? error.message : "The Antigravity agent could not be reached.",
+          error instanceof AcpError
+            ? error.message
+            : `The Antigravity agent could not be reached: ${reasonOf(error, "no reason given")}`,
           "error",
         );
       }

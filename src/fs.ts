@@ -20,9 +20,9 @@ export async function readTextFile({
 }: ReadTextFileRequest): Promise<ReadTextFileResponse> {
   requireAbsolute(path);
   const text = await readFile(path, "utf8").catch((error: unknown) => {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT")
-      throw RequestError.resourceNotFound(path);
-    throw RequestError.internalError(undefined, "the file could not be read");
+    const code = error instanceof Error && "code" in error ? String(error.code) : "unknown";
+    if (code === "ENOENT") throw RequestError.resourceNotFound(path);
+    throw RequestError.internalError(undefined, `${path} could not be read (${code})`);
   });
   const first = line ?? undefined;
   const count = limit ?? undefined;

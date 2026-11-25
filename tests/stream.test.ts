@@ -478,3 +478,22 @@ test("a mirrored call that Pi aborts, or that the agent never made, is reported 
   expect(JSON.stringify(unknown.content)).toMatch(/No Antigravity tool call matches/);
   gate.resolve();
 });
+
+test("an unexpected failure is reported with its reason", async () => {
+  const stream = createStream({
+    conversing: () => true,
+    open: () => Promise.reject(new Error("socket hang up")),
+    restart: () => Promise.reject(new Error("unused")),
+    abandon: () => {},
+    noteTool: () => {},
+  });
+  const context = normalizeContext({
+    systemPrompt: "",
+    messages: [{ role: "user", content: "hi", timestamp: 1 }],
+  });
+  const message = await stream(modelA, context).result();
+  expect(message.stopReason).toBe("error");
+  expect(message.errorMessage).toBe(
+    "The Antigravity agent stopped unexpectedly (socket hang up). Check that `agy` works in a terminal.",
+  );
+});
