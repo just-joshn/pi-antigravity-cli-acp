@@ -45,7 +45,8 @@ export class Conversation {
   /** A Pi tool call id for one of the agent's tool calls. */
   mirror(tool: ToolView): string {
     const prefix = this.session.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 40);
-    const id = `agy_${prefix}_${this.#toolIds.size + 1}`;
+    // The turn keeps ids unique when the session is reopened and this count starts again.
+    const id = `agy_${prefix}_${this.session.turns}_${this.#toolIds.size + 1}`;
     this.#toolIds.set(id, tool.id);
     return id;
   }

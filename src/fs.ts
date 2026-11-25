@@ -23,7 +23,7 @@ async function requireReadable(path: string) {
   if (info && !info.isFile() && !info.isDirectory())
     throw RequestError.invalidParams(undefined, `${path} is not a regular file`);
   if (info && info.size > READ_LIMIT)
-    throw RequestError.invalidParams(undefined, `${path} is larger than 16 MB`);
+    throw RequestError.invalidParams(undefined, `${path} is larger than 16 MiB`);
 }
 
 /** Serves ACP `fs/read_text_file`: the whole file, or `limit` lines from 1-based `line`. */
@@ -81,7 +81,9 @@ export async function writeTextFile(
   // at the file itself.
   const target = join(await realpath(dirname(path)), basename(path));
   requireInside(root, target);
-  const flags = constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW;
+  // Windows has no O_NOFOLLOW; there, creating a symbolic link needs privileges the agent lacks.
+  const noFollow = process.platform === "win32" ? 0 : constants.O_NOFOLLOW;
+  const flags = constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | noFollow;
   const file = await open(target, flags).catch((error: unknown) => {
     const code = error instanceof Error && "code" in error ? String(error.code) : "unknown";
     if (code === "ELOOP") throw outsideWorkspace();

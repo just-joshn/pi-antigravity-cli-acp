@@ -260,7 +260,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 
 - **Applies:** yes for agents that use them; `agy acp` reads and writes files itself, the registry agent uses the client.
 - **ACP:** `fs/read_text_file`, `fs/write_text_file`.
-- **Implementation:** reads by absolute path, refusing devices, pipes and files over 16 MB; writes only inside the session's directory, checked after resolving links and again for the real parent after creating it, without following a link at the file.
+- **Implementation:** reads by absolute path, refusing devices, pipes and files over 16 MiB; writes only inside the session's directory, checked after resolving links and again for the real parent after creating it, without following a link at the file.
 - **Verification:** `tests/fs.test.ts`, `tests/client.test.ts`.
 - **Status:** implemented_unverified: `python3 tests/live-acp.py registry` was not run on this branch.
 
@@ -354,5 +354,5 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 ### PERF-1 Measured extension overhead
 
 - **Implementation:** `bun run bench` compares the bare SDK with the extension on the same exchange.
-- **Evidence:** about 1 µs per streamed chunk and 20 µs per 200 KB tool result, from two local runs; see [ARCHITECTURE.md](ARCHITECTURE.md#performance). Not compared with Zed, and not measured against the real agent.
+- **Evidence:** about 1 µs per streamed chunk and 10 to 22 µs per 200 KB tool result, from two local runs; see [ARCHITECTURE.md](ARCHITECTURE.md#performance). Not compared with Zed, and not measured against the real agent.
 - **Status:** implemented_unverified.

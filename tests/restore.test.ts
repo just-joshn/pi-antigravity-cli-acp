@@ -121,3 +121,17 @@ test("when the agent process dies mid-turn, the message is not sent again and th
   expect(log.sessions.length).toBe(1);
   expect(log.prompts.map(texts)).toStrictEqual([["[resource]", "after"]]);
 });
+
+test("tool calls after reopening an agent session get ids the transcript has not used", async () => {
+  const { home } = await earlierRun(["please read it"]);
+  const { session, stop } = await start({ home });
+  await session.prompt("read it again");
+  await stop();
+  const ids = session.messages.flatMap((message) =>
+    message.role === "assistant"
+      ? message.content.flatMap((block) => (block.type === "toolCall" ? [block.id] : []))
+      : [],
+  );
+  expect(ids.length).toBe(2);
+  expect(new Set(ids).size, JSON.stringify(ids)).toBe(2);
+});

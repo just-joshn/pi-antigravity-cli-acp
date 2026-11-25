@@ -114,7 +114,7 @@ bun run pack             # npm pack: pi-antigravity-acp-<version>.tgz
 
 The tests run without a Google account: a scripted ACP agent stands in for `agy`, both in memory and as a process on `PATH` under a real Pi session.
 
-Live checks use your signed-in agent and normal quota. They drive real Pi in RPC mode through a greeting, model and thinking-level selection, a file read, an allowed edit, a denied command, a follow-up, a mode change, the context meter, an abort, `/agy compact`, and reopening a saved session after restarting Pi:
+Live checks use your signed-in agent and normal quota. They drive real Pi in RPC mode through a greeting, model and thinking-level selection, a question about which harness it runs in, a file read, an allowed edit, a denied command, a follow-up, a mode change, the context meter, an abort, `/agy compact`, and reopening a saved session after restarting Pi:
 
 ```sh
 python3 tests/live-acp.py            # agy acp; its sessions go to ~/.gemini/antigravity-scratch

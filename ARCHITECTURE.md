@@ -58,7 +58,7 @@ Esc aborts Pi's request. The extension sends `session/cancel`, aborts any open p
 - The extension never sees credentials. Sign-in, tokens and quota stay in the agent.
 - Permission requests always reach the user as a dialog with the agent's own options. With no UI, the request is answered with the agent's reject option, or cancelled if it has none. A dialog still open when its turn ends is closed and the request cancelled. Nothing is approved without the user.
 - Writes requested by the agent go only inside the session's working directory. The path is checked after resolving symbolic links, the real parent directory is checked again after it is created, and a symbolic link at the file itself is not followed.
-- Reads requested by the agent take any absolute path, as an editor's would, but refuse devices, pipes and files over 16 MB.
+- Reads requested by the agent take any absolute path, as an editor's would, but refuse devices, pipes and files over 16 MiB.
 - What the agent sends is bounded: plans to 100 entries, commands to 200, each text to 500 characters, titles to 200, tool output shown to 20,000 characters, and updates held for not-yet-known sessions to 64 each for the newest 16 sessions.
 - The agent process inherits Pi's environment, because `agy` needs it to find its sign-in. Do not run Pi with secrets in its environment that the agent should not see.
 - Nothing is logged.
@@ -73,4 +73,4 @@ Esc aborts Pi's request. The extension sends `session/cancel`, aborts any open p
 | A tool call with 200 KB of output      | 0.168 and 0.172 ms | 0.178 and 0.194 ms     |
 | Reopening a saved session of 500 turns | n/a                | 4.70 and 4.71 ms       |
 
-The extension, including building Pi's events and assistant message, adds about 1 µs per streamed chunk and about 20 µs for a 200 KB tool result. Updates are handled as they arrive, without polling or batching, except that tool calls the agent starts within 25 ms of each other are shown together. Updates that arrive before their session exists are kept, at most 64 per session for the newest 16 sessions.
+The extension, including building Pi's events and assistant message, adds about 1 µs per streamed chunk and 10 to 22 µs for a 200 KB tool result. Updates are handled as they arrive, without polling or batching, except that tool calls the agent starts within 25 ms of each other are shown together. Updates that arrive before their session exists are kept, at most 64 per session for the newest 16 sessions.
