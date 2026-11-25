@@ -351,7 +351,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 
 - **Implementation:** package `pi-antigravity-acp` with a `pi.extensions` manifest; `zod`, a required peer of the ACP SDK, is a dependency because Pi does not install peers.
 - **Verification:** `bun run verify:package` packs, installs with `pi install`, prompts, restarts and continues, and shuts down, with the scripted agent.
-- **Status:** implemented_unverified: the installed package was driven by the scripted agent, not the real one. **Limits:** not published to npm, so `pi install npm:pi-antigravity-acp` is untested; `pi install npm:<tarball path>` did not load the package in Pi 1.6.1.
+- **Status:** implemented_unverified: the installed package was driven by the scripted agent, not the real one. **Limits:** not published to npm, so `pi install npm:pi-antigravity-acp` is untested; Pi installs `npm:` sources by registry name, so a tarball path cannot stand in for the published package.
 
 ### PERF-1 Measured extension overhead
 

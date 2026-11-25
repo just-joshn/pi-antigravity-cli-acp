@@ -4,10 +4,10 @@
 # saved session after Pi restarts, and that no agent process outlives Pi. Uses no Antigravity
 # account or quota.
 #
-# Pi installs npm sources itself, but it did not load a package given as `npm:<tarball path>`
-# (Pi 1.6.1), and this package is not published. So the script unpacks the tarball and installs
-# its production dependencies the way Pi does for npm sources (no peers), then adds the directory
-# with `pi install <path>`.
+# Pi installs `npm:` sources by registry name (it looks for node_modules/<name from the spec>), so
+# an unpublished tarball cannot be installed that way. The script unpacks the tarball, installs its
+# production dependencies the way Pi does for npm sources (no peers), then adds the directory with
+# `pi install <path>`.
 set -euo pipefail
 
 repo="$(cd "$(dirname "$0")/.." && pwd)"
