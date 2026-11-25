@@ -115,3 +115,31 @@ test("a session the agent cannot create is explained", async () => {
   expect(client.agent).toStrictEqual({ name: "bare", version: "1" });
   await expect(client.newSession("/work")).rejects.toThrow(/sign in/);
 });
+
+test("a failed prompt reports the agent's message with any details it attached", async () => {
+  const replies = [{ details: "quota exhausted" }, { details: 7 }, null];
+  const client = await meet((b) =>
+    b
+      .onRequest(methods.agent.initialize, () => hello)
+      .onRequest(methods.agent.session.new, () => ({ sessionId: "s1" }))
+      .onRequest(methods.agent.session.prompt, () => {
+        throw new RequestError(-32603, "Internal error", replies.shift());
+      }),
+  );
+  const session = await client.newSession("/work");
+  const failure = async () => {
+    const turn = session.startTurn([{ type: "text", text: "hi" }]);
+    const event = await turn.next();
+    session.endTurn(turn);
+    return event;
+  };
+  expect(await failure()).toStrictEqual({
+    type: "failed",
+    message: "Internal error: quota exhausted",
+  });
+  expect(await failure(), "details that are not text").toStrictEqual({
+    type: "failed",
+    message: "Internal error",
+  });
+  expect(await failure(), "no data").toStrictEqual({ type: "failed", message: "Internal error" });
+});

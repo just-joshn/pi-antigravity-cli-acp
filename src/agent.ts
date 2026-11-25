@@ -6,6 +6,7 @@ import { Readable, Writable } from "node:stream";
 import { ndJsonStream, type Stream } from "@agentclientprotocol/sdk/unstable";
 
 import { AcpError } from "./client.ts";
+import { isRecord } from "./guards.ts";
 
 /** Which Antigravity ACP server to run. */
 export type AgentChoice = "auto" | "cli" | "registry";
@@ -20,10 +21,6 @@ export interface AgentCommand {
 type Env = Record<string, string | undefined>;
 
 const REGISTRY_ID = "antigravity-acp";
-
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function executable(file: string): boolean {
   try {
@@ -55,12 +52,13 @@ function registryCommand(
 ): { cmd: string; args: string[] } | undefined {
   try {
     const registry: unknown = JSON.parse(readFileSync(join(root, "registry.json"), "utf8"));
-    const agents = record(registry) && Array.isArray(registry["agents"]) ? registry["agents"] : [];
-    const entry: unknown = agents.find((agent) => record(agent) && agent["id"] === REGISTRY_ID);
-    const distribution = record(entry) ? entry["distribution"] : undefined;
-    const binaries = record(distribution) ? distribution["binary"] : undefined;
-    const binary = record(binaries) ? binaries[platform] : undefined;
-    if (!record(binary) || typeof binary["cmd"] !== "string") return undefined;
+    const agents =
+      isRecord(registry) && Array.isArray(registry["agents"]) ? registry["agents"] : [];
+    const entry: unknown = agents.find((agent) => isRecord(agent) && agent["id"] === REGISTRY_ID);
+    const distribution = isRecord(entry) ? entry["distribution"] : undefined;
+    const binaries = isRecord(distribution) ? distribution["binary"] : undefined;
+    const binary = isRecord(binaries) ? binaries[platform] : undefined;
+    if (!isRecord(binary) || typeof binary["cmd"] !== "string") return undefined;
     const args = Array.isArray(binary["args"]) ? binary["args"] : [];
     return { cmd: binary["cmd"], args: args.filter((arg) => typeof arg === "string") };
   } catch {

@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 
 import type { Api, Model } from "@earendil-works/pi-ai";
 
+import { isRecord } from "./guards.ts";
 import type { AcpSession, Choice } from "./session.ts";
 
 export const PROVIDER = "antigravity";
@@ -87,27 +88,23 @@ export function effortFor(model: Model<string>, level: string | undefined): stri
   return (level === undefined ? undefined : levels[level]) ?? undefined;
 }
 
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function strings(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
 function parseCatalog(value: unknown): Catalog | undefined {
-  if (!record(value) || !Array.isArray(value["models"]) || !Array.isArray(value["modes"]))
+  if (!isRecord(value) || !Array.isArray(value["models"]) || !Array.isArray(value["modes"]))
     return undefined;
   const models: CatalogModel[] = [];
   for (const model of value["models"]) {
-    if (!record(model) || typeof model["id"] !== "string" || typeof model["name"] !== "string")
+    if (!isRecord(model) || typeof model["id"] !== "string" || typeof model["name"] !== "string")
       return undefined;
     if (!strings(model["efforts"])) return undefined;
     models.push({ id: model["id"], name: model["name"], efforts: model["efforts"] });
   }
   const modes: Choice[] = [];
   for (const mode of value["modes"]) {
-    if (!record(mode) || typeof mode["value"] !== "string" || typeof mode["name"] !== "string")
+    if (!isRecord(mode) || typeof mode["value"] !== "string" || typeof mode["name"] !== "string")
       return undefined;
     const description = typeof mode["description"] === "string" ? mode["description"] : undefined;
     modes.push({ value: mode["value"], name: mode["name"], description });

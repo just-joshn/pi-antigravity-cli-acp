@@ -12,6 +12,8 @@ import type {
   ToolKind,
 } from "@agentclientprotocol/sdk/unstable";
 
+import { isRecord } from "./guards.ts";
+
 /** The agent settings a client can change, named by ACP's config-option categories. */
 export type OptionCategory = "model" | "thought_level" | "mode";
 
@@ -107,10 +109,8 @@ type SelectOption = Extract<SessionConfigOption, { type: "select" }>;
 
 function describeFailure(error: unknown): string {
   const text = error instanceof Error ? error.message : "The agent ended the request.";
-  const detail =
-    error instanceof Error && "data" in error && typeof error.data === "object" && error.data
-      ? (error.data as { details?: unknown }).details
-      : undefined;
+  const data = error instanceof Error && "data" in error ? error.data : undefined;
+  const detail = isRecord(data) ? data["details"] : undefined;
   return [text, typeof detail === "string" ? detail : ""].filter(Boolean).join(": ").slice(0, 500);
 }
 

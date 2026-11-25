@@ -10,6 +10,7 @@ import {
 } from "@agentclientprotocol/sdk/unstable";
 
 import { readTextFile, writeTextFile } from "./fs.ts";
+import { isRecord } from "./guards.ts";
 import { AcpSession, type AgentPort, type SessionHooks } from "./session.ts";
 
 /** A failure the user can act on. Its message is shown as is. */
@@ -24,23 +25,19 @@ export interface ClientIdentity {
 const AUTH_REQUIRED = -32000;
 const EARLY_UPDATE_LIMIT = 64;
 
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function tierName(meta: unknown): string | undefined {
-  const antigravity = record(meta) ? meta["antigravity"] : undefined;
-  const tier = record(antigravity) ? antigravity["tier"] : undefined;
-  return record(tier) && typeof tier["name"] === "string" ? tier["name"] : undefined;
+  const antigravity = isRecord(meta) ? meta["antigravity"] : undefined;
+  const tier = isRecord(antigravity) ? antigravity["tier"] : undefined;
+  return isRecord(tier) && typeof tier["name"] === "string" ? tier["name"] : undefined;
 }
 
 /** Both Antigravity servers also list each model once per thinking level, outside the typed schema. */
 function modelVariants(created: unknown): string[] {
-  const models = record(created) ? created["models"] : undefined;
+  const models = isRecord(created) ? created["models"] : undefined;
   const available =
-    record(models) && Array.isArray(models["availableModels"]) ? models["availableModels"] : [];
+    isRecord(models) && Array.isArray(models["availableModels"]) ? models["availableModels"] : [];
   return available.flatMap((entry: unknown) =>
-    record(entry) && typeof entry["modelId"] === "string" ? [entry["modelId"]] : [],
+    isRecord(entry) && typeof entry["modelId"] === "string" ? [entry["modelId"]] : [],
   );
 }
 
