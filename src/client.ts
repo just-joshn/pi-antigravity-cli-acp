@@ -52,6 +52,35 @@ function explain(action: string) {
   };
 }
 
+/** Answers the agent's requests for the sessions in `sessions`. */
+function serve(
+  stream: Stream,
+  identity: ClientIdentity,
+  sessions: ReadonlyMap<string, AcpSession>,
+  early: Map<string, SessionUpdate[]>,
+): ClientConnection {
+  return client({ name: identity.name })
+    .onRequest(methods.client.session.requestPermission, ({ params }) => {
+      const session = sessions.get(params.sessionId);
+      return session ? session.permission(params) : { outcome: { outcome: "cancelled" } };
+    })
+    .onRequest(methods.client.fs.readTextFile, ({ params }) => readTextFile(params))
+    .onRequest(methods.client.fs.writeTextFile, ({ params }) =>
+      writeTextFile(params, sessions.get(params.sessionId)?.cwd),
+    )
+    .onNotification(methods.client.session.update, ({ params }) => {
+      const session = sessions.get(params.sessionId);
+      if (session) {
+        session.receive(params.update);
+        return;
+      }
+      // Agents report usage before session/new returns; keep it until the session exists.
+      const held = early.get(params.sessionId) ?? [];
+      if (held.length < EARLY_UPDATE_LIMIT) early.set(params.sessionId, [...held, params.update]);
+    })
+    .connect(stream);
+}
+
 /** One connection to an ACP agent process. */
 export class AcpClient {
   readonly agent: { name: string; version: string };
@@ -84,26 +113,7 @@ export class AcpClient {
   ): Promise<AcpClient> {
     const sessions = new Map<string, AcpSession>();
     const early = new Map<string, SessionUpdate[]>();
-    const connection = client({ name: identity.name })
-      .onRequest(methods.client.session.requestPermission, ({ params }) => {
-        const session = sessions.get(params.sessionId);
-        return session ? session.permission(params) : { outcome: { outcome: "cancelled" } };
-      })
-      .onRequest(methods.client.fs.readTextFile, ({ params }) => readTextFile(params))
-      .onRequest(methods.client.fs.writeTextFile, ({ params }) =>
-        writeTextFile(params, sessions.get(params.sessionId)?.cwd),
-      )
-      .onNotification(methods.client.session.update, ({ params }) => {
-        const session = sessions.get(params.sessionId);
-        if (session) {
-          session.receive(params.update);
-          return;
-        }
-        // Agents report usage before session/new returns; keep it until the session exists.
-        const held = early.get(params.sessionId) ?? [];
-        if (held.length < EARLY_UPDATE_LIMIT) early.set(params.sessionId, [...held, params.update]);
-      })
-      .connect(stream);
+    const connection = serve(stream, identity, sessions, early);
     const introduction: InitializeRequest = {
       protocolVersion: PROTOCOL_VERSION,
       clientInfo: identity,
