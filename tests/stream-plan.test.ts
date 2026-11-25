@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 
-import { planTurn, renderHistory } from "../src/stream.ts";
+import { parseAnchor } from "../src/conversation.ts";
+import { lastAnchor, planTurn, renderHistory } from "../src/stream.ts";
 
 const usage = {
   input: 0,
@@ -107,4 +108,24 @@ test("long history keeps its most recent part", () => {
   const long = renderHistory([user("a".repeat(30_000)), user("END")]);
   expect(long.length).toBeLessThan(24_200);
   expect(long).toMatch(/\[earlier conversation omitted\][\s\S]*END$/);
+});
+
+test("a saved anchor names the agent session and its turn count; anything else is no anchor", () => {
+  expect(parseAnchor("s1/3.0")).toStrictEqual({ sessionId: "s1", turns: 3 });
+  expect(parseAnchor("a/b/0.12")).toStrictEqual({ sessionId: "a/b", turns: 0 });
+  expect(parseAnchor(`s/${Number.MAX_SAFE_INTEGER}.0`)?.turns).toBe(Number.MAX_SAFE_INTEGER);
+  for (const bad of ["", "s1", "s1/", "/3.0", "s1/3", "s1/3.", "s1/-1.0", "s1/x.0", "s1/3.0 "])
+    expect(parseAnchor(bad), bad).toBe(undefined);
+});
+
+test("the last anchor is from the newest reply this provider stamped, or none", () => {
+  expect(lastAnchor([])).toStrictEqual({ index: -1, anchor: undefined });
+  expect(lastAnchor([user("hi"), reply(undefined), reply("s/1.0", "other")])).toStrictEqual({
+    index: -1,
+    anchor: undefined,
+  });
+  expect(lastAnchor([reply("s/1.0"), user("hi"), reply("s/2.0"), user("again")])).toStrictEqual({
+    index: 2,
+    anchor: "s/2.0",
+  });
 });

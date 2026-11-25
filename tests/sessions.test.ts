@@ -75,6 +75,7 @@ test("session labels are numbered when they repeat, and show what is known", () 
       { id: "c", title: undefined, updatedAt: undefined },
     ]),
   ).toStrictEqual(["Fix — 2026-11-25 10:00", "Fix — 2026-11-25 10:00 (2)", "Untitled"]);
+  expect(labels([])).toStrictEqual([]);
 });
 
 test("/agy sessions does not reopen the session already in use", async () => {

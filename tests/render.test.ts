@@ -14,6 +14,7 @@ test("mirrored calls render as a tool row with progress, diff and output", () =>
   });
   expect(changedLines("", "x\n")).toStrictEqual({ removed: [], added: ["x"] });
   expect(changedLines("same\n", "same\n")).toStrictEqual({ removed: [], added: [] });
+  expect(changedLines("x\ny\n", "")).toStrictEqual({ removed: ["x", "y"], added: [] });
 
   const closed = { expanded: false, isPartial: false };
   expect(
