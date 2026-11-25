@@ -32,13 +32,14 @@ function script(prompt: ContentBlock[]): Step[] {
       { say: "It says alpha." },
     ];
   }
+  if (text.includes("name")) return [{ title: "Named" }, { say: "Named it." }];
   if (text.includes("wait")) return [{ say: "Waiting." }, { hold: "cancel" }];
   return [{ think: "hm" }, { usage: [2048, 1_000_000] }, { say: `echo: ${text}` }];
 }
 
 const { log } = serveAgent(
   ndJsonStream(Writable.toWeb(process.stdout), Readable.toWeb(process.stdin)),
-  { script },
+  { script, plain: process.env["FAKE_AGY_PLAIN"] === "1" },
 );
 const save = () => {
   const file = process.env["FAKE_AGY_LOG"];

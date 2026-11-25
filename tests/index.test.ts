@@ -23,7 +23,7 @@ import { TOOL_NAME } from "../src/tool.ts";
 import type { AgentLog } from "./support/fake-agent.ts";
 
 const fakeAgy = join(import.meta.dirname, "support", "fake-agy.ts");
-const ENV = ["PATH", "HOME", "PI_CODING_AGENT_DIR", "FAKE_AGY_LOG"] as const;
+const ENV = ["PATH", "HOME", "PI_CODING_AGENT_DIR", "FAKE_AGY_LOG", "FAKE_AGY_PLAIN"] as const;
 type ProcessLog = AgentLog & { argv: string[]; cwd: string };
 
 function isProcessLog(value: unknown): value is ProcessLog {
@@ -79,6 +79,8 @@ interface StartOptions {
   ui?: Partial<ExtensionUIContext>;
   flags?: Record<string, string>;
   settings?: Parameters<typeof SettingsManager.inMemory>[0];
+  /** Start the scripted agent without a tier, settings or context usage. */
+  plain?: boolean;
 }
 
 /** A real Pi session with the extension loaded and a scripted `agy` first on PATH. */
@@ -98,6 +100,7 @@ async function start(options: StartOptions = {}) {
     HOME: dir,
     PI_CODING_AGENT_DIR: agentDir,
     FAKE_AGY_LOG: logFile,
+    FAKE_AGY_PLAIN: options.plain ? "1" : "0",
   });
   const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline test"));
   onTestFinished(() => fetch.mockRestore());
@@ -428,4 +431,35 @@ test("--agy-agent picks the agent to run", async () => {
   const { session, stop } = await start({ flags: { "agy-agent": "cli" } });
   await session.prompt("hello");
   expect((await stop()).argv).toStrictEqual(["acp"]);
+});
+
+test("/agy status names the session once the agent titles it", async () => {
+  const { ui, notes } = fakeUi();
+  const { session } = await start({ ui });
+  await session.prompt("name this chat");
+  await session.prompt("/agy status");
+  expect(notes.at(-1)).toMatch(/^Agent session: s1 \(Named\)$/m);
+});
+
+test("/agy status and mode with an agent that reports no tier, settings or usage", async () => {
+  const { ui, notes } = fakeUi();
+  const { session } = await start({ ui, plain: true });
+  await session.prompt("/agy mode auto");
+  expect(notes.at(-1)).toBe('warning: Antigravity has no "auto" mode. Available: .');
+  await session.prompt("/agy status");
+  expect(notes.at(-1)?.split("\n")).toStrictEqual([
+    "info: Agent: Fake Agent 0.0.1",
+    "Model: unknown",
+    "Thinking: not adjustable",
+    "Permission mode: unknown",
+    "Agent session: s1",
+  ]);
+});
+
+test("/agy mode without an id does nothing when there is nobody to ask", async () => {
+  const { session, stop } = await start();
+  await session.prompt("/agy mode");
+  const log = await stop();
+  expect(log.sessions.length, "the agent session still starts").toBe(1);
+  expect(log.config).toStrictEqual([]);
 });

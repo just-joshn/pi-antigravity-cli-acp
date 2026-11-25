@@ -24,6 +24,7 @@ export type Step =
   | { update: ToolCallUpdate }
   | { ask: string; options?: PermissionOption[]; allowed?: Step[]; declined?: Step[] }
   | { usage: [used: number, size: number] }
+  | { title: string }
   | { read: string }
   | { write: [path: string, content: string] }
   | { hold: "cancel" | Promise<unknown> }
@@ -48,6 +49,8 @@ export interface FakeAgentOptions {
   variants?: boolean;
   image?: boolean;
   embeddedContext?: boolean;
+  /** Report no quota tier, no settings and no context usage when a session starts. */
+  plain?: boolean;
 }
 
 export interface AgentLog {
@@ -124,6 +127,7 @@ export function serveAgent(stream: Stream, options: FakeAgentOptions) {
         effort: first?.efforts.at(-1) ?? "",
         mode: modes[0] ?? "",
       });
+      if (options.plain) return { sessionId };
       // The real servers report context usage before session/new returns.
       await client.notify(methods.client.session.update, {
         sessionId,
@@ -179,6 +183,8 @@ export function serveAgent(stream: Stream, options: FakeAgentOptions) {
           else if ("tool" in step) await send({ sessionUpdate: "tool_call", ...step.tool });
           else if ("update" in step)
             await send({ sessionUpdate: "tool_call_update", ...step.update });
+          else if ("title" in step)
+            await send({ sessionUpdate: "session_info_update", title: step.title });
           else if ("usage" in step)
             await send({ sessionUpdate: "usage_update", used: step.usage[0], size: step.usage[1] });
           else if ("read" in step) {
