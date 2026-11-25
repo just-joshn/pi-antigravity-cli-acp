@@ -2,7 +2,9 @@ import {
   client,
   type ClientConnection,
   type InitializeRequest,
+  type McpServer,
   methods,
+  type NewSessionRequest,
   PROTOCOL_VERSION,
   RequestError,
   type SessionConfigOption,
@@ -115,13 +117,20 @@ function serve(
     .connect(stream);
 }
 
+/** Where a session works: its directory, extra directories and the MCP servers it may use. */
+export interface Workspace {
+  cwd: string;
+  directories?: readonly string[];
+  mcpServers?: readonly McpServer[];
+}
+
 /** One connection to an ACP agent process. */
 export class AcpClient {
   readonly agent: { name: string; version: string };
   /** Prompt content the agent accepts besides text. */
   readonly accepts: { image: boolean; embeddedContext: boolean };
   /** Session lifecycle requests the agent offers besides session/new. */
-  readonly offers: { load: boolean; close: boolean };
+  readonly offers: { load: boolean; close: boolean; directories: boolean; mcpHttp: boolean };
   #connection: ClientConnection;
   #sessions: Map<string, AcpSession>;
   #inbox: Inbox;
@@ -176,6 +185,8 @@ export class AcpClient {
       offers: {
         load: hello.agentCapabilities?.loadSession === true,
         close: Boolean(hello.agentCapabilities?.sessionCapabilities?.close),
+        directories: Boolean(hello.agentCapabilities?.sessionCapabilities?.additionalDirectories),
+        mcpHttp: hello.agentCapabilities?.mcpCapabilities?.http === true,
       },
     });
   }
@@ -185,18 +196,33 @@ export class AcpClient {
     return this.#connection.closed;
   }
 
-  async newSession(cwd: string): Promise<AcpSession> {
+  /** The session/new and session/load fields for `where`, limited to what the agent accepts. */
+  #place(where: Workspace): NewSessionRequest {
+    const mcpServers = (where.mcpServers ?? []).filter(
+      (server) => this.offers.mcpHttp || !("type" in server),
+    );
+    const directories = where.directories ?? [];
+    return {
+      cwd: where.cwd,
+      mcpServers,
+      ...(this.offers.directories && directories.length
+        ? { additionalDirectories: [...directories] }
+        : {}),
+    };
+  }
+
+  async newSession(where: Workspace): Promise<AcpSession> {
     const created = await this.#connection.agent
-      .request(methods.agent.session.new, { cwd, mcpServers: [] })
+      .request(methods.agent.session.new, this.#place(where))
       .catch(explain("start a session"));
-    return this.#adopt(created.sessionId, created, cwd, 0);
+    return this.#adopt(created.sessionId, created, where.cwd, 0);
   }
 
   /**
    * Reopens a saved agent session, with its prompt turns counted from the agent's replay.
    * Resolves with undefined when the agent cannot load sessions or no longer has this one.
    */
-  async loadSession(sessionId: string, cwd: string): Promise<AcpSession | undefined> {
+  async loadSession(sessionId: string, where: Workspace): Promise<AcpSession | undefined> {
     if (!this.offers.load) return undefined;
     const replay = { turns: 0, userSpeaking: false };
     this.#inbox.early.delete(sessionId);
@@ -204,10 +230,9 @@ export class AcpClient {
     try {
       const loaded = await this.#connection.agent.request(methods.agent.session.load, {
         sessionId,
-        cwd,
-        mcpServers: [],
+        ...this.#place(where),
       });
-      return this.#adopt(sessionId, loaded, cwd, replay.turns);
+      return this.#adopt(sessionId, loaded, where.cwd, replay.turns);
     } catch (error) {
       this.#inbox.early.delete(sessionId);
       if (error instanceof RequestError && error.code === RESOURCE_NOT_FOUND) return undefined;

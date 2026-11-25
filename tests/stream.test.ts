@@ -44,7 +44,8 @@ function scriptedHost(client: Client, options: ChatOptions) {
   const state = { conversation: undefined as Conversation | undefined };
   const notes: string[] = [];
   const abandoned = { count: 0 };
-  const start = async () => new Conversation(await client.newSession("/work"), client.accepts);
+  const start = async () =>
+    new Conversation(await client.newSession({ cwd: "/work" }), client.accepts);
   const stream = createStream({
     conversing: () => options.conversing ?? true,
     open: async () => (state.conversation ??= await start()),

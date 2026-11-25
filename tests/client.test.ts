@@ -49,7 +49,7 @@ test("the client introduces itself as Pi and offers file access but no terminal"
 test("a session reports the agent's choices, quota tier and early context usage", async () => {
   const { client, log, close } = await connect({ script: () => [], effortId: "thinking_level" });
   onTestFinished(close);
-  const session = await client.newSession("/work");
+  const session = await client.newSession({ cwd: "/work" });
   expect(log.sessions[0]?.cwd).toBe("/work");
   expect(log.sessions[0]?.mcpServers).toStrictEqual([]);
   expect(session.choices("model").map((c) => c.value)).toStrictEqual(["gemini-a", "gemini-b"]);
@@ -63,7 +63,7 @@ test("choosing a model, effort or mode is confirmed by the agent; unknown values
   let changes = 0;
   const { client, log, close } = await connect({ script: () => [] }, { changed: () => changes++ });
   onTestFinished(close);
-  const session = await client.newSession("/work");
+  const session = await client.newSession({ cwd: "/work" });
   expect(await session.select("model", "gemini-a")).toBe("unchanged");
   expect(await session.select("model", "gemini-b")).toBe("set");
   expect(await session.select("thought_level", "xhigh")).toBe("set");
@@ -90,7 +90,7 @@ test("a turn delivers thoughts, text, tool calls and the final usage in order", 
   ];
   const { client, log, close } = await connect({ script: () => steps });
   onTestFinished(close);
-  const session = await client.newSession("/work");
+  const session = await client.newSession({ cwd: "/work" });
   const turn = session.startTurn([{ type: "text", text: "hello" }]);
   const events = await collect(turn);
   expect(log.prompts).toStrictEqual([[{ type: "text", text: "hello" }]]);
@@ -134,7 +134,7 @@ test("watching a running tool reports progress and resolves when it finishes or 
   ];
   const { client, close } = await connect({ script: () => steps });
   onTestFinished(close);
-  const session = await client.newSession("/work");
+  const session = await client.newSession({ cwd: "/work" });
   const turn = session.startTurn([{ type: "text", text: "go" }]);
   expect((await turn.next()).type).toBe("tool");
   expect((await eventually(() => turn.takeTool())).id).toBe("t2");
@@ -172,7 +172,7 @@ test("permission: the user's choice is passed on; no decision means the agent's 
     },
   );
   onTestFinished(close);
-  const session = await client.newSession("/work");
+  const session = await client.newSession({ cwd: "/work" });
   const events = await collect(session.startTurn([{ type: "text", text: "edit" }]));
   expect(asked).toStrictEqual([
     "t1:allow_once+reject_once",
@@ -215,7 +215,7 @@ test("cancelling a turn tells the agent and withdraws an open permission questio
     },
   );
   onTestFinished(close);
-  const session = await client.newSession("/work");
+  const session = await client.newSession({ cwd: "/work" });
   const first = session.startTurn([{ type: "text", text: "one" }]);
   expect((await first.next()).type).toBe("tool");
   await session.cancelTurn();
@@ -235,7 +235,7 @@ test("an agent error ends the turn with its message", async () => {
     script: () => [{ say: "partial" }, { fail: "quota exhausted" }],
   });
   onTestFinished(close);
-  const session = await client.newSession("/work");
+  const session = await client.newSession({ cwd: "/work" });
   const events = await collect(session.startTurn([{ type: "text", text: "hi" }]));
   const last = events.at(-1);
   expect.assert(last?.type === "failed");
@@ -254,7 +254,7 @@ test("the agent reads and writes text files through the client", async () => {
         : [{ read: join(dir, "absent.txt") }],
   });
   onTestFinished(close);
-  const session = await client.newSession(dir);
+  const session = await client.newSession({ cwd: dir });
   const events = await collect(session.startTurn([{ type: "text", text: "files" }]));
   expect(events[0]).toStrictEqual({ type: "text", text: "alpha\nbravo\n" });
   expect(await readFile(created, "utf8")).toBe("charlie\n");
@@ -276,7 +276,7 @@ test("Pi writes files for the agent only inside the session's workspace", async 
         : [{ write: [join(work, "deep", "inside.txt"), "y"] }, { say: "written" }],
   });
   onTestFinished(close);
-  const session = await client.newSession(work);
+  const session = await client.newSession({ cwd: work });
   const refused = await collect(session.startTurn([{ type: "text", text: "escape" }]));
   const last = refused.at(-1);
   expect.assert(last?.type === "failed");

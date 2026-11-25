@@ -5,6 +5,7 @@ import {
   type AvailableCommand,
   type ContentBlock,
   type InitializeRequest,
+  type LoadSessionRequest,
   methods,
   type NewSessionRequest,
   type NewSessionResponse,
@@ -58,6 +59,10 @@ export interface FakeAgentOptions {
   plain?: boolean;
   /** Commands the agent lists for its sessions. */
   commands?: AvailableCommand[];
+  /** Accept additional workspace directories, as `agy` does. */
+  directories?: boolean;
+  /** Accept MCP servers over HTTP; `agy` 1.5.17 does not. */
+  mcpHttp?: boolean;
   /** Offer session/load and session/close, as `agy` does. */
   restore?: boolean;
   /** Saved conversations by session id, each a list of prompts; kept across agent processes. */
@@ -74,6 +79,8 @@ export interface AgentLog {
   cancels: number;
   outcomes: RequestPermissionOutcome[];
   loads: string[];
+  /** The full session/load requests, in order. */
+  loadRequests: LoadSessionRequest[];
   closes: string[];
 }
 
@@ -287,7 +294,12 @@ function hello(options: FakeAgentOptions) {
     agentInfo: { name: "fake-agent", title: "Fake Agent", version: "0.0.1" },
     agentCapabilities: {
       promptCapabilities: { image, embeddedContext },
-      ...(restore ? { loadSession: true, sessionCapabilities: { close: {} } } : {}),
+      ...(restore ? { loadSession: true } : {}),
+      sessionCapabilities: {
+        ...(restore ? { close: {} } : {}),
+        ...(options.directories === false ? {} : { additionalDirectories: {} }),
+      },
+      ...(options.mcpHttp ? { mcpCapabilities: { http: true } } : {}),
     },
     authMethods: [],
   };
@@ -300,6 +312,7 @@ const emptyLog = (): AgentLog => ({
   cancels: 0,
   outcomes: [],
   loads: [],
+  loadRequests: [],
   closes: [],
 });
 
@@ -314,8 +327,10 @@ interface Agent {
   prompts: number;
 }
 
-async function load(state: Agent, sessionId: string, client: AgentContext) {
+async function load(state: Agent, request: LoadSessionRequest, client: AgentContext) {
+  const { sessionId } = request;
   state.log.loads.push(sessionId);
+  state.log.loadRequests.push(request);
   const prompts = state.history[sessionId];
   if (!prompts) throw RequestError.resourceNotFound(sessionId);
   await replay(client, sessionId, prompts);
@@ -370,9 +385,7 @@ export function serveAgent(stream: Stream, options: FakeAgentOptions) {
       state.history[sessionId] = [];
       return openSession(state.offer, options, state.sessions, sessionId, client);
     })
-    .onRequest(methods.agent.session.load, ({ params, client }) =>
-      load(state, params.sessionId, client),
-    )
+    .onRequest(methods.agent.session.load, ({ params, client }) => load(state, params, client))
     .onRequest(methods.agent.session.close, ({ params }) => {
       log.closes.push(params.sessionId);
       state.sessions.delete(params.sessionId);

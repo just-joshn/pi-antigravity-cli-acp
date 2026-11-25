@@ -77,12 +77,14 @@ export interface StartOptions {
   agy?: boolean;
   /** Dialogs and notices; Pi's no-op UI supplies everything else. */
   ui?: Partial<ExtensionUIContext>;
-  flags?: Record<string, string>;
+  flags?: Record<string, string | boolean>;
   settings?: Parameters<typeof SettingsManager.inMemory>[0];
   /** Start the scripted agent without a tier, settings or context usage. */
   plain?: boolean;
   /** Reuse the scratch HOME of an earlier start, with its saved Pi and agent sessions. */
   home?: string;
+  /** Prepares the scratch HOME before Pi starts, for example with config files. */
+  setup?: (home: string) => Promise<void>;
   /** Start the scripted agent without session/load and session/close. */
   restore?: boolean;
 }
@@ -94,6 +96,7 @@ async function scratchHome(options: StartOptions) {
   const [work, bin, agentDir] = [join(dir, "work"), join(dir, "bin"), join(dir, "pi")];
   const logFile = join(dir, `agent-log-${randomUUID()}.json`);
   await Promise.all([mkdir(work, { recursive: true }), mkdir(bin, { recursive: true })]);
+  await options.setup?.(dir);
   if (options.agy ?? true)
     await writeFile(join(bin, "agy"), `#!/bin/sh\nexec "${process.execPath}" "${fakeAgy}" "$@"\n`, {
       mode: 0o755,

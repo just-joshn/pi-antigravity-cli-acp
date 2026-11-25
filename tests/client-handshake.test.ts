@@ -92,7 +92,7 @@ test("an agent that says little about itself still gets a working session", asyn
   );
   expect(client.agent).toStrictEqual({ name: "ACP agent", version: "" });
   expect(client.accepts).toStrictEqual({ image: false, embeddedContext: false });
-  const session = await client.newSession("/work");
+  const session = await client.newSession({ cwd: "/work" });
   expect(asked).toStrictEqual(["cancelled"]);
   expect(session.tier).toBeUndefined();
   expect(session.choices("model")).toStrictEqual([]);
@@ -113,7 +113,7 @@ test("a session the agent cannot create is explained", async () => {
       }),
   );
   expect(client.agent).toStrictEqual({ name: "bare", version: "1" });
-  await expect(client.newSession("/work")).rejects.toThrow(/sign in/);
+  await expect(client.newSession({ cwd: "/work" })).rejects.toThrow(/sign in/);
 });
 
 test("a failed prompt reports the agent's message with any details it attached", async () => {
@@ -126,7 +126,7 @@ test("a failed prompt reports the agent's message with any details it attached",
         throw new RequestError(-32603, "Internal error", replies.shift());
       }),
   );
-  const session = await client.newSession("/work");
+  const session = await client.newSession({ cwd: "/work" });
   const failure = async () => {
     const turn = session.startTurn([{ type: "text", text: "hi" }]);
     const event = await turn.next();
@@ -162,7 +162,7 @@ test("a tier or per-level model list of the wrong shape is ignored", async () =>
         ...replies[count - 1],
       })),
   );
-  const sessions = await Promise.all(replies.map(() => client.newSession("/work")));
+  const sessions = await Promise.all(replies.map(() => client.newSession({ cwd: "/work" })));
   expect(sessions.map((session) => [session.tier, session.variants])).toStrictEqual([
     [undefined, []],
     [undefined, []],
@@ -182,14 +182,14 @@ test("a loaded session counts the prompt turns the agent replays, however many b
   };
   const { client, log, close } = await connect({ script: () => [], history });
   onTestFinished(close);
-  const session = await client.loadSession("saved", "/work");
+  const session = await client.loadSession("saved", { cwd: "/work" });
   expect.assert(session);
   expect([session.id, session.turns, session.usage]).toStrictEqual([
     "saved",
     2,
     { used: 0, size: 1_000_000 },
   ]);
-  expect(await client.loadSession("missing", "/work")).toBeUndefined();
+  expect(await client.loadSession("missing", { cwd: "/work" })).toBeUndefined();
   await client.closeSession("saved");
   expect([log.loads, log.closes]).toStrictEqual([["saved", "missing"], ["saved"]]);
 });
@@ -201,8 +201,13 @@ test("an agent without session/load or session/close is not asked for either", a
     history: { a: [] },
   });
   onTestFinished(close);
-  expect(client.offers).toStrictEqual({ load: false, close: false });
-  expect(await client.loadSession("a", "/work")).toBeUndefined();
+  expect(client.offers).toStrictEqual({
+    load: false,
+    close: false,
+    directories: true,
+    mcpHttp: false,
+  });
+  expect(await client.loadSession("a", { cwd: "/work" })).toBeUndefined();
   await client.closeSession("a");
   expect([log.loads, log.closes]).toStrictEqual([[], []]);
 });
@@ -218,7 +223,7 @@ test("a load that fails for another reason says so", async () => {
         throw RequestError.internalError(undefined, "disk full");
       }),
   );
-  await expect(client.loadSession("a", "/work")).rejects.toThrow(
+  await expect(client.loadSession("a", { cwd: "/work" })).rejects.toThrow(
     "Antigravity could not reopen the saved session: Internal error",
   );
 });
@@ -241,8 +246,8 @@ test("updates held for a session that failed to load do not reach it when it loa
         throw RequestError.resourceNotFound(params.sessionId);
       }),
   );
-  expect(await client.loadSession("a", "/work")).toBeUndefined();
-  const session = await client.loadSession("a", "/work");
+  expect(await client.loadSession("a", { cwd: "/work" })).toBeUndefined();
+  const session = await client.loadSession("a", { cwd: "/work" });
   expect(session?.title).toBeUndefined();
 });
 
@@ -265,6 +270,35 @@ test("updates for many unknown sessions cannot crowd out a new session's own", a
         return { sessionId: "real" };
       }),
   );
-  const session = await client.newSession("/work");
+  const session = await client.newSession({ cwd: "/work" });
   expect(session.usage).toStrictEqual({ used: 5, size: 10 });
+});
+
+test("extra directories and MCP servers reach the agent only as far as it accepts them", async () => {
+  const stdio = { name: "files", command: "/bin/fs-mcp", args: ["."], env: [] };
+  const http = {
+    type: "http" as const,
+    name: "docs",
+    url: "https://docs.example/mcp",
+    headers: [],
+  };
+  const where = { cwd: "/work", directories: ["/lib"], mcpServers: [stdio, http] };
+  const both = await connect({ script: () => [], mcpHttp: true, history: { old: [] } });
+  onTestFinished(both.close);
+  await both.client.newSession(where);
+  await both.client.loadSession("old", where);
+  expect(both.log.sessions[0]).toMatchObject({
+    additionalDirectories: ["/lib"],
+    mcpServers: [stdio, http],
+  });
+  expect(both.log.loadRequests[0]).toMatchObject({
+    additionalDirectories: ["/lib"],
+    mcpServers: [stdio, http],
+  });
+
+  const plain = await connect({ script: () => [], directories: false });
+  onTestFinished(plain.close);
+  await plain.client.newSession(where);
+  expect(plain.log.sessions[0]?.additionalDirectories).toBeUndefined();
+  expect(plain.log.sessions[0]?.mcpServers).toStrictEqual([stdio]);
 });

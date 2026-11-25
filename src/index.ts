@@ -8,6 +8,7 @@ import { Antigravity, selected } from "./antigravity.ts";
 import { registerAgyCommand } from "./command.ts";
 import { callLine, resultLines } from "./render.ts";
 import { runMirror, TOOL_NAME, type ToolDetails } from "./tool.ts";
+import { registerWorkspaceFlags } from "./workspace.ts";
 
 function registerFlags(pi: ExtensionAPI) {
   pi.registerFlag("agy-agent", {
@@ -75,6 +76,7 @@ function registerEvents(pi: ExtensionAPI, link: Antigravity) {
  */
 export default function antigravityAcp(pi: ExtensionAPI) {
   registerFlags(pi);
+  registerWorkspaceFlags(pi);
   const link = new Antigravity(pi, join(getAgentDir(), "antigravity", "catalog.json"));
   link.publish();
   registerMirrorTool(pi, link);

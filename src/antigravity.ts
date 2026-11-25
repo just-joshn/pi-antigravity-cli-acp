@@ -2,11 +2,12 @@ import { type ExtensionAPI, type ExtensionContext, VERSION } from "@earendil-wor
 
 import { type AgentChoice, launch, resolveAgent, type RunningAgent } from "./agent.ts";
 import { type Catalog, learn, piModels, PROVIDER, readCatalog, writeCatalog } from "./catalog.ts";
-import { AcpClient } from "./client.ts";
+import { AcpClient, type Workspace } from "./client.ts";
 import { Conversation, parseAnchor } from "./conversation.ts";
 import type { SessionHooks } from "./session.ts";
 import { createStream, haltTurn } from "./stream.ts";
 import { choiceLabels, TOOL_NAME, toolArguments } from "./tool.ts";
+import { workspaceFor } from "./workspace.ts";
 
 const STATUS = "antigravity";
 const PLAN = "antigravity-plan";
@@ -269,9 +270,9 @@ export class Antigravity {
   }
 
   /** Reopens the agent session Pi's transcript left off in, if the agent is still at that point. */
-  async #reopen(connected: AcpClient, anchor: string, cwd: string) {
+  async #reopen(connected: AcpClient, anchor: string, where: Workspace) {
     const at = parseAnchor(anchor);
-    const session = at && (await connected.loadSession(at.sessionId, cwd));
+    const session = at && (await connected.loadSession(at.sessionId, where));
     if (!session) return undefined;
     if (session.turns === at.turns) return new Conversation(session, connected.accepts, anchor);
     // The agent has prompts this transcript never saw; continuing would mix the two conversations.
@@ -282,10 +283,13 @@ export class Antigravity {
   async #start(anchor: string | undefined): Promise<Conversation> {
     this.#client ??= this.#connect();
     const connected = await this.#client;
-    const cwd = this.#pane?.cwd ?? process.cwd();
+    const pane = this.#pane;
+    const trusted = pane?.isProjectTrusted() ?? false;
+    const { where, notes } = workspaceFor(this.#pi, pane?.cwd ?? process.cwd(), trusted);
+    for (const note of notes) this.#pane?.ui.notify(note, "warning");
     const conversation =
-      (anchor && (await this.#reopen(connected, anchor, cwd))) ||
-      new Conversation(await connected.newSession(cwd), connected.accepts);
+      (anchor && (await this.#reopen(connected, anchor, where))) ||
+      new Conversation(await connected.newSession(where), connected.accepts);
     const { session } = conversation;
     const wanted = this.#wantedMode;
     if (wanted !== undefined && (await session.select("mode", wanted)) === "unavailable") {

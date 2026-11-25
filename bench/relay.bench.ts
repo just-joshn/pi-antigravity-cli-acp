@@ -72,7 +72,7 @@ async function extensionTurn(options: FakeAgentOptions): Promise<string> {
   const { client: acp, close } = await connect(options);
   let conversation: Conversation | undefined;
   const open = async () =>
-    (conversation ??= new Conversation(await acp.newSession("/work"), acp.accepts));
+    (conversation ??= new Conversation(await acp.newSession({ cwd: "/work" }), acp.accepts));
   const stream = createStream({
     conversing: () => true,
     open,
@@ -125,7 +125,7 @@ test("reopening a saved session of 500 turns", async ({ bench }) => {
   ]);
   await bench("loadSession, counting the replay", async () => {
     const { client: acp, close } = await connect({ script: () => [], history: { s: saved } });
-    const session = await acp.loadSession("s", "/work");
+    const session = await acp.loadSession("s", { cwd: "/work" });
     if (session?.turns !== 500) throw new Error(`counted ${session?.turns}`);
     close();
   }).run();

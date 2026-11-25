@@ -23,7 +23,7 @@ async function scratch() {
 test("the catalog learns every model's thinking levels from one session", async () => {
   const listed = await connect({ script: () => [] });
   onTestFinished(listed.close);
-  const first = learn(emptyCatalog, await listed.client.newSession("/work"));
+  const first = learn(emptyCatalog, await listed.client.newSession({ cwd: "/work" }));
   expect(first.models).toStrictEqual([
     { id: "gemini-a", name: "Gemini A", efforts: ["low", "medium", "high"] },
     { id: "gemini-b", name: "Gemini B", efforts: ["low", "high", "xhigh"] },
@@ -33,7 +33,7 @@ test("the catalog learns every model's thinking levels from one session", async 
 
   const unlisted = await connect({ script: () => [], variants: false });
   onTestFinished(unlisted.close);
-  const session = await unlisted.client.newSession("/work");
+  const session = await unlisted.client.newSession({ cwd: "/work" });
   const guessed = learn(emptyCatalog, session);
   expect(guessed.models[1]?.efforts, "assumed until selected").toStrictEqual([
     "low",
@@ -57,7 +57,7 @@ test("thinking levels are read off model ids that share a prefix with another mo
     ],
   });
   onTestFinished(agent.close);
-  const session = await agent.client.newSession("/work");
+  const session = await agent.client.newSession({ cwd: "/work" });
   expect(session.variants).toStrictEqual(["g-low", "g-high", "g-pro-low", "g-lite"]);
   expect(learn(emptyCatalog, session).models.map((m) => [m.id, m.efforts])).toStrictEqual([
     ["g", ["low", "high"]],
@@ -180,7 +180,7 @@ test("a session that has not listed its commands keeps the saved ones; an empty 
   const saved = { ...emptyCatalog, commands: [{ name: "old", description: "d", hint: undefined }] };
   const { client, close } = await connect({ script: () => [], plain: true });
   onTestFinished(close);
-  const quiet = await client.newSession("/work");
+  const quiet = await client.newSession({ cwd: "/work" });
   expect(learn(saved, quiet).commands).toStrictEqual(saved.commands);
   quiet.receive({ sessionUpdate: "available_commands_update", availableCommands: [] });
   expect(learn(saved, quiet).commands).toStrictEqual([]);
