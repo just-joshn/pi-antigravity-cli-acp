@@ -35,6 +35,7 @@ export type Step =
   | { elicit: CreateElicitationRequest }
   | { run: [command: string, ...args: string[]] }
   | { plan: PlanEntry[] }
+  | { raw: SessionUpdate }
   | { read: string }
   | { write: [path: string, content: string] }
   | { hold: "cancel" | Promise<unknown> }
@@ -235,6 +236,7 @@ async function perform(pb: Playback, step: Step): Promise<StopReason | undefined
   else if ("tool" in step) await send(pb, { sessionUpdate: "tool_call", ...step.tool });
   else if ("update" in step) await send(pb, { sessionUpdate: "tool_call_update", ...step.update });
   else if ("plan" in step) await send(pb, { sessionUpdate: "plan", entries: step.plan });
+  else if ("raw" in step) await send(pb, step.raw);
   else if ("run" in step) await runInTerminal(pb, step.run);
   else if ("elicit" in step) {
     // A question with an empty session id is about the session being played.

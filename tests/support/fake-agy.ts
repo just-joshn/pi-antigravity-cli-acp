@@ -67,6 +67,19 @@ const SCRIPTS: [keyword: string, steps: () => Step[]][] = [
     ],
   ],
   [
+    "markdown plan",
+    () => [
+      {
+        raw: {
+          sessionUpdate: "plan_update",
+          plan: { type: "markdown", planId: "m1", content: "1. Look\n2. Write" },
+        },
+      },
+      { raw: { sessionUpdate: "plan_removed", planId: "m1" } },
+      { say: "Done." },
+    ],
+  ],
+  [
     "plan",
     () => [
       { plan: [entry("Look around", "in_progress"), entry("Write it", "pending")] },

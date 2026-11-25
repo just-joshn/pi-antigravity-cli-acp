@@ -252,6 +252,7 @@ export class AcpClient {
         fs: { readTextFile: true, writeTextFile: true },
         terminal: true,
         elicitation: { form: {}, url: {} },
+        plan: {},
       },
     };
     const hello = await connection.agent

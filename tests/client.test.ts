@@ -48,6 +48,7 @@ test("the client introduces itself as Pi and offers files, terminals, questions 
     terminal: true,
     auth: { terminal: false },
     elicitation: { form: {}, url: {} },
+    plan: {},
   });
 });
 

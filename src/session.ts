@@ -4,7 +4,6 @@ import type {
   CreateElicitationRequest,
   CreateElicitationResponse,
   PermissionOption,
-  PlanEntry,
   PromptResponse,
   RequestPermissionRequest,
   RequestPermissionResponse,
@@ -17,6 +16,7 @@ import type {
 } from "@agentclientprotocol/sdk/unstable";
 
 import { isRecord } from "./guards.ts";
+import { isPlanUpdate, nextPlan, type Plan } from "./plan.ts";
 
 /** The agent settings a client can change, named by ACP's config-option categories. */
 export type OptionCategory = "model" | "thought_level" | "mode";
@@ -34,7 +34,6 @@ function agentCommand(command: AvailableCommand): AgentCommand {
   return { name: command.name, description: command.description.slice(0, TEXT_LIMIT), hint };
 }
 
-const PLAN_LIMIT = 100;
 const COMMAND_LIMIT = 200;
 const TEXT_LIMIT = 500;
 const TITLE_LIMIT = 200;
@@ -158,7 +157,7 @@ export class AcpSession {
   #commands: readonly AgentCommand[] | undefined;
   /** Latest output of each client terminal of this session. */
   #terminals = new Map<string, string>();
-  #plan: readonly PlanEntry[] = [];
+  #plan: Plan | undefined;
   #tools = new Map<string, ToolView>();
   #watchers = new Map<string, Set<(tool: ToolView) => void>>();
   #turn: Turn | undefined;
@@ -202,7 +201,7 @@ export class AcpSession {
     return this.#commands;
   }
 
-  /** The agent's latest plan for the work in progress, in order. */
+  /** The agent's current plan, if it has one. */
   get plan() {
     return this.#plan;
   }
@@ -331,12 +330,8 @@ export class AcpSession {
     } else if (update.sessionUpdate === "config_option_update") {
       this.#options = update.configOptions;
       this.#hooks.changed();
-    } else if (update.sessionUpdate === "plan") {
-      this.#plan = update.entries.slice(0, PLAN_LIMIT).map((entry) => ({
-        content: entry.content.slice(0, TEXT_LIMIT),
-        priority: entry.priority,
-        status: entry.status,
-      }));
+    } else if (isPlanUpdate(update)) {
+      this.#plan = nextPlan(this.#plan, update);
       this.#hooks.changed();
     } else if (update.sessionUpdate === "available_commands_update") {
       this.#commands = update.availableCommands.slice(0, COMMAND_LIMIT).map(agentCommand);

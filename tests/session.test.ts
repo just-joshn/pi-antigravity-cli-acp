@@ -94,8 +94,10 @@ test("an agent's plan, commands and title are capped", () => {
     })),
   });
   session.receive({ sessionUpdate: "session_info_update", title: long });
-  expect(session.plan.length).toBe(100);
-  expect(session.plan[0]?.content.length).toBe(500);
+  const plan = session.plan;
+  expect.assert(plan && "steps" in plan);
+  expect(plan.steps.length).toBe(100);
+  expect(plan.steps[0]?.content.length).toBe(500);
   expect(session.commands?.length).toBe(200);
   expect(session.commands?.[0]?.description.length).toBe(500);
   expect(session.title?.length).toBe(200);

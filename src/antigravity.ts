@@ -5,6 +5,7 @@ import { type Catalog, learn, piModels, PROVIDER, readCatalog, writeCatalog } fr
 import { AcpClient, SignInRequired, type Workspace } from "./client.ts";
 import { Conversation, parseAnchor } from "./conversation.ts";
 import { answerElicitation } from "./elicit.ts";
+import { planLines } from "./plan.ts";
 import type { SessionHooks } from "./session.ts";
 import { signIn } from "./sign-in.ts";
 import { createStream, haltTurn } from "./stream.ts";
@@ -13,7 +14,6 @@ import { workspaceFor } from "./workspace.ts";
 
 const STATUS = "antigravity";
 const PLAN = "antigravity-plan";
-const MARK = { completed: "[x]", in_progress: "[>]", pending: "[ ]" } as const;
 const CHOICES: readonly string[] = ["auto", "cli", "registry"] satisfies AgentChoice[];
 
 function isChoice(value: unknown): value is AgentChoice {
@@ -182,11 +182,7 @@ export class Antigravity {
 
   /** Shows the agent's plan above the editor until every step is done. */
   #showPlan(pane: ExtensionContext) {
-    const plan = selected(pane) ? (this.#live?.session.plan ?? []) : [];
-    const working = plan.some((entry) => entry.status !== "completed");
-    const lines = working
-      ? ["Antigravity plan", ...plan.map((entry) => `${MARK[entry.status]} ${entry.content}`)]
-      : undefined;
+    const lines = selected(pane) ? planLines(this.#live?.session.plan) : undefined;
     const shown = JSON.stringify(lines ?? null);
     if (shown === this.#shownPlan) return;
     this.#shownPlan = shown;

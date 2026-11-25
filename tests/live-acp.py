@@ -7,17 +7,20 @@ directory, ~/.gemini/antigravity-scratch, so they stay out of your agy history.
     python3 tests/live-acp.py            # agy acp
     python3 tests/live-acp.py registry   # the agent Zed installed from the ACP registry
 """
+import base64
 import json
 import os
 import queue
 import re
 import secrets
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
 import threading
 import time
+import zlib
 from pathlib import Path
 
 ENTRY = Path(__file__).resolve().parents[1] / "src" / "index.ts"
@@ -33,9 +36,11 @@ class Rpc:
     def __init__(self, pipe):
         self.pipe = pipe
         self.pending = queue.Queue()
-        self.answers = []  # labels to pick for upcoming permission dialogs
+        self.answers = []  # labels, or functions of the offered labels, for upcoming dialogs
         self.asked = []  # (title, options) of every dialog shown
         self.statuses = []
+        self.notes = []  # (type, message) of every notice
+        self.widgets = []  # (key, lines) of every widget shown or cleared
         threading.Thread(target=self._read, daemon=True).start()
 
     def _read(self):
@@ -59,10 +64,19 @@ class Rpc:
                 if e.get("method") == "select":
                     self.asked.append((e.get("title", ""), e.get("options", [])))
                     choice = self.answers.pop(0) if self.answers else None
+                    if callable(choice):
+                        choice = choice(e.get("options", []))
                     reply = {"value": choice} if choice else {"cancelled": True}
                     self.send({"type": "extension_ui_response", "id": e["id"], **reply})
                 elif e.get("method") == "setStatus":
                     self.statuses.append(e.get("statusText") or e.get("text") or "")
+                elif e.get("method") == "notify":
+                    self.notes.append((e.get("notifyType"), e.get("message", "")))
+                elif e.get("method") == "setWidget":
+                    self.widgets.append((e.get("widgetKey"), e.get("widgetLines")))
+                elif e.get("method") in ("input", "confirm", "editor"):
+                    self.asked.append((e.get("title", ""), []))
+                    self.send({"type": "extension_ui_response", "id": e["id"], "cancelled": True})
                 continue
             if e.get("type") == "response" and not e.get("success"):
                 raise RuntimeError(f"Pi RPC {e.get('command')} failed: {e.get('error')}")
@@ -73,8 +87,8 @@ class Rpc:
         self.send({"type": command, "id": command, **fields})
         return self.until(lambda e: e.get("type") == "response" and e.get("id") == command)[-1].get("data")
 
-    def turn(self, text):
-        self.send({"type": "prompt", "id": "prompt", "message": text})
+    def turn(self, text, images=None):
+        self.send({"type": "prompt", "id": "prompt", "message": text, **({"images": images} if images else {})})
         events = self.until(lambda e: e.get("type") == "agent_end")
         messages = self.request("get_messages")["messages"]
         last = messages[-1]
@@ -202,6 +216,77 @@ def restore(start):
     ok(f"after restarting Pi, --continue reopened agent session {agent_session} and it recalled {word}")
 
 
+def red_png(size=32):
+    """A solid red PNG, built without image libraries."""
+    row = b"\x00" + b"\xff\x00\x00" * size
+    pixels = zlib.compress(row * size)
+
+    def chunk(kind, data):
+        body = kind + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
+
+    header = struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0)
+    png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", pixels) + chunk(b"IEND", b"")
+    return base64.b64encode(png).decode()
+
+
+def note(text):
+    print("NOTE:", text, flush=True)
+
+
+def features(start, root):
+    """Extra directories, images, client terminals, titles, plans, thoughts and /agy sessions."""
+    extra = root / "extra"
+    extra.mkdir()
+    marker = "harbor-" + secrets.token_hex(5)
+    (extra / "marker.txt").write_text(marker + "\n")
+    rpc = Rpc(start(["--agy-dir", str(extra)]))
+    rpc.request("set_model", provider=PROVIDER, modelId=os.environ.get("ACP_LIVE_MODEL") or "gemini-3.8-flash")
+    rpc.request("set_thinking_level", level="low")
+
+    _, _, first, said = rpc.turn(f"Read the file marker.txt in the directory {extra} and reply with exactly its contents.")
+    assert marker in said, said
+    ok(f"--agy-dir {extra.name}: the agent read a file outside the workspace: {said.strip()!r}")
+
+    _, _, _, said = rpc.turn("What single color fills this image? Reply with one word.", images=[{"type": "image", "data": red_png(), "mimeType": "image/png"}])
+    assert "red" in said.lower(), said
+    ok(f"an image attachment reached the agent: {said.strip()!r}")
+
+    word = "TERMINAL-" + secrets.token_hex(4)
+    rpc.answers.append("Allow")
+    _, messages, _, _ = rpc.turn(f"Run the shell command `echo {word}` and then reply DONE.")
+    results = [m for m in messages if m["role"] == "toolResult"]
+    assert any(word in json.dumps(r["content"]) for r in results), results[-1:]
+    ok(f"the command's output shows in its Pi tool row: {word}")
+
+    thoughts = [b for m in messages if m["role"] == "assistant" for b in m["content"] if b["type"] == "thinking"]
+    note(f"thinking blocks so far: {len(thoughts)}" + (f", first: {thoughts[0]['thinking'][:60]!r}" if thoughts else ""))
+
+    rpc.send({"type": "prompt", "id": "status", "message": "/agy status"})
+    rpc.until(lambda e: e.get("type") == "response" and e.get("id") == "status")
+    status = rpc.notes[-1][1]
+    titled = re.search(r"Agent session: (\S+) \((.+)\)", status)
+    assert titled, status
+    agent_session, title = titled.groups()
+    assert first["responseId"].startswith(agent_session + "/"), (first["responseId"], agent_session)
+    ok(f"/agy status names the agent's title for the session: {title!r}")
+
+    rpc.turn("/agy plan Create a file named plan.txt containing the word PLANNED.")
+    plans = [lines for key, lines in rpc.widgets if key == "antigravity-plan" and lines]
+    note(f"plan widgets shown: {len(plans)}" + (f", first: {plans[0]}" if plans else ""))
+
+    rpc.answers.append(lambda options: next(o for o in options if o.startswith(title)))
+    rpc.send({"type": "prompt", "id": "sessions", "message": "/agy sessions"})
+    rpc.until(lambda e: e.get("type") == "response" and e.get("id") == "sessions")
+    _, messages, last, said = rpc.turn("What was the contents of marker.txt you read earlier? Reply with just it.")
+    assert marker in said, said
+    assert last["responseId"].startswith(agent_session + "/"), (last["responseId"], agent_session)
+    assert messages[0]["role"] == "user", messages[0]
+    ok(f"/agy sessions opened {title!r} as a new Pi session that continues agent session {agent_session}")
+    rpc.pipe.stdin.close()
+    rpc.pipe.wait(timeout=30)
+
+
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory(prefix="workspace-") as temp:
         root = Path(temp).resolve()
@@ -234,3 +319,4 @@ if __name__ == "__main__":
                 pi.kill()
                 pi.wait()
         restore(lambda extra: start(["--session-dir", str(root / "sessions"), *extra]))
+        features(lambda extra: start(["--session-dir", str(root / "features"), *extra]), root)
