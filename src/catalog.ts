@@ -30,21 +30,33 @@ export const emptyCatalog: Catalog = { models: [], modes: [], contextWindow: 1_0
 const PI_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 type LevelMap = NonNullable<Model<Api>["thinkingLevelMap"]>;
 
+const LEVELS = new Set<string>(PI_LEVELS);
+
+/** Splits per-level model ids such as `gemini-x-high` into each model's levels, in listed order. */
+function levelsByModel(variants: readonly string[]): Map<string, string[]> {
+  const levels = new Map<string, string[]>();
+  for (const variant of variants) {
+    const cut = variant.lastIndexOf("-");
+    const level = variant.slice(cut + 1);
+    if (cut < 0 || !LEVELS.has(level)) continue;
+    const model = variant.slice(0, cut);
+    const found = levels.get(model);
+    if (found) found.push(level);
+    else levels.set(model, [level]);
+  }
+  return levels;
+}
+
 /** Folds what a live session reports into the catalog. */
 export function learn(catalog: Catalog, session: AcpSession): Catalog {
   const current = session.current("model");
   const efforts = session.choices("thought_level").map((c) => c.value);
   const known = new Map(catalog.models.map((m) => [m.id, m.efforts]));
-  const levels = new Set<string>(PI_LEVELS);
+  const listed = levelsByModel(session.variants);
   // The config options give levels for the selected model only. For the others, read them off the
   // per-level model ids when the agent lists those; otherwise assume the selected model's levels.
   const others = (id: string) =>
-    session.variants.length
-      ? session.variants
-          .filter((variant) => variant.startsWith(`${id}-`))
-          .map((variant) => variant.slice(id.length + 1))
-          .filter((level) => levels.has(level))
-      : (known.get(id) ?? efforts);
+    session.variants.length ? (listed.get(id) ?? []) : (known.get(id) ?? efforts);
   const models = session.choices("model").map((c) => ({
     id: c.value,
     name: c.name,

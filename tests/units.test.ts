@@ -91,6 +91,25 @@ test("the catalog learns every model's thinking levels from one session", async 
   ]);
 });
 
+test("thinking levels are read off model ids that share a prefix with another model", async () => {
+  const agent = await connect({
+    script: () => [],
+    models: [
+      { id: "g", name: "G", efforts: ["low", "high"] },
+      { id: "g-pro", name: "G Pro", efforts: ["low"] },
+      { id: "g-lite", name: "G Lite", efforts: [] },
+    ],
+  });
+  onTestFinished(agent.close);
+  const session = await agent.client.newSession("/work");
+  expect(session.variants).toStrictEqual(["g-low", "g-high", "g-pro-low", "g-lite"]);
+  expect(learn(emptyCatalog, session).models.map((m) => [m.id, m.efforts])).toStrictEqual([
+    ["g", ["low", "high"]],
+    ["g-pro", ["low"]],
+    ["g-lite", []],
+  ]);
+});
+
 test("Pi models mark thinking levels the agent lacks as unsupported", () => {
   const models = piModels({
     models: [
@@ -261,6 +280,20 @@ test("permission choices with the same name stay distinguishable", () => {
   ]);
   expect(new Set(twins).size).toBe(3);
   expect(twins).toStrictEqual(["Yes [allow once]", "Yes [reject once]", "Yes [reject once] #3"]);
+  expect(choiceLabels([])).toStrictEqual([]);
+  expect(
+    choiceLabels([
+      option("A", "allow_once", "1"),
+      option("No", "reject_once", "2"),
+      option("A", "allow_once", "3"),
+      option("No", "reject_once", "4"),
+    ]),
+  ).toStrictEqual([
+    "A [allow once]",
+    "No [reject once]",
+    "A [allow once] #3",
+    "No [reject once] #4",
+  ]);
 });
 
 test("stopping a turn: one cancel for concurrent callers, no throw when the agent is gone, open dialogs withdrawn", async () => {

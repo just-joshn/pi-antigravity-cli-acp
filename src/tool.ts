@@ -89,13 +89,16 @@ export function toolResult(tool: ToolView | undefined, state: "running" | "done"
 
 /** Dialog labels for the agent's permission options, made unique when two share a name. */
 export function choiceLabels(options: readonly { name: string; kind: string }[]): string[] {
-  const labels: string[] = [];
-  for (const [index, option] of options.entries()) {
-    const shared = options.filter((other) => other.name === option.name).length > 1;
+  const named = new Map<string, number>();
+  for (const { name } of options) named.set(name, (named.get(name) ?? 0) + 1);
+  const used = new Set<string>();
+  return options.map((option, index) => {
+    const shared = (named.get(option.name) ?? 0) > 1;
     const label = shared ? `${option.name} [${option.kind.replaceAll("_", " ")}]` : option.name;
-    labels.push(labels.includes(label) ? `${label} #${index + 1}` : label);
-  }
-  return labels;
+    const unique = used.has(label) ? `${label} #${index + 1}` : label;
+    used.add(unique);
+    return unique;
+  });
 }
 
 type Watch = (
