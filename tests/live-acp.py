@@ -105,8 +105,11 @@ class Rpc:
         end = time.monotonic() + timeout
         events = ()
         while True:
+            remaining = end - time.monotonic()
             try:
-                event = self.pending.get(timeout=max(0.1, end - time.monotonic()))
+                if remaining <= 0:
+                    raise queue.Empty
+                event = self.pending.get(timeout=remaining)
             except queue.Empty:
                 raise TimeoutError(f"no matching event within {timeout} s; last: {events[-1:]}") from None
             if event is None:
@@ -385,32 +388,41 @@ def plan(rpc):
 
 
 def saved_sessions(rpc, marker, agent_session, name):
-    # Without a title, the session just used is the newest the agent lists.
-    rpc.answer(lambda options: next(o for o in options if o.startswith(name)) if name else options[0])
+    """Opens the earlier agent session from a different one, as /agy sessions refuses the one in use."""
+    rpc.request("new_session")
+    rpc.turn("Reply with exactly: NEW")
+    before = rpc.request("get_state")["sessionId"]
+    # Newest first: without a title, the earlier session is the second listed.
+    rpc.answer(lambda options: next(o for o in options if o.startswith(name)) if name else options[1])
     rpc.command("/agy sessions", "sessions")
-    if rpc.notes and "no saved sessions" in rpc.notes[-1][1]:
-        note("this agent lists no saved sessions")
-        return
+    refused = [text for _, text in rpc.notes if "in use here" in text or "no longer has" in text]
+    assert not refused, refused
+    assert rpc.request("get_state")["sessionId"] != before, "Pi did not open a new session"
     _, messages, last, said = rpc.turn("What was the contents of marker.txt you read earlier? Reply with just it.")
     assert marker in said, said
     assert last["responseId"].startswith(agent_session + "/"), (last["responseId"], agent_session)
     conversation = [m for m in messages if m["role"] != "system"]
     assert conversation[0]["role"] == "user", conversation[0]["role"]
-    ok(f"/agy sessions opened {name or 'the newest session'!r} as a new Pi session that continues agent session {agent_session}")
+    ok(f"/agy sessions opened {name or 'the earlier session'!r} as a new Pi session that continues agent session {agent_session}")
+
+
+def blue_or_answer(options):
+    """Picks Blue where it is offered, and Answer on a form's first dialog."""
+    return next((o for o in options if "blue" in o.lower()), "Answer" if "Answer" in options else None)
 
 
 def question(rpc):
-    """A structured question from the agent, answered with Pi's dialogs."""
+    """A question from the agent, answered in Pi's dialogs: a form (agy) or a permission choice (registry)."""
     rpc.forget_dialogs()
-    rpc.answer("Answer")
-    rpc.answer(lambda options: next(o for o in options if "blue" in o.lower()))
+    rpc.answer(blue_or_answer)
+    rpc.answer(blue_or_answer)
     rpc.answer("")  # agy adds an optional free-form "Other" field, left blank
     _, _, _, said = rpc.turn("Before doing anything, ask me which color I prefer, red or blue, using a structured question if you can. Then say the color.")
-    if not any("Answer" in options for _, options in rpc.asked):
-        note(f"the agent asked in plain text, not with a structured question: {said.strip()[:80]!r}")
+    if not any(any("blue" in o.lower() for o in options) for _, options in rpc.asked):
+        note(f"the agent asked in plain text, not with a dialog: {said.strip()[:80]!r}")
         return
     assert "blue" in said.lower(), said
-    ok(f"the agent's structured question was answered in Pi's dialogs {[t for t, _ in rpc.asked]} -> {said.strip()[:60]!r}")
+    ok(f"the agent's question was answered in Pi's dialogs {[t for t, _ in rpc.asked]} -> {said.strip()[:60]!r}")
 
 
 def features(start, root):

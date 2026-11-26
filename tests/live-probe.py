@@ -145,7 +145,8 @@ class Agent:
         if method == "terminal/wait_for_exit":
             # Waiting blocks only this request's thread.
             code = proc.wait()
-            collector.join()  # the exit is answered once all output is in
+            # The exit is answered once all output is in, or after a second if a child keeps the pipe open.
+            collector.join(timeout=1)
             return {"exitCode": code, "signal": None}
         status = {"exitStatus": {"exitCode": proc.returncode, "signal": None}} if proc.poll() is not None else {}
         return {"output": self.outputs.get(params["terminalId"], ""), "truncated": False, **status}
