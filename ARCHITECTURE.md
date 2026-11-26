@@ -26,8 +26,9 @@ The extension registers an `antigravity` provider, because Pi's model picker, th
 | `tool.ts`, `render.ts`   | The mirror tool `antigravity_tool`, which shows the agent's tool calls as Pi tool rows, and how those rows render.                                  |
 | `catalog.ts`             | The agent's models, modes and commands as Pi models, cached in `antigravity/catalog.json` under Pi's agent directory.                               |
 | `command.ts`             | `/agy status`, `mode`, `sessions`, `login`, `logout` and `/agy <agent command>`.                                                                    |
-| `guards.ts`              | `isRecord` and `isStringArray`, which narrow untyped input such as agent metadata, MCP entries and saved catalogs.                                  |
+| `guards.ts`              | `isRecord`, which narrows untyped agent data such as its metadata and tool output.                                                                  |
 | `fs.ts`                  | The agent's file requests: reads by absolute path, writes only inside the session's directory and its `--agy-dir` directories.                      |
+| `flags.ts`               | The extension's flags, read through one zod schema.                                                                                                 |
 | `workspace.ts`, `mcp.ts` | `--agy-dir` and `--agy-mcp`: the extra directories and Pi's MCP servers each session gets.                                                          |
 | `inbox.ts`               | Updates for sessions not open yet: the replay of a reopened session, counted and optionally kept as text, and early settings and usage.             |
 | `sessions.ts`            | `/agy sessions`: a saved agent conversation as a new Pi session.                                                                                    |
@@ -37,6 +38,7 @@ The extension registers an `antigravity` provider, because Pi's model picker, th
 | `plan.ts`                | The agent's plan from `plan`, `plan_update` and `plan_removed`, and the widget's lines.                                                             |
 | `draft.ts`               | `Draft`: one Pi assistant message built as the agent's events arrive, and the events Pi streams for it.                                             |
 | `pick.ts`                | Shows a select dialog and returns the item behind the chosen label.                                                                                 |
+| `occurrences.ts`         | Each item's place among items that share a key, for labels that must stay distinct.                                                                 |
 | `immutable.ts`           | Copy-on-write maps and `Registry`, which hold sessions and tool calls without editing shared state.                                                 |
 
 ## A prompt, end to end
@@ -69,6 +71,7 @@ Esc aborts Pi's request. The extension sends `session/cancel`, aborts any open p
 - Permission requests always reach the user as a dialog with the agent's own options. With no UI, the request is answered with the agent's reject option, or cancelled if it has none. A dialog still open when its turn ends is closed and the request cancelled. Nothing is approved without the user.
 - Writes requested by the agent go only inside the session's working directory and the directories given with `--agy-dir`. The path is checked after resolving symbolic links, the real parent directory is checked again after it is created, and a symbolic link at the file itself is not followed.
 - Reads requested by the agent take any absolute path, as an editor's would, but refuse devices, pipes and files over 16 MiB.
+- What the user supplies is validated with zod schemas: the flags, `mcp.json`, typed answers to the agent's questions, and the files the extension reads back (its catalog and Zed's registry listing). Untyped fields the agent sends, such as its metadata and raw tool output, are narrowed with type guards before use.
 - What the agent sends is bounded: plans to 100 entries, commands to 200, each text to 500 characters, titles to 200, tool output shown to 20,000 characters, and updates held for not-yet-known sessions to 64 each for the newest 16 sessions.
 - The agent process inherits Pi's environment, because `agy` needs it to find its sign-in. Do not run Pi with secrets in its environment that the agent should not see.
 - Commands the agent runs through Pi's terminals start without a shell in their own process group, report at most 1 MiB of output whatever the agent asks (holding up to twice that between trims), and are stopped with everything they started when released or when their session or the connection closes. Pi runs what the agent asks; whether to ask the user first is the agent's permission policy, as for its own tools.
