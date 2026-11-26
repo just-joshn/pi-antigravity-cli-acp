@@ -102,15 +102,23 @@ export function choiceLabels(options: readonly { name: string; kind: string }[])
   return distinct(labels, new Set());
 }
 
-/** Each label, numbered when an earlier one, as given out, is the same. A dialog has few options. */
+/** Each label, numbered when it is one already given out, so no two are the same. A dialog has few options. */
 function distinct(
   labels: readonly { index: number; label: string }[],
   used: ReadonlySet<string>,
 ): string[] {
   const [first, ...rest] = labels;
   if (!first) return [];
-  const label = used.has(first.label) ? `${first.label} #${first.index + 1}` : first.label;
+  const label = unused(first.label, first.index + 1, used);
   return [label, ...distinct(rest, new Set([...used, label]))];
+}
+
+/** `label`, or `label #n` with the first `n` from `from` that gives a label not yet used. */
+function unused(label: string, from: number, used: ReadonlySet<string>): string {
+  if (!used.has(label)) return label;
+  const numbered = (n: number): string =>
+    used.has(`${label} #${n}`) ? numbered(n + 1) : `${label} #${n}`;
+  return numbered(from);
 }
 
 type Watch = (

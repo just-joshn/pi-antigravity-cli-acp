@@ -136,7 +136,7 @@ async function ask(field: Field, dialogs: Dialogs, signal: AbortSignal): Promise
     return chosen ? { value: chosen.value } : "cancel";
   }
   if (type === "array" && listed)
-    return typed(field, dialogs, signal, (text) => pickMany(text, listed));
+    return typed(field, dialogs, signal, (text) => pickMany(text, listed, field.schema));
   if (type === "integer" || type === "number")
     return typed(field, dialogs, signal, (text) =>
       toNumber(text, field.schema, type === "integer"),
@@ -182,8 +182,8 @@ function rangeHint(schema: Record<string, unknown>): string {
 const boundOf = (value: unknown) => (typeof value === "number" ? value : undefined);
 
 /** The answer zod reads from the text, or the first problem it found, worded for the user. */
-function parsedWith(schema: z.ZodType<ElicitationContentValue>, text: string): Parsed {
-  const parsed = schema.safeParse(text);
+function parsedWith(schema: z.ZodType<ElicitationContentValue>, answer: unknown): Parsed {
+  const parsed = schema.safeParse(answer);
   return parsed.success
     ? { value: parsed.data }
     : { problem: parsed.error.issues[0]?.message ?? "not a valid answer" };
@@ -215,7 +215,11 @@ function toText(text: string, schema: Record<string, unknown>): Parsed {
   return parsedWith(atMost, text);
 }
 
-function pickMany(text: string, listed: { value: string; label: string }[]): Parsed {
+function pickMany(
+  text: string,
+  listed: { value: string; label: string }[],
+  schema: Record<string, unknown>,
+): Parsed {
   const picked = text
     .split(",")
     .map((part) => part.trim())
@@ -224,5 +228,14 @@ function pickMany(text: string, listed: { value: string; label: string }[]): Par
     (part) => listed.find((c) => c.label === part || c.value === part)?.value,
   );
   if (values.some((value) => value === undefined)) return { problem: "choose from the list" };
-  return { value: values.filter((value) => value !== undefined) };
+  const [minItems, maxItems] = [boundOf(schema["minItems"]), boundOf(schema["maxItems"])];
+  const array = z.array(z.string());
+  const atLeast =
+    minItems === undefined ? array : array.min(minItems, { error: `at least ${minItems}` });
+  const atMost =
+    maxItems === undefined ? atLeast : atLeast.max(maxItems, { error: `at most ${maxItems}` });
+  return parsedWith(
+    atMost,
+    values.filter((value) => value !== undefined),
+  );
 }

@@ -34,6 +34,15 @@ function extend(exchanges: readonly Exchange[], side: keyof Exchange, text: stri
   return [...exchanges.slice(0, -1), { ...last, [side]: last[side] + text }];
 }
 
+/** Updates in which the agent answers; the user's next message starts a new turn after one. */
+const AGENT_TURN = new Set([
+  "agent_message_chunk",
+  "agent_thought_chunk",
+  "tool_call",
+  "tool_call_update",
+  "plan",
+]);
+
 /** The replay after one more update; each user message after an agent update starts a turn. */
 function replayed(replay: Replay, update: SessionUpdate): Replay {
   const { exchanges } = replay;
@@ -49,7 +58,7 @@ function replayed(replay: Replay, update: SessionUpdate): Replay {
   const answer = update.sessionUpdate === "agent_message_chunk" && exchanges;
   return {
     turns: replay.turns,
-    userSpeaking: false,
+    userSpeaking: replay.userSpeaking && !AGENT_TURN.has(update.sessionUpdate),
     exchanges: answer ? extend(answer, "agent", chunkText(update)) : exchanges,
   };
 }

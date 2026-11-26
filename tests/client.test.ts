@@ -299,3 +299,10 @@ test("Pi also writes for the agent inside the extra directories its session was 
   expect(events.at(-1)?.type).toBe("end");
   expect(await readFile(join(extra, "x.txt"), "utf8")).toBe("z");
 });
+
+test("a signed-out agent asks for sign-in before it reopens a saved session too", async () => {
+  const saved = { s: [[{ type: "text" as const, text: "hello" }]] };
+  const { client, close } = await connect({ script: () => [], signedOut: true, history: saved });
+  onTestFinished(close);
+  await expect(client.loadSession("s", { cwd: "/work" })).rejects.toThrow(/sign in/);
+});

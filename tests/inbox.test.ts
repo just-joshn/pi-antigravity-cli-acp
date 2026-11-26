@@ -36,7 +36,7 @@ test("a replay counts each turn the user starts and keeps the text only when ask
   inbox.hold("s", usage(5));
   expect(inbox.endReplay("s")).toStrictEqual({
     turns: 2,
-    userSpeaking: false,
+    userSpeaking: true,
     exchanges: [
       { user: "hi!", agent: "hello" },
       { user: "again", agent: "" },
@@ -50,4 +50,14 @@ test("a replay counts each turn the user starts and keeps the text only when ask
     userSpeaking: true,
     exchanges: undefined,
   });
+});
+
+test("settings sent in the middle of a user message do not start a new turn", () => {
+  const inbox = new Inbox();
+  inbox.startReplay("s", true);
+  inbox.hold("s", said("user_message_chunk", "hello"));
+  inbox.hold("s", usage(1));
+  inbox.hold("s", said("user_message_chunk", " world"));
+  inbox.hold("s", said("agent_message_chunk", "hi"));
+  expect(inbox.endReplay("s")?.exchanges).toStrictEqual([{ user: "hello world", agent: "hi" }]);
 });

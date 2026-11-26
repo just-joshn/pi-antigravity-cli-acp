@@ -105,9 +105,10 @@ export class Terminals {
       exit: undefined,
       exited: this.#exited(terminalId, child),
     });
-    const append = (chunk: Buffer) => this.#append(terminalId, chunk.toString("utf8"));
-    child.stdout?.on("data", append);
-    child.stderr?.on("data", append);
+    // Decoding per stream keeps a character split across two chunks whole.
+    const append = (text: string) => this.#append(terminalId, text);
+    child.stdout?.setEncoding("utf8").on("data", append);
+    child.stderr?.setEncoding("utf8").on("data", append);
     return { terminalId };
   }
 
@@ -122,12 +123,11 @@ export class Terminals {
     return this.#get(sessionId, terminalId).exited;
   }
 
+  /** Stops the command and what it started; whatever is still running a moment later is killed. */
   kill(sessionId: string, terminalId: string): Record<string, never> {
-    const { child, exit } = this.#get(sessionId, terminalId);
-    if (exit) return {};
+    const { child } = this.#get(sessionId, terminalId);
     signal(child, "SIGTERM");
-    const force = setTimeout(() => signal(child, "SIGKILL"), KILL_GRACE_MS).unref();
-    child.once("exit", () => clearTimeout(force));
+    setTimeout(() => signal(child, "SIGKILL"), KILL_GRACE_MS).unref();
     return {};
   }
 

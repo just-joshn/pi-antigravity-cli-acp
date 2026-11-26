@@ -143,3 +143,43 @@ test("a command still running when the agent process dies is stopped", async () 
   const pid = Number(await readFile(join(work, "runaway.pid"), "utf8"));
   await vi.waitFor(() => expect(alive(pid)).toBe(false), { timeout: 3000 });
 });
+
+test("releasing a command that has exited still stops what it left running", async () => {
+  const { all } = terminals();
+  const dir = await scratchDir("term");
+  const pidFile = join(dir, "child");
+  const code = `const c = require("node:child_process").spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" }); c.unref(); require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(c.pid));`;
+  const { terminalId } = all.create({ sessionId: "s", ...node(code) }, "/");
+  await all.waitForExit("s", terminalId);
+  const child = Number(await readFile(pidFile, "utf8"));
+  onTestFinished(() => {
+    if (alive(child)) process.kill(child, "SIGKILL");
+  });
+  all.release("s", terminalId);
+  await vi.waitFor(() => expect(alive(child)).toBe(false), { timeout: 3000 });
+});
+
+test("a child that ignores SIGTERM is killed even after the command itself exits", async () => {
+  const { all } = terminals();
+  const dir = await scratchDir("term");
+  const pidFile = join(dir, "child");
+  const stubborn = `process.on("SIGTERM", () => {}); require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setInterval(() => {}, 1000)`;
+  const code = `require("node:child_process").spawn(process.execPath, ["-e", ${JSON.stringify(stubborn)}], { stdio: "ignore" }); setInterval(() => {}, 1000);`;
+  const { terminalId } = all.create({ sessionId: "s", ...node(code) }, "/");
+  await vi.waitFor(async () => expect(await readFile(pidFile, "utf8")).toMatch(/\d/));
+  const child = Number(await readFile(pidFile, "utf8"));
+  onTestFinished(() => {
+    if (alive(child)) process.kill(child, "SIGKILL");
+  });
+  all.release("s", terminalId);
+  await vi.waitFor(() => expect(alive(child)).toBe(false), { timeout: 4000 });
+});
+
+test("a character split across two writes is kept whole", async () => {
+  const { all } = terminals();
+  const code =
+    "process.stdout.write(Buffer.from([0xe2, 0x82])); setTimeout(() => process.stdout.write(Buffer.from([0xac])), 50);";
+  const { terminalId } = all.create({ sessionId: "s", ...node(code) }, "/");
+  await all.waitForExit("s", terminalId);
+  expect(all.output("s", terminalId).output).toBe("€");
+});

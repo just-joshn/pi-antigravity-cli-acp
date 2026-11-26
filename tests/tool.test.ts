@@ -87,3 +87,12 @@ test("a generated label never repeats another option's own label", () => {
   ]);
   expect(new Set(labels).size).toBe(3);
 });
+
+test("a numbered label never repeats one given out before it", () => {
+  const labels = choiceLabels([
+    option("X [allow once] #3", "reject_once", "a"),
+    option("X", "allow_once", "b"),
+    option("X", "allow_once", "c"),
+  ]);
+  expect(new Set(labels).size).toBe(3);
+});

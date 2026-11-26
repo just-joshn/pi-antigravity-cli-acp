@@ -241,3 +241,22 @@ test("typed answers are checked against the form's type and bounds before they a
     "S (try again: at most 3 characters)",
   ]);
 });
+
+test("a multiple choice answer must pick as many options as the form allows", async () => {
+  const colors = {
+    type: "array",
+    title: "Colors",
+    minItems: 2,
+    maxItems: 2,
+    items: { enum: ["red", "blue", "green"] },
+  };
+  const { dialogs, shown } = scripted(["Answer", "red", "red, blue, green", "red, blue"]);
+  expect(await answerElicitation(form({ colors }, ["colors"]), dialogs, signal)).toStrictEqual({
+    action: "accept",
+    content: { colors: ["red", "blue"] },
+  });
+  expect(shown().slice(2)).toStrictEqual([
+    "Colors (comma-separated: red, blue, green; try again: at least 2)",
+    "Colors (comma-separated: red, blue, green; try again: at most 2)",
+  ]);
+});

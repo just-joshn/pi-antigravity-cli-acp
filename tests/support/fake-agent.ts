@@ -304,6 +304,7 @@ class FakeAgent {
   }
 
   async load(request: LoadSessionRequest, client: AgentContext) {
+    if (!this.#signedIn) throw RequestError.authRequired();
     const { sessionId } = request;
     const { loads, loadRequests } = this.#log;
     this.#note({ loads: [...loads, sessionId], loadRequests: [...loadRequests, request] });

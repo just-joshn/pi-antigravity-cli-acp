@@ -1,6 +1,6 @@
 import { constants } from "node:fs";
 import { mkdir, open, readFile, realpath, stat } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 
 import {
   type ReadTextFileRequest,
@@ -113,7 +113,8 @@ function outsideWorkspace() {
 function requireInside(roots: readonly string[], path: string) {
   const within = (root: string) => {
     const inside = relative(root, path);
-    return inside !== "" && !inside.startsWith("..") && !isAbsolute(inside);
+    const above = inside === ".." || inside.startsWith(`..${sep}`);
+    return inside !== "" && !above && !isAbsolute(inside);
   };
   if (!roots.some(within)) throw outsideWorkspace();
 }

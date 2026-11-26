@@ -77,6 +77,10 @@ test("writing stays inside the workspace, even through a symlink", async () => {
   expect(await write(join(work, "..", "out.txt"))).toBe(refused);
 
   expect(await write(join(work, "new", "deeper", "in.txt"))).toBeUndefined();
+  expect(
+    await write(join(work, "..notes")),
+    "a name starting with two dots is inside",
+  ).toBeUndefined();
   await writeTextFile({ sessionId: "s", path: join(work, "blank.txt"), content: "" }, [work]);
   expect(await readFile(join(work, "blank.txt"), "utf8")).toBe("");
   expect(await readFile(join(work, "new", "deeper", "in.txt"), "utf8")).toBe("x");
