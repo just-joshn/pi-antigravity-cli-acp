@@ -78,3 +78,12 @@ test("permission choices with the same name stay distinguishable", () => {
     "No [reject once] #4",
   ]);
 });
+
+test("a generated label never repeats another option's own label", () => {
+  const labels = choiceLabels([
+    option("X", "allow_once", "a"),
+    option("X", "allow_once", "b"),
+    option("X [allow once] #2", "reject_once", "c"),
+  ]);
+  expect(new Set(labels).size).toBe(3);
+});

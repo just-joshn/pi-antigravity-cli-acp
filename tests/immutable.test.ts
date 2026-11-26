@@ -33,3 +33,12 @@ test("a registry finds what was put under an id until it is removed", () => {
   registry.remove("never there");
   expect(registry.get("a")).toBeUndefined();
 });
+
+test("without removes a key the way the map itself would, NaN included", () => {
+  const numbers: ReadonlyMap<number, string> = new Map([
+    [Number.NaN, "nan"],
+    [0, "zero"],
+  ]);
+  expect([...without(numbers, Number.NaN)]).toStrictEqual([[0, "zero"]]);
+  expect([...without(numbers, -0)]).toStrictEqual([[Number.NaN, "nan"]]);
+});

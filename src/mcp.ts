@@ -89,7 +89,9 @@ function convert(name: string, raw: unknown, env: Env): McpServer | string | und
   if (!entry.success) return NOT_AN_ENTRY;
   if (entry.data.enabled === false) return undefined;
   if (entry.data.type === "sse") return "the SSE transport is not supported";
-  return entry.data.url === undefined ? stdioServer(name, raw, env) : httpServer(name, raw, env);
+  return typeof entry.data.url === "string"
+    ? httpServer(name, raw, env)
+    : stdioServer(name, raw, env);
 }
 
 function httpServer(name: string, raw: unknown, env: Env): McpServer | string {

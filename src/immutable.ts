@@ -5,7 +5,10 @@ export function put<K, V>(map: ReadonlyMap<K, V>, key: K, value: V): ReadonlyMap
 
 /** A copy of `map` without `key`; `map` is left as it was. */
 export function without<K, V>(map: ReadonlyMap<K, V>, key: K): ReadonlyMap<K, V> {
-  return map.has(key) ? new Map([...map].filter(([other]) => other !== key)) : map;
+  // Map keys are equal as SameValueZero: NaN matches NaN, and 0 matches -0.
+  return map.has(key)
+    ? new Map([...map].filter(([other]) => !(Object.is(other, key) || other === key)))
+    : map;
 }
 
 /** Values by id, shared by reference; each change replaces the map inside instead of editing it. */

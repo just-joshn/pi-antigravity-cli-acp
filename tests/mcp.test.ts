@@ -103,6 +103,10 @@ test("missing or malformed files give no servers", async () => {
   expect(read().servers).toStrictEqual([]);
   await s.user({ odd: "not an object", nums: { command: "x", args: [1] } });
   expect(read().skipped).toStrictEqual(["odd: not a server entry", "nums: not a server entry"]);
+  await s.user({ nulled: { command: "/bin/x", url: null } });
+  expect(read().servers, "a url that is not text does not make a server HTTP").toStrictEqual([
+    { name: "nulled", command: "/bin/x", args: [], env: [] },
+  ]);
   await s.user({ blank: { command: "" }, nowhere: { url: "" } });
   expect(read()).toStrictEqual({
     servers: [],

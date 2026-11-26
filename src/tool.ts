@@ -99,9 +99,18 @@ export function choiceLabels(options: readonly { name: string; kind: string }[])
     index,
     label: of > 1 ? `${item.name} [${item.kind.replaceAll("_", " ")}]` : item.name,
   }));
-  return occurrences(labels, ({ label }) => label).map(({ item, nth }) =>
-    nth > 1 ? `${item.label} #${item.index + 1}` : item.label,
-  );
+  return distinct(labels, new Set());
+}
+
+/** Each label, numbered when an earlier one, as given out, is the same. A dialog has few options. */
+function distinct(
+  labels: readonly { index: number; label: string }[],
+  used: ReadonlySet<string>,
+): string[] {
+  const [first, ...rest] = labels;
+  if (!first) return [];
+  const label = used.has(first.label) ? `${first.label} #${first.index + 1}` : first.label;
+  return [label, ...distinct(rest, new Set([...used, label]))];
 }
 
 type Watch = (
