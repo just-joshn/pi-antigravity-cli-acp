@@ -49,6 +49,7 @@ class Agent:
         self.lock = threading.Lock()
         self.replies = {}
         self.terminals = {}
+        self.outputs = {}
         self.forget()
         threading.Thread(target=self._read, daemon=True).start()
 
@@ -114,25 +115,31 @@ class Agent:
             return {"result": {"action": "accept", "content": {"color": "blue"}}}
         return {"error": {"code": -32601, "message": "not handled by the probe"}}
 
+    def _collect(self, terminal_id, proc):
+        """Keeps a terminal's output as it arrives, so the command never blocks on a full pipe."""
+        for chunk in iter(lambda: proc.stdout.read1(4096), b""):
+            with self.lock:
+                self.outputs = {**self.outputs, terminal_id: self.outputs.get(terminal_id, "") + chunk.decode(errors="replace")}
+
     def _terminal(self, method, params):
-        """A client terminal: the command starts at once; its output and exit are read when asked."""
+        """A client terminal: the command starts at once; its output so far and its exit are read when asked."""
         if method == "terminal/create":
             command = [params["command"], *params.get("args", [])]
-            proc = subprocess.Popen(command, cwd=params.get("cwd") or self.cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            proc = subprocess.Popen(command, cwd=params.get("cwd") or self.cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             terminal_id = f"t{len(self.terminals) + 1}"
             self.terminals = {**self.terminals, terminal_id: proc}
+            threading.Thread(target=self._collect, args=(terminal_id, proc), daemon=True).start()
             return {"terminalId": terminal_id}
         proc = self.terminals[params["terminalId"]]
         if method in ("terminal/kill", "terminal/release"):
             if proc.poll() is None:
                 proc.kill()
             return {}
-        # Waiting blocks only this request's thread; output is read once the command has ended.
-        output, _ = proc.communicate() if method == "terminal/wait_for_exit" or proc.poll() is not None else ("", None)
-        status = {"exitCode": proc.returncode, "signal": None}
         if method == "terminal/wait_for_exit":
-            return status
-        return {"output": output or "", "truncated": False, **({"exitStatus": status} if proc.returncode is not None else {})}
+            # Waiting blocks only this request's thread.
+            return {"exitCode": proc.wait(), "signal": None}
+        status = {"exitStatus": {"exitCode": proc.returncode, "signal": None}} if proc.poll() is not None else {}
+        return {"output": self.outputs.get(params["terminalId"], ""), "truncated": False, **status}
 
     def call(self, request_id, method, params, wait=300):
         self._send({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params})

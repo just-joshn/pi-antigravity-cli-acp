@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { mkdir, open, realpath } from "node:fs/promises";
+import { lstat, mkdir, open, realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { buffer } from "node:stream/consumers";
 
@@ -110,7 +110,9 @@ export async function writeTextFile(
   // at the file itself.
   const target = join(await realpath(dirname(path)), basename(path));
   requireInside(roots, target);
-  // Windows has no O_NOFOLLOW; there, creating a symbolic link needs privileges the agent lacks.
+  // A link at the file itself is refused here, and O_NOFOLLOW closes the moment between this check
+  // and the open. Windows has no O_NOFOLLOW, so there only this check applies.
+  if ((await lstat(target).catch(() => undefined))?.isSymbolicLink()) throw outsideWorkspace();
   const noFollow = process.platform === "win32" ? 0 : constants.O_NOFOLLOW;
   // Opening does not wait for a pipe's reader; a pipe with none fails with ENXIO.
   const flags = constants.O_WRONLY | constants.O_CREAT | constants.O_NONBLOCK | noFollow;
