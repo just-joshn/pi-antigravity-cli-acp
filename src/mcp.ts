@@ -74,7 +74,8 @@ function convert(
 }
 
 function home(value: string): string {
-  return value.startsWith("~/") ? join(homedir(), value.slice(2)) : value;
+  const prefix = "~/";
+  return value.startsWith(prefix) ? join(homedir(), value.slice(prefix.length)) : value;
 }
 
 /** `${VAR}` values from the environment. Pi also runs `!command` values; this cannot. */

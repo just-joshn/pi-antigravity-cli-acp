@@ -3,6 +3,9 @@ import type { ContentBlock } from "@agentclientprotocol/sdk/unstable";
 import { put } from "./immutable.ts";
 import type { AcpSession, ToolView, Turn } from "./session.ts";
 
+/** Characters of the agent session id kept in a mirrored tool call id. */
+const ID_PREFIX_LIMIT = 40;
+
 /** Where a saved assistant message left an agent session: `<session id>/<turns>.<segment>`. */
 export function anchorFor(sessionId: string, turns: number, segment: number): string {
   return `${sessionId}/${turns}.${segment}`;
@@ -54,7 +57,7 @@ export class Conversation {
 
   /** A Pi tool call id for one of the agent's tool calls. */
   mirror(tool: ToolView): string {
-    const prefix = this.session.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 40);
+    const prefix = this.session.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, ID_PREFIX_LIMIT);
     // The turn keeps ids unique when the session is reopened and this count starts again.
     this.#mirrored += 1;
     const id = `agy_${prefix}_${this.session.turns}_${this.#mirrored}`;

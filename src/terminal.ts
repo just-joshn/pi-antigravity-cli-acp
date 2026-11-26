@@ -13,6 +13,8 @@ import { put, without } from "./immutable.ts";
 /** Most output reported per terminal, whatever the agent asks for; up to twice this is held between trims. */
 const OUTPUT_LIMIT = 1024 * 1024;
 const KILL_GRACE_MS = 1000;
+/** Output may grow to this many times its limit before it is trimmed, so trims copy rarely. */
+const TRIM_FACTOR = 2;
 /** After the command exits, how long to wait for output still held by processes it left behind. */
 const DRAIN_MS = 1000;
 /** Process groups let a stop reach what the command started; Windows has none to signal. */
@@ -182,8 +184,7 @@ export class Terminals {
       output: running.output + text,
       bytes: running.bytes + Buffer.byteLength(text),
     };
-    // Trimming copies what is kept, so it waits until twice the limit has piled up.
-    const kept = grown.bytes > 2 * grown.limit ? trimmed(grown) : grown;
+    const kept = grown.bytes > TRIM_FACTOR * grown.limit ? trimmed(grown) : grown;
     this.#all = put(this.#all, terminalId, { ...kept, reporting: true });
     if (!running.reporting) setImmediate(() => this.#reportOutput(terminalId));
   }

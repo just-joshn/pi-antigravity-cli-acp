@@ -174,7 +174,10 @@ function describeFailure(error: unknown): string {
   const text = error instanceof Error ? error.message : "The agent ended the request.";
   const data = error instanceof Error && "data" in error ? error.data : undefined;
   const detail = isRecord(data) ? data["details"] : undefined;
-  return [text, typeof detail === "string" ? detail : ""].filter(Boolean).join(": ").slice(0, 500);
+  return [text, typeof detail === "string" ? detail : ""]
+    .filter(Boolean)
+    .join(": ")
+    .slice(0, TEXT_LIMIT);
 }
 
 /** One agent conversation: its settings, context usage, tool calls and the turn in progress. */

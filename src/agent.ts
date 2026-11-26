@@ -21,6 +21,8 @@ interface AgentLaunch {
 type Env = Record<string, string | undefined>;
 
 const REGISTRY_ID = "antigravity-acp";
+/** How long a stopped agent has to exit before it is killed. */
+const STOP_GRACE_MS = 1000;
 
 function executable(file: string): boolean {
   try {
@@ -153,7 +155,7 @@ export function launch(agent: AgentLaunch, cwd: string, env: Env = process.env):
       child.stdin.end();
       if (child.exitCode !== null || child.signalCode !== null) return;
       child.kill();
-      const force = setTimeout(() => child.kill("SIGKILL"), 1000).unref();
+      const force = setTimeout(() => child.kill("SIGKILL"), STOP_GRACE_MS).unref();
       child.once("close", () => clearTimeout(force));
     },
   };

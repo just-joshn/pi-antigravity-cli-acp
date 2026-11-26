@@ -33,9 +33,12 @@ export interface SignInMethod {
   description: string | undefined;
 }
 
+/** Characters of an error's message shown to the user. */
+const REASON_LIMIT = 300;
+
 /** The start of an error's message, to show the user why something failed. */
 export function reasonOf(error: unknown, fallback: string): string {
-  return error instanceof Error ? error.message.slice(0, 300) : fallback;
+  return error instanceof Error ? error.message.slice(0, REASON_LIMIT) : fallback;
 }
 
 export interface ClientIdentity {

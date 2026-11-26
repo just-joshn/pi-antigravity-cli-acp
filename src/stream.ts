@@ -27,6 +27,8 @@ const CANCEL_GRACE_MS = 5000;
 /** Tool calls the agent starts together arrive as separate updates; wait this long to group them. */
 const TOOL_BATCH_MS = 25;
 const HISTORY_LIMIT = 24_000;
+/** Characters of each tool result kept in history sent as context. */
+const TOOL_RESULT_LIMIT = 600;
 
 /** Shown when Pi continues a turn the agent no longer runs; it must not look retryable either. */
 export const TURN_LOST =
@@ -114,7 +116,9 @@ export function renderHistory(messages: Message[]): string {
   const lines = messages.flatMap((message) => {
     if (message.role === "user") return [`User: ${plainText(message.content)}`];
     if (message.role === "toolResult")
-      return [`Tool result (${message.toolName}): ${plainText(message.content).slice(0, 600)}`];
+      return [
+        `Tool result (${message.toolName}): ${plainText(message.content).slice(0, TOOL_RESULT_LIMIT)}`,
+      ];
     if (message.role !== "assistant") return [];
     const said = message.content
       .flatMap((block) => {

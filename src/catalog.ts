@@ -26,11 +26,16 @@ export interface Catalog {
   contextWindow: number;
 }
 
+/** Context window assumed until the agent reports its own. */
+const DEFAULT_CONTEXT_WINDOW = 1_048_576;
+/** Output tokens Pi may budget for one reply; the agent enforces its own limit. */
+const MAX_OUTPUT_TOKENS = 65_536;
+
 export const emptyCatalog: Catalog = {
   models: [],
   modes: [],
   commands: [],
-  contextWindow: 1_048_576,
+  contextWindow: DEFAULT_CONTEXT_WINDOW,
 };
 
 const PI_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
@@ -83,7 +88,7 @@ export function piModels(catalog: Catalog): Model<typeof API>[] {
     baseUrl: "acp:antigravity",
     input: ["text" as const, "image" as const],
     contextWindow: catalog.contextWindow,
-    maxTokens: 65_536,
+    maxTokens: MAX_OUTPUT_TOKENS,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
   } satisfies Partial<Model<typeof API>>;
   return [

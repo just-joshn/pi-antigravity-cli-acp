@@ -9,8 +9,9 @@ import {
   type WriteTextFileRequest,
 } from "@agentclientprotocol/sdk/unstable";
 
-/** Largest file the agent may read through Pi. */
-const READ_LIMIT = 16 * 1024 * 1024;
+const MIB = 1024 * 1024;
+/** Largest file the agent may read through Pi, in MiB. */
+const READ_LIMIT_MIB = 16;
 
 /** The system error code of a failed file operation, such as `ENOENT`. */
 function codeOf(error: unknown): string {
@@ -27,8 +28,8 @@ async function requireReadable(path: string) {
   const info = await stat(path).catch(() => undefined);
   if (info && !info.isFile() && !info.isDirectory())
     throw RequestError.invalidParams(undefined, `${path} is not a regular file`);
-  if (info && info.size > READ_LIMIT)
-    throw RequestError.invalidParams(undefined, `${path} is larger than 16 MiB`);
+  if (info && info.size > READ_LIMIT_MIB * MIB)
+    throw RequestError.invalidParams(undefined, `${path} is larger than ${READ_LIMIT_MIB} MiB`);
 }
 
 /** Serves ACP `fs/read_text_file`: the whole file, or `limit` lines from 1-based `line`. */
