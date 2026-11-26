@@ -81,5 +81,5 @@
     "unicorn/no-process-exit": "error"
   },
 
-  "ignorePatterns": ["**/node_modules/**", "**/dist/**", "**/build/**", "**/coverage/**"]
+  "ignorePatterns": ["**/node_modules/**", "**/coverage/**"]
 }
