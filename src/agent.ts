@@ -106,6 +106,7 @@ export function findRegistryAgent(root: string, platform: string): AgentLaunch |
   try {
     installed = readdirSync(join(root, REGISTRY_ID));
   } catch {
+    // No directory to read: no copy of the agent is installed there.
     return undefined;
   }
   const [first, ...rest] = installed.flatMap((directory): Installed[] => {

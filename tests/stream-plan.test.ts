@@ -94,7 +94,6 @@ test("history is rendered as text without thinking, and nothing is rendered for 
   expect(history).toMatch(
     /^Conversation so far, supplied by the client as context:\n\nUser: question\n\nAssistant: answer\n\nAssistant: \[tool antigravity_tool: \{\}\]\n\nTool result \(antigravity_tool\): out\n\nUser: \[image\]$/,
   );
-  expect(history).not.toMatch(/secret/);
 });
 
 test("long history keeps its most recent part", () => {

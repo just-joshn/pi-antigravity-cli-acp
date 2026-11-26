@@ -1,4 +1,4 @@
-import type { SessionUpdate } from "@agentclientprotocol/sdk/unstable";
+import type { ContentBlock, SessionUpdate } from "@agentclientprotocol/sdk/unstable";
 
 import { put, without } from "./immutable.ts";
 
@@ -22,10 +22,8 @@ interface Replay {
   readonly exchanges: readonly Exchange[] | undefined;
 }
 
-function chunkText(update: SessionUpdate): string {
-  const chunk =
-    update.sessionUpdate === "user_message_chunk" || update.sessionUpdate === "agent_message_chunk";
-  return chunk && update.content.type === "text" ? update.content.text : "";
+function chunkText(content: ContentBlock): string {
+  return content.type === "text" ? content.text : "";
 }
 
 function extend(exchanges: readonly Exchange[], side: keyof Exchange, text: string) {
@@ -52,14 +50,17 @@ function replayed(replay: Replay, update: SessionUpdate): Replay {
     return {
       turns: replay.turns + (starts ? 1 : 0),
       userSpeaking: true,
-      exchanges: begun && extend(begun, "user", chunkText(update)),
+      exchanges: begun && extend(begun, "user", chunkText(update.content)),
     };
   }
-  const answer = update.sessionUpdate === "agent_message_chunk" && exchanges;
+  const answered =
+    update.sessionUpdate === "agent_message_chunk" && exchanges
+      ? extend(exchanges, "agent", chunkText(update.content))
+      : exchanges;
   return {
     turns: replay.turns,
     userSpeaking: replay.userSpeaking && !AGENT_TURN.has(update.sessionUpdate),
-    exchanges: answer ? extend(answer, "agent", chunkText(update)) : exchanges,
+    exchanges: answered,
   };
 }
 

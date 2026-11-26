@@ -67,7 +67,7 @@ Esc aborts Pi's request. The extension sends `session/cancel`, aborts any open p
 ## Security
 
 - The agent starts without a shell, with its stderr discarded, so output cannot be mistaken for protocol messages.
-- The extension never sees credentials. Sign-in, tokens and quota stay in the agent.
+- The extension never sees the agent's sign-in: tokens and quota stay in the agent. The one exception is `--agy-mcp`, below, which passes the MCP servers' configured credentials on.
 - Permission requests always reach the user as a dialog with the agent's own options. With no UI, the request is answered with the agent's reject option, or cancelled if it has none. A dialog still open when its turn ends is closed and the request cancelled. Nothing is approved without the user.
 - Writes requested by the agent go only inside the session's working directory and the directories given with `--agy-dir`. The path is checked after resolving symbolic links, the real parent directory is checked again after it is created, and a symbolic link at the file itself is not followed.
 - Reads requested by the agent take any absolute path, as an editor's would, but refuse devices, pipes and files over 16 MiB.

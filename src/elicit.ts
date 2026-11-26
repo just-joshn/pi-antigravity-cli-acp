@@ -234,8 +234,5 @@ function pickMany(
     minItems === undefined ? array : array.min(minItems, { error: `at least ${minItems}` });
   const atMost =
     maxItems === undefined ? atLeast : atLeast.max(maxItems, { error: `at most ${maxItems}` });
-  return parsedWith(
-    atMost,
-    values.filter((value) => value !== undefined),
-  );
+  return parsedWith(atMost, values);
 }
