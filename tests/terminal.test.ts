@@ -18,6 +18,13 @@ function terminals() {
   return { all, updates: updates.all };
 }
 
+/** Waits for a terminal's output with real timers; vi.waitFor would run a faked setImmediate. */
+async function outputIs(all: Terminals, terminalId: string, expected: string): Promise<void> {
+  if (all.output("s", terminalId).output === expected) return;
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  return outputIs(all, terminalId, expected);
+}
+
 const node = (code: string) => ({ command: process.execPath, args: ["-e", code] });
 const forever = node("setInterval(() => {}, 1000)");
 
@@ -194,13 +201,7 @@ test("output that arrives just before release is still reported", async () => {
     { sessionId: "s", ...node("process.stdout.write('last'); setInterval(() => {}, 1000)") },
     "/",
   );
-  // vi.waitFor would run the faked setImmediate; poll with real timers instead.
-  const arrived = async (): Promise<void> => {
-    if (all.output("s", terminalId).output === "last") return;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    return arrived();
-  };
-  await arrived();
+  await outputIs(all, terminalId, "last");
   all.release("s", terminalId);
   expect(updates()).toStrictEqual([
     ["s", terminalId, "last"],
@@ -218,11 +219,6 @@ test("output the agent reads is reported at once, so a tool finished just after 
     { sessionId: "s", ...node("process.stdout.write('done'); setInterval(() => {}, 1000)") },
     "/",
   );
-  const arrived = async (): Promise<void> => {
-    if (all.output("s", terminalId).output === "done") return;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    return arrived();
-  };
-  await arrived();
+  await outputIs(all, terminalId, "done");
   expect(updates()).toStrictEqual([["s", terminalId, "done"]]);
 });

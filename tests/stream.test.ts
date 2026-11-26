@@ -95,7 +95,7 @@ async function runTools(host: ReturnType<typeof scriptedHost>, message: Assistan
       timestamp: Date.now(),
     };
   });
-  return { results, toolResults };
+  return toolResults;
 }
 
 /** Every event of a provider stream, each also handed to `onEvent` as it arrives. */
@@ -157,9 +157,7 @@ function piLoop(host: ReturnType<typeof scriptedHost>, mirrorTool: boolean) {
   }
 
   const mirror = async (message: AssistantMessage) => {
-    const { results, toolResults } = await runTools(host, message);
-    add(...toolResults);
-    return results;
+    add(...(await runTools(host, message)));
   };
 
   async function turn(text: string, model: Model<string> = modelA, request: StreamRequest = {}) {

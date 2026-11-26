@@ -26,6 +26,7 @@ function executable(file: string): boolean {
     accessSync(file, constants.X_OK);
     return true;
   } catch {
+    // Missing, not executable or not reachable: in every case it cannot be run.
     return false;
   }
 }
