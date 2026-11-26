@@ -198,10 +198,11 @@ test("output that arrives just before release is still reported", async () => {
   });
   const { all, updates } = terminals();
   const { terminalId } = all.create(
-    { sessionId: "s", ...node("process.stdout.write('last'); setInterval(() => {}, 1000)") },
+    { sessionId: "s", ...node("process.stdout.write('last')") },
     "/",
   );
-  await outputIs(all, terminalId, "last");
+  // Waiting for the exit reads no output, so the report can only come from the release.
+  await all.waitForExit("s", terminalId);
   all.release("s", terminalId);
   expect(updates()).toStrictEqual([
     ["s", terminalId, "last"],
