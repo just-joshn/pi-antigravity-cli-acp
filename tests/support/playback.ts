@@ -33,6 +33,14 @@ export type Step =
   | { fail: string }
   | { stop: StopReason };
 
+/** A read the agent is still running, for tests that mirror one. */
+export const readCall = {
+  toolCallId: "t1",
+  kind: "read" as const,
+  title: "File a.txt",
+  status: "in_progress" as const,
+};
+
 export const allow: PermissionOption = { kind: "allow_once", optionId: "allow", name: "Allow" };
 export const deny: PermissionOption = { kind: "reject_once", optionId: "deny", name: "Deny" };
 
@@ -67,11 +75,14 @@ async function ask(pb: Playback, step: Extract<Step, { ask: string }>) {
 }
 
 /** Runs a command in a client terminal, shown in a tool call, and says how it ended. */
-async function runInTerminal(pb: Playback, [command, ...args]: string[]) {
+async function runInTerminal(
+  pb: Playback,
+  [command, ...args]: Extract<Step, { run: unknown }>["run"],
+) {
   const { client, sessionId } = pb;
   const { terminalId } = await client.request(methods.client.terminal.create, {
     sessionId,
-    command: command ?? "",
+    command,
     args,
   });
   const toolCallId = `run-${terminalId}`;
@@ -80,7 +91,7 @@ async function runInTerminal(pb: Playback, [command, ...args]: string[]) {
     sessionUpdate: "tool_call",
     toolCallId,
     kind: "execute",
-    title: command ?? "",
+    title: command,
     content,
   });
   const exit = await client.request(methods.client.terminal.waitForExit, { sessionId, terminalId });

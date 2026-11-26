@@ -26,7 +26,7 @@ The extension registers an `antigravity` provider, because Pi's model picker, th
 | `tool.ts`, `render.ts`   | The mirror tool `antigravity_tool`, which shows the agent's tool calls as Pi tool rows, and how those rows render.                                  |
 | `catalog.ts`             | The agent's models, modes and commands as Pi models, cached in `antigravity/catalog.json` under Pi's agent directory.                               |
 | `command.ts`             | `/agy status`, `mode`, `sessions`, `login`, `logout` and `/agy <agent command>`.                                                                    |
-| `guards.ts`              | `isRecord`, which narrows untyped input such as agent metadata and saved catalogs.                                                                  |
+| `guards.ts`              | `isRecord` and `isStringArray`, which narrow untyped input such as agent metadata, MCP entries and saved catalogs.                                  |
 | `fs.ts`                  | The agent's file requests: reads by absolute path, writes only inside the session's directory and its `--agy-dir` directories.                      |
 | `workspace.ts`, `mcp.ts` | `--agy-dir` and `--agy-mcp`: the extra directories and Pi's MCP servers each session gets.                                                          |
 | `inbox.ts`               | Updates for sessions not open yet: the replay of a reopened session, counted and optionally kept as text, and early settings and usage.             |
@@ -35,6 +35,9 @@ The extension registers an `antigravity` provider, because Pi's model picker, th
 | `elicit.ts`              | The agent's structured questions, asked with Pi's dialogs.                                                                                          |
 | `terminal.ts`            | Commands the agent runs through Pi (ACP terminals).                                                                                                 |
 | `plan.ts`                | The agent's plan from `plan`, `plan_update` and `plan_removed`, and the widget's lines.                                                             |
+| `draft.ts`               | `Draft`: one Pi assistant message built as the agent's events arrive, and the events Pi streams for it.                                             |
+| `pick.ts`                | Shows a select dialog and returns the item behind the chosen label.                                                                                 |
+| `immutable.ts`           | Copy-on-write maps and `Registry`, which hold sessions and tool calls without editing shared state.                                                 |
 
 ## A prompt, end to end
 
@@ -45,7 +48,7 @@ The extension registers an `antigravity` provider, because Pi's model picker, th
 5. Agent updates arrive in order on one queue per turn. Text and thoughts become Pi text and thinking blocks. A tool call ends the current Pi message with a call to `antigravity_tool`; Pi runs that tool, which waits for the agent's own tool call to finish and shows its updates. Pi then calls the stream again, which continues the same agent turn.
 6. The turn's end stamps the last message with the new anchor and the usage the agent reported.
 
-The mirror tool is why the agent's tool calls look like Pi's own: Pi renders, collapses and expands them, and the tool result in the transcript is what the agent's tool returned. Nothing runs twice; the agent already ran it.
+The mirror tool is why the agent's tool calls look like Pi's own: Pi renders, collapses and expands them, and the tool result in the transcript is what the agent's tool returned.
 
 ## Process and session lifetime
 
@@ -83,4 +86,4 @@ Esc aborts Pi's request. The extension sends `session/cancel`, aborts any open p
 | A tool call with 200 KB of output      | 0.168 and 0.172 ms | 0.178 and 0.194 ms     |
 | Reopening a saved session of 500 turns | n/a                | 4.70 and 4.71 ms       |
 
-The extension, including building Pi's events and assistant message, adds about 1 µs per streamed chunk and 10 to 22 µs for a 200 KB tool result. Updates are handled as they arrive, without polling or batching, except that tool calls the agent starts within 25 ms of each other are shown together. Updates that arrive before their session exists are kept, at most 64 per session for the newest 16 sessions.
+The extension, including building Pi's events and assistant message, adds about 1 µs per streamed chunk and 10 to 22 µs for a 200 KB tool result. Updates are handled as they arrive, without polling or batching, except that tool calls the agent starts within 25 ms of each other are shown together.

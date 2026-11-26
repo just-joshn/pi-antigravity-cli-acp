@@ -5,16 +5,9 @@ import { expect, onTestFinished, test } from "vitest";
 
 import type { TurnEvent } from "../src/session.ts";
 import { connect, identity, resolvable } from "./support/harness.ts";
-import { allow, deny, type Step } from "./support/playback.ts";
+import { allow, deny, readCall, type Step } from "./support/playback.ts";
 import { answering, recorder } from "./support/record.ts";
 import { scratchDir } from "./support/scratch.ts";
-
-const readCall = {
-  toolCallId: "t1",
-  kind: "read" as const,
-  title: "File a.txt",
-  status: "in_progress" as const,
-};
 
 async function eventually<T>(read: () => T | undefined): Promise<T> {
   for (let attempt = 0; attempt < 200; attempt++) {
@@ -40,10 +33,6 @@ test("the client introduces itself as Pi and offers files, terminals, questions 
   const { log, close } = await connect({ script: () => [] });
   onTestFinished(close);
   expect(log.initialize?.clientInfo).toStrictEqual(identity);
-  expect(log.initialize?.clientCapabilities?.fs).toStrictEqual({
-    readTextFile: true,
-    writeTextFile: true,
-  });
   expect(log.initialize?.clientCapabilities).toStrictEqual({
     fs: { readTextFile: true, writeTextFile: true },
     terminal: true,

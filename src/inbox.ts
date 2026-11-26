@@ -37,7 +37,7 @@ function extend(exchanges: readonly Exchange[], side: keyof Exchange, text: stri
 }
 
 /** The replay after one more update; each user message after an agent update starts a turn. */
-export function replayed(replay: Replay, update: SessionUpdate): Replay {
+function replayed(replay: Replay, update: SessionUpdate): Replay {
   const { exchanges } = replay;
   if (update.sessionUpdate === "user_message_chunk") {
     const starts = !replay.userSpeaking;

@@ -34,8 +34,6 @@ fail() {
 }
 
 echo "== install"
-# What Pi does for an npm source, without a registry: the published files, their production
-# dependencies, and no peer dependencies (Pi supplies its own packages to extensions).
 mkdir "$scratch/package"
 tar -xzf "$tarball" -C "$scratch/package" --strip-components 1
 (cd "$scratch/package" && npm install --silent --omit=dev --omit=peer --ignore-scripts --no-audit --no-fund)

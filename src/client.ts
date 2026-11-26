@@ -90,12 +90,6 @@ function explain(action: string) {
   };
 }
 
-function terminalsFor(sessions: Registry<AcpSession>) {
-  return new Terminals((sessionId, terminalId, output) =>
-    sessions.get(sessionId)?.terminalOutput(terminalId, output),
-  );
-}
-
 function sessionCwd(sessions: Registry<AcpSession>, sessionId: string): string {
   const session = sessions.get(sessionId);
   if (!session) throw RequestError.invalidParams(undefined, `no session ${sessionId}`);
@@ -249,7 +243,10 @@ export class AcpClient {
     hooks: SessionHooks,
   ): Promise<AcpClient> {
     const sessions = new Registry<AcpSession>();
-    const wiring = { sessions, inbox: new Inbox(), hooks, terminals: terminalsFor(sessions) };
+    const terminals = new Terminals((sessionId, terminalId, output) =>
+      sessions.get(sessionId)?.terminalOutput(terminalId, output),
+    );
+    const wiring = { sessions, inbox: new Inbox(), hooks, terminals };
     const connection = serve(stream, identity, wiring);
     const introduction: InitializeRequest = {
       protocolVersion: PROTOCOL_VERSION,

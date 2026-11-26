@@ -76,8 +76,6 @@ The last live run (`python3 tests/live-acp.py`, all 12 steps passed) was at comm
 | PKG-1   | Install through Pi's package mechanism   | implemented_unverified |
 | PERF-1  | Measured extension overhead              | implemented_unverified |
 
-Not all applicable capabilities are verified, so parity is not claimed.
-
 ## Details
 
 Each entry gives the reference behavior and its source, whether it applies, the ACP methods and Pi APIs involved, the implementation, the acceptance criteria, how it was checked, its status, the evidence and any upstream limitation.

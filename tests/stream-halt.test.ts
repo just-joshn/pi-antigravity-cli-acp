@@ -2,11 +2,10 @@ import { type AssistantMessage, isRetryableAssistantError } from "@earendil-work
 import { expect, test } from "vitest";
 
 import { noUsage } from "../src/draft.ts";
-import { AcpSession, type AgentPort, type SessionHooks } from "../src/session.ts";
+import { AcpSession, type AgentPort } from "../src/session.ts";
 import { haltTurn, NOT_RESENT } from "../src/stream.ts";
 import { initialSession, quietHooks, resolvable } from "./support/harness.ts";
 
-const hooks: SessionHooks = quietHooks;
 /** An agent that never answers a prompt and whose connection is gone. */
 const gone: AgentPort = {
   prompt: () => new Promise(() => {}),
@@ -26,7 +25,7 @@ test("stopping a turn sends one cancel for concurrent callers and clears the tur
     },
     setConfigOption: () => Promise.resolve([]),
   };
-  const session = new AcpSession("s", initialSession, responsive, hooks);
+  const session = new AcpSession("s", initialSession, responsive, quietHooks);
   session.startTurn([]);
   expect(await Promise.all([haltTurn(session, 1000), haltTurn(session, 1000)])).toStrictEqual([
     true,
@@ -38,7 +37,7 @@ test("stopping a turn sends one cancel for concurrent callers and clears the tur
 });
 
 test("stopping a turn of an agent that is gone reports it unconfirmed without throwing", async () => {
-  const dead = new AcpSession("d", initialSession, gone, hooks);
+  const dead = new AcpSession("d", initialSession, gone, quietHooks);
   dead.startTurn([]);
   expect(await haltTurn(dead, 20)).toBe(false);
 });
@@ -52,7 +51,7 @@ test("an open permission dialog is withdrawn when its turn ends", async () => {
     initialSession,
     { ...gone, prompt: () => reply.promise },
     {
-      ...hooks,
+      ...quietHooks,
       askPermission(_tool, _options, signal) {
         signal.addEventListener("abort", () => {
           withdrawn = true;

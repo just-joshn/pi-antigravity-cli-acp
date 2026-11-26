@@ -14,7 +14,7 @@ function scripted(answers: readonly (string | undefined)[]) {
     shown.record(title);
     return Promise.resolve(answer());
   };
-  const dialogs: Dialogs = { select: (title) => next(title), input: (title) => next(title) };
+  const dialogs: Dialogs = { select: next, input: next };
   return { dialogs, shown: shown.all };
 }
 

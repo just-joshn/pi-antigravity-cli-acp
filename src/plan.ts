@@ -33,6 +33,7 @@ export function nextPlan(current: Plan | undefined, update: PlanUpdate): Plan | 
   if (update.sessionUpdate === "plan_removed")
     return current?.id === update.planId ? undefined : current;
   const { plan } = update;
+  // The plan comes from the agent, which may send a kind this SDK does not know; it is ignored.
   if (plan.type === "items" && "entries" in plan)
     return { id: plan.planId, steps: steps(plan.entries) };
   if (plan.type === "markdown" && "content" in plan) {

@@ -26,7 +26,7 @@ const fakeAgy = join(import.meta.dirname, "fake-agy.ts");
 export type ProcessLog = AgentLog & { argv: string[]; cwd: string };
 
 function isProcessLog(value: unknown): value is ProcessLog {
-  return typeof value === "object" && value !== null && "prompts" in value && "argv" in value;
+  return isRecord(value) && "prompts" in value && "argv" in value;
 }
 
 export const said = (message: AssistantMessage | undefined) =>

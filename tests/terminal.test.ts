@@ -19,6 +19,7 @@ function terminals() {
 }
 
 const node = (code: string) => ({ command: process.execPath, args: ["-e", code] });
+const forever = node("setInterval(() => {}, 1000)");
 
 test("a command runs without a shell, and its output and exit status are reported", async () => {
   const { all, updates } = terminals();
@@ -51,7 +52,6 @@ test("output past the byte limit keeps its end", async () => {
 
 test("kill stops a running command; release stops it and forgets it", async () => {
   const { all } = terminals();
-  const forever = node("setInterval(() => {}, 1000)");
   const killed = all.create({ sessionId: "s", ...forever }, "/").terminalId;
   all.kill("s", killed);
   expect(await all.waitForExit("s", killed)).toStrictEqual({ exitCode: null, signal: "SIGTERM" });
@@ -76,7 +76,6 @@ test("a relative working directory is refused; ending a session releases its ter
   expect(() => all.create({ sessionId: "s", command: "true", cwd: "relative" }, "/")).toThrow(
     RequestError,
   );
-  const forever = node("setInterval(() => {}, 1000)");
   const a = all.create({ sessionId: "a", ...forever }, "/").terminalId;
   const b = all.create({ sessionId: "b", ...forever }, "/").terminalId;
   const exited = all.waitForExit("a", a);

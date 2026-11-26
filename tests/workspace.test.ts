@@ -5,6 +5,12 @@ import { expect, test } from "vitest";
 
 import { fakeUi, start } from "./support/pi.ts";
 
+/** Prepares a scratch HOME whose Pi configuration lists these MCP servers. */
+const withMcp = (servers: unknown) => async (dir: string) => {
+  await mkdir(join(dir, "pi"), { recursive: true });
+  await writeFile(join(dir, "pi", "mcp.json"), JSON.stringify({ mcpServers: servers }));
+};
+
 test("--agy-dir passes extra directories, resolved from the workspace, and reports missing ones", async () => {
   const { ui, notes } = fakeUi();
   const flags = { "agy-dir": ["lib", "/no/such/dir", ""].join(delimiter) };
@@ -24,11 +30,7 @@ test("--agy-dir passes extra directories, resolved from the workspace, and repor
 });
 
 test("--agy-mcp gives the agent Pi's stdio MCP servers; without it the agent gets none", async () => {
-  const servers = { mcpServers: { files: { command: "/bin/fs-mcp", args: ["."] } } };
-  const setup = async (dir: string) => {
-    await mkdir(join(dir, "pi"), { recursive: true });
-    await writeFile(join(dir, "pi", "mcp.json"), JSON.stringify(servers));
-  };
+  const setup = withMcp({ files: { command: "/bin/fs-mcp", args: ["."] } });
   const on = await start({ flags: { "agy-mcp": true }, setup });
   await on.session.prompt("hello");
   expect((await on.stop()).sessions[0]?.mcpServers).toStrictEqual([
@@ -41,11 +43,7 @@ test("--agy-mcp gives the agent Pi's stdio MCP servers; without it the agent get
 
 test("--agy-mcp says which HTTP servers an agent without HTTP support does not get", async () => {
   const { ui, notes } = fakeUi();
-  const servers = { mcpServers: { docs: { url: "https://docs.example/mcp" } } };
-  const setup = async (dir: string) => {
-    await mkdir(join(dir, "pi"), { recursive: true });
-    await writeFile(join(dir, "pi", "mcp.json"), JSON.stringify(servers));
-  };
+  const setup = withMcp({ docs: { url: "https://docs.example/mcp" } });
   const { session, stop } = await start({ ui, flags: { "agy-mcp": true }, setup });
   await session.prompt("hello");
   expect(notes()).toContain(

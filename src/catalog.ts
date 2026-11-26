@@ -11,7 +11,7 @@ export const API = "antigravity-acp";
 /** Pi model that leaves the agent on whatever model it is configured to use. */
 export const AGENT_DEFAULT = "default";
 
-export interface CatalogModel {
+interface CatalogModel {
   id: string;
   name: string;
   /** Thinking levels the agent offers for this model, in the agent's own words. */

@@ -3,10 +3,12 @@ import { createHash } from "node:crypto";
 import type { ContentBlock } from "@agentclientprotocol/sdk/unstable";
 import {
   getCurrentTools,
+  type ImageContent,
   type Message,
   type Model,
   type StopReason,
   type StreamOptions,
+  type TextContent,
   type ThinkingLevel,
   type TranscriptContext,
   type UserMessage,
@@ -102,11 +104,9 @@ export function lastAnchor(messages: Message[]): { index: number; anchor: string
   return { index: -1, anchor: undefined };
 }
 
-function plainText(content: string | { type: string; text?: string }[]): string {
+function plainText(content: string | readonly (TextContent | ImageContent)[]): string {
   if (typeof content === "string") return content;
-  return content
-    .map((block) => (block.type === "text" ? (block.text ?? "") : "[image]"))
-    .join("\n");
+  return content.map((block) => (block.type === "text" ? block.text : "[image]")).join("\n");
 }
 
 /** Renders earlier conversation as text for an agent session that was not part of it. */

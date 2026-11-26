@@ -16,7 +16,8 @@ import { createStream, haltTurn, TURN_LOST } from "../src/stream.ts";
 import { runMirror, TOOL_NAME } from "../src/tool.ts";
 import { defaultModels, type FakeAgentOptions } from "./support/fake-agent.ts";
 import { connect, resolvable } from "./support/harness.ts";
-import { allow, type Step } from "./support/playback.ts";
+import { said } from "./support/pi.ts";
+import { allow, readCall, type Step } from "./support/playback.ts";
 import { answering, recorder } from "./support/record.ts";
 
 const catalog: Catalog = {
@@ -174,16 +175,6 @@ async function chat(agent: FakeAgentOptions, options: ChatOptions = {}) {
   return { log, notes, abandoned, watch, conversation, ...piLoop(host, options.mirror !== false) };
 }
 
-const textOf = (message: AssistantMessage | undefined) =>
-  (message?.content ?? []).map((block) => (block.type === "text" ? block.text : "")).join("");
-const promptText = (blocks: unknown) => JSON.stringify(blocks);
-const readCall = {
-  toolCallId: "t1",
-  kind: "read" as const,
-  title: "File a.txt",
-  status: "in_progress" as const,
-};
-
 test("a prompt reaches the agent as the user's words only and the reply streams back natively", async () => {
   const steps: Step[] = [
     { think: "consider" },
@@ -226,11 +217,11 @@ test("a prompt reaches the agent as the user's words only and the reply streams 
 
 test("follow-ups continue the same agent conversation with only the new message", async () => {
   const c = await chat({ script: (_prompt, n) => [{ say: `answer ${n + 1}` }] });
-  expect(textOf((await c.turn("first")).at(-1))).toBe("answer 1");
-  expect(textOf((await c.turn("second")).at(-1))).toBe("answer 2");
+  expect(said((await c.turn("first")).at(-1))).toBe("answer 1");
+  expect(said((await c.turn("second")).at(-1))).toBe("answer 2");
   expect(c.log.sessions.length).toBe(1);
   expect(c.log.prompts[1]).toStrictEqual([{ type: "text", text: "second" }]);
-  expect(promptText(c.log.prompts)).not.toMatch(/PI-SYSTEM-PROMPT/);
+  expect(JSON.stringify(c.log.prompts)).not.toMatch(/PI-SYSTEM-PROMPT/);
 });
 
 test("agent tool calls become mirrored Pi tool calls and the same turn resumes after them", async () => {
@@ -262,7 +253,7 @@ test("agent tool calls become mirrored Pi tool calls and the same turn resumes a
     [false, [{ type: "text", text: "alpha" }]],
     [false, [{ type: "text", text: "a.txt\n" }]],
   ]);
-  expect(textOf(last)).toBe("Both done.");
+  expect(said(last)).toBe("Both done.");
   expect(last?.stopReason).toBe("stop");
   expect(c.log.prompts.length).toBe(1);
   expect(first?.responseId).not.toBe(last?.responseId);
@@ -331,7 +322,7 @@ test("a message typed during a turn stops that turn and is sent next", async () 
   const second = await c.step();
   expect(c.log.cancels).toBe(1);
   expect(c.log.prompts[1]).toStrictEqual([{ type: "text", text: "do this instead" }]);
-  expect(textOf(second.message)).toBe("switched");
+  expect(said(second.message)).toBe("switched");
   expect(c.log.sessions.length).toBe(1);
 });
 
@@ -351,9 +342,9 @@ test("aborting from Pi cancels the agent's turn and the conversation stays usabl
   const { message, events } = await running;
   expect(message.stopReason).toBe("aborted");
   expect(events.at(-1)?.type).toBe("error");
-  expect(textOf(message)).toBe("working");
+  expect(said(message)).toBe("working");
   expect(c.log.cancels).toBe(1);
-  expect(textOf((await c.turn("again")).at(-1))).toBe("fresh");
+  expect(said((await c.turn("again")).at(-1))).toBe("fresh");
   expect(c.log.sessions.length).toBe(1);
 });
 
@@ -411,7 +402,7 @@ test("an agent that ignores cancellation is abandoned, not prompted again while 
   const { message, events } = await running;
   expect([message.stopReason, events.at(-1)?.type]).toStrictEqual(["aborted", "error"]);
   expect([c.log.cancels, c.abandoned()]).toStrictEqual([1, 1]);
-  expect(textOf((await c.turn("again")).at(-1))).toBe("new");
+  expect(said((await c.turn("again")).at(-1))).toBe("new");
   expect(c.log.sessions.length, "the unresponsive session is not reused").toBe(2);
   const context = c.log.prompts[1]?.[0];
   expect.assert(context?.type === "resource" && "text" in context.resource);
@@ -445,7 +436,7 @@ test("without the mirror tool, tool activity is noted and the reply still arrive
   const c = await chat({ script: () => steps }, { mirror: false });
   const replies = await c.turn("read it");
   expect(replies.length).toBe(1);
-  expect(textOf(replies[0])).toBe("Reading. Done.");
+  expect(said(replies[0])).toBe("Reading. Done.");
   expect(c.notes()).toStrictEqual(["read:File a.txt"]);
 });
 
@@ -456,7 +447,7 @@ test("agent failures, refusals, truncation and unsupported images surface as Pi 
   const [failed] = await failing.turn("go");
   expect(failed?.stopReason).toBe("error");
   expect(failed?.errorMessage ?? "").toMatch(/quota exhausted/);
-  expect(textOf(failed)).toBe("partial");
+  expect(said(failed)).toBe("partial");
 
   const stops = await chat({
     script: (_prompt, n) => [{ say: "x" }, { stop: n === 0 ? "max_tokens" : "refusal" }],

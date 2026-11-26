@@ -2,7 +2,7 @@
 
 Use Google's Antigravity agent from Pi the way Zed does. **Pi is the [ACP](https://agentclientprotocol.com/) client and Antigravity is the agent.** You pick an Antigravity model in Pi's model picker and type normally. The agent keeps the conversation, runs its own tools and asks Pi's user for permission.
 
-Pi sends the agent your new message, plus the earlier conversation as context when the agent has not seen it, and nothing else: no Pi system prompt, no Pi tool list. Asked which harness it runs in, the model answers "Antigravity", because that is what it runs in. Pi introduces itself to the agent as `pi` in the ACP handshake.
+Pi sends the agent your new message, plus the earlier conversation as context when the agent has not seen it, and nothing else: no Pi system prompt, no Pi tool list. Asked which harness it runs in, the model answers "Antigravity". Pi introduces itself to the agent as `pi` in the ACP handshake.
 
 [ARCHITECTURE.md](ARCHITECTURE.md) explains how the pieces fit. [PARITY.md](PARITY.md) compares each Antigravity ACP capability with Zed's client and records the evidence.
 
@@ -69,12 +69,12 @@ One Pi session drives one agent session. A follow-up sends only your new message
 
 ## Configure
 
-| Flag                 | Effect                                                                                                                                                                                                                                             |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--agy-agent <name>` | Which agent to run; see below. Default `auto`.                                                                                                                                                                                                     |
-| `--agy-mode <id>`    | Permission mode for new agent sessions, such as `default`.                                                                                                                                                                                         |
-| `--agy-dir <dirs>`   | More directories the agent may work in, separated like `PATH` and resolved from the workspace.                                                                                                                                                     |
-| `--agy-mcp`          | Also give the agent Pi's configured MCP servers (stdio only for `agy`). Servers that cannot be passed are skipped with a notice: OAuth sign-in, `!command` values, an unset `${VAR}`, a `cwd`, SSE, and HTTP servers for an agent that takes none. |
+| Flag                 | Effect                                                                                                                                                                                                                                                                       |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--agy-agent <name>` | Which agent to run; see below. Default `auto`.                                                                                                                                                                                                                               |
+| `--agy-mode <id>`    | Permission mode for new agent sessions, such as `default`.                                                                                                                                                                                                                   |
+| `--agy-dir <dirs>`   | More directories the agent may work in, separated like `PATH` and resolved from the workspace.                                                                                                                                                                               |
+| `--agy-mcp`          | Also give the agent Pi's configured MCP servers (stdio only for `agy`). Servers that cannot be passed are skipped with a notice: OAuth sign-in, `!command` values, an unset `${VAR}`, a `cwd`, SSE, a name Pi does not allow, and HTTP servers for an agent that takes none. |
 
 | `--agy-agent`    | Agent                                                         | Notes                                                                                                                                                             |
 | ---------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -104,10 +104,10 @@ Live-tested on macOS with Pi 1.6.1 and `agy` 1.5.17, using ACP protocol version 
 
 - **The agent runs the tools, not Pi.** Pi's own tools, skills, context files and tool hooks do not apply to these models. The agent has its own equivalents.
 - **No Pi-side summaries.** The agent manages its context, so Pi's compaction and branch summaries are skipped or refused for these models. Use `/agy compact` for the agent's own.
-- When the agent writes files through Pi, as the registry agent does, Pi writes only inside the session's working directory.
+- When the agent writes files through Pi, as the registry agent does, Pi writes only inside the session's working directory and the directories given with `--agy-dir`.
 - Not implemented: the agent's subagents, which ACP reports as child sessions. [PARITY.md](PARITY.md) lists every capability with its status and evidence.
 - `/agy sessions` carries over a saved conversation's text, not the agent's tool calls in it.
-- Quota, model access and account policy are the agent's and Google's. Nothing here changes what your account may do.
+- Quota, model access and account policy are the agent's and Google's.
 
 ## Develop
 

@@ -31,7 +31,7 @@ export interface FakeAgentOptions {
   models?: FakeModel[];
   /** Config option id for the effort selector; the two Antigravity servers name it differently. */
   effortId?: string;
-  /** Also list every model once per thinking level, as the Antigravity servers do. */
+  /** Set false to leave out the per-level model list. */
   variants?: boolean;
   image?: boolean;
   /** Report no quota tier, no settings and no context usage when a session starts. */
@@ -369,7 +369,7 @@ class FakeAgent {
   async #open(
     sessionId: string,
     client: AgentContext,
-  ): Promise<NewSessionResponse & { models?: unknown }> {
+  ): Promise<NewSessionResponse & { models?: ReturnType<typeof variants> }> {
     const first = this.#offer.models[0];
     const state = {
       model: first?.id ?? "",

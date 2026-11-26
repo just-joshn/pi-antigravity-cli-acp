@@ -11,7 +11,7 @@ import { isRecord } from "./guards.ts";
 /** Which Antigravity ACP server to run. */
 export type AgentChoice = "auto" | "cli" | "registry";
 
-export interface AgentLaunch {
+interface AgentLaunch {
   /** `cli`: the Antigravity CLI's `agy acp`. `registry`: the ACP registry agent an editor installed. */
   kind: "cli" | "registry";
   command: string;
@@ -62,6 +62,7 @@ function registryCommand(
     const args = Array.isArray(binary["args"]) ? binary["args"] : [];
     return { cmd: binary["cmd"], args: args.filter((arg) => typeof arg === "string") };
   } catch {
+    // No readable listing: the caller falls back to the binary's usual name.
     return undefined;
   }
 }

@@ -15,7 +15,7 @@ export interface ToolDetails {
   output: string;
 }
 
-export interface MirrorResult {
+interface MirrorResult {
   content: { type: "text"; text: string }[];
   details: ToolDetails;
   isError: boolean;

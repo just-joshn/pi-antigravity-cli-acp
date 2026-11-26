@@ -35,7 +35,11 @@ const toolTurn: Step[] = [
   { say: "done" },
 ];
 /** `default` leaves the agent on its own model, so the turn needs no model change. */
-const model = piModels(emptyCatalog).find((entry) => entry.id === AGENT_DEFAULT);
+const model = (() => {
+  const found = piModels(emptyCatalog).find((entry) => entry.id === AGENT_DEFAULT);
+  if (!found) throw new Error("the catalog has no default model");
+  return found;
+})();
 const prompt = normalizeContext({
   systemPrompt: "",
   messages: [{ role: "user", content: "go", timestamp: 1 }],
@@ -79,7 +83,6 @@ async function extensionTurn(options: FakeAgentOptions): Promise<string> {
     abandon: () => {},
     noteTool: () => {},
   });
-  if (!model) throw new Error("no model");
   const reply = stream(model, prompt);
   try {
     for await (const event of reply)
