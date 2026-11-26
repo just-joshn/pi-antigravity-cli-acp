@@ -113,7 +113,7 @@ Live-tested on macOS with Pi 1.6.1 and `agy` 1.5.17, using ACP protocol version 
 
 ```sh
 bun install --frozen-lockfile
-bun run check            # formatter, oxlint, tsc, vitest with a per-file 80% coverage gate
+bun run check            # formatter, oxlint, tsrs, vitest with a per-file 80% coverage gate
 bun run bench            # the extension's own overhead against the bare ACP SDK
 bun run verify:package   # pack, install with pi install, prompt, restart and continue, shut down
 bun run pack             # npm pack: pi-antigravity-acp-<version>.tgz

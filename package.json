@@ -26,9 +26,9 @@
   "scripts": {
     "format": "bun fmt",
     "format:check": "bun fmt --check",
-    "lint": "oxlint --deny-warnings",
-    "lint:fix": "oxlint --fix --deny-warnings",
-    "typecheck": "tsc --noEmit",
+    "lint": "OXLINT_TSGOLINT_PATH=node_modules/.bin/tsrs-lint oxlint --deny-warnings",
+    "lint:fix": "OXLINT_TSGOLINT_PATH=node_modules/.bin/tsrs-lint oxlint --fix --deny-warnings",
+    "typecheck": "tsrs --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -45,9 +45,7 @@
     "@types/node": "22",
     "@vitest/coverage-v8": "^5.1.1",
     "oxlint": "^1.95.0",
-    "oxlint-tsgolint": "^7.0.2008",
     "tsrs": "7.1.0-beta.tsrs5",
-    "typescript": "6",
     "vitest": "^5.1.1"
   },
   "peerDependencies": {
