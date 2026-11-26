@@ -52,6 +52,7 @@ class Agent:
         self.replies = {}
         self.terminals = {}
         self.outputs = {}
+        self.limits = {}
         self.forget()
         threading.Thread(target=self._read, daemon=True).start()
 
@@ -130,11 +131,13 @@ class Agent:
         """A client terminal: the command starts at once; its output so far and its exit are read when asked."""
         if method == "terminal/create":
             command = [params["command"], *params.get("args", [])]
-            proc = subprocess.Popen(command, cwd=params.get("cwd") or self.cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            env = {**os.environ, **{v["name"]: v["value"] for v in params.get("env") or []}}
+            proc = subprocess.Popen(command, cwd=params.get("cwd") or self.cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             with self.lock:  # requests arrive on their own threads
                 terminal_id = f"t{len(self.terminals) + 1}"
                 collector = threading.Thread(target=self._collect, args=(terminal_id, proc), daemon=True)
                 self.terminals = {**self.terminals, terminal_id: (proc, collector)}
+                self.limits = {**self.limits, terminal_id: params.get("outputByteLimit")}
             collector.start()
             return {"terminalId": terminal_id}
         proc, collector = self.terminals[params["terminalId"]]
@@ -149,7 +152,10 @@ class Agent:
             collector.join(timeout=1)
             return {"exitCode": code, "signal": None}
         status = {"exitStatus": {"exitCode": proc.returncode, "signal": None}} if proc.poll() is not None else {}
-        return {"output": self.outputs.get(params["terminalId"], ""), "truncated": False, **status}
+        output = self.outputs.get(params["terminalId"], "").encode()
+        limit = self.limits.get(params["terminalId"])
+        kept = output[-limit:] if limit is not None and len(output) > limit else output
+        return {"output": kept.decode(errors="ignore"), "truncated": len(kept) < len(output), **status}
 
     def call(self, request_id, method, params, wait=300):
         self._send({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params})

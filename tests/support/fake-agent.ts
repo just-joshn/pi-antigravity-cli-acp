@@ -165,7 +165,11 @@ async function replay(client: AgentContext, sessionId: string, prompts: readonly
       sessionId,
       update: {
         sessionUpdate: "agent_message_chunk",
-        content: { type: "text", text: "(earlier)" },
+        // A reply per prompt, so a replay that mixes up turns is visible.
+        content: {
+          type: "text",
+          text: `(earlier reply to ${prompt.map((block) => ("text" in block ? block.text : "")).join("")})`,
+        },
       },
     });
   }

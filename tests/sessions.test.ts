@@ -45,7 +45,17 @@ test(
       agentSession,
     ]);
     const messages = opened.all()[0]?.buildSessionContext().messages ?? [];
-    expect(messages.map((m) => m.role)).toStrictEqual(["user", "assistant", "user", "assistant"]);
+    const shown = messages.flatMap((m) => {
+      if (m.role === "assistant") return [["assistant", said(m)]];
+      if (m.role !== "user") return [];
+      return [["user", typeof m.content === "string" ? m.content : texts(m.content).join("")]];
+    });
+    expect(shown).toStrictEqual([
+      ["user", "hello"],
+      ["assistant", "(earlier reply to hello)"],
+      ["user", "how are you"],
+      ["assistant", "(earlier reply to how are you)"],
+    ]);
     expect(opened.all()[0]?.getSessionName()).toBe("hello");
 
     const resumed = await start({ home: first.home });
