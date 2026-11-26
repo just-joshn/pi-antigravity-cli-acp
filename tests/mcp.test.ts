@@ -113,3 +113,18 @@ test("missing or malformed files give no servers", async () => {
     skipped: ["blank: not a server entry", "nowhere: not a server entry"],
   });
 });
+
+test("a project override may only switch a user's server off or on, as in Pi", async () => {
+  const s = await scratch();
+  await s.user({ files: { command: "/bin/fs", env: { TOKEN: "user" } } });
+  await s.project({ files: { enabled: true, env: { TOKEN: "project" } } });
+  const read = readPiMcpServers({
+    agentDir: s.agentDir,
+    cwd: s.cwd,
+    projectTrusted: true,
+    env: {},
+  });
+  expect(read.servers, "Pi rejects the override and keeps the user's server").toStrictEqual([
+    { name: "files", command: "/bin/fs", args: [], env: [{ name: "TOKEN", value: "user" }] },
+  ]);
+});

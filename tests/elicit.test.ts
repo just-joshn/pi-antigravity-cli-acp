@@ -356,3 +356,21 @@ test("a choice starting with a comma can be picked, and a run of commas is read 
     },
   );
 });
+
+test("a date and time with a UTC offset is a valid date-time answer", async () => {
+  const when = { type: "string", title: "When", format: "date-time" };
+  const { dialogs } = scripted(["Answer", "2026-11-25T10:00:00+01:00"]);
+  expect(await answerElicitation(form({ when }, ["when"]), dialogs, signal)).toStrictEqual({
+    action: "accept",
+    content: { when: "2026-11-25T10:00:00+01:00" },
+  });
+});
+
+test("an empty choice name does not match the separators between answers", async () => {
+  const colors = { type: "array", title: "Colors", items: { enum: ["", "red"] } };
+  const { dialogs } = scripted(["Answer", "red, red"]);
+  expect(await answerElicitation(form({ colors }, ["colors"]), dialogs, signal)).toStrictEqual({
+    action: "accept",
+    content: { colors: ["red", "red"] },
+  });
+});

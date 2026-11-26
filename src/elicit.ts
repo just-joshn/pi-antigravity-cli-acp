@@ -226,7 +226,10 @@ const FORMATS: Readonly<Record<string, z.ZodType<string, string>>> = {
   email: z.email({ error: "an email address" }),
   uri: z.url({ error: "a URL" }),
   date: z.iso.date({ error: "a date such as 2026-11-25" }),
-  "date-time": z.iso.datetime({ error: "a date and time such as 2026-11-25T10:00:00Z" }),
+  "date-time": z.iso.datetime({
+    offset: true,
+    error: "a date and time such as 2026-11-25T10:00:00Z",
+  }),
 };
 
 /** The form's pattern as a regular expression, or undefined when it has none it can use. */
@@ -278,7 +281,7 @@ function readChoices(text: string, listed: Listed): (string | undefined)[] {
   ];
   const after = (name: string) => rest.slice(name.length).trimStart();
   const [best] = named
-    .filter(({ name }) => rest.startsWith(name) && /^(,|$)/.test(after(name)))
+    .filter(({ name }) => name !== "" && rest.startsWith(name) && /^(,|$)/.test(after(name)))
     .toSorted((a, b) => b.name.length - a.name.length);
   // toSorted is stable, so among names of the same length the labels, listed first, stay first.
   if (best) return [best.value, ...readChoices(after(best.name), listed)];

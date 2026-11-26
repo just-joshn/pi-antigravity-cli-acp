@@ -41,11 +41,17 @@ export function readPiMcpServers(options: {
   };
 }
 
-/** A project entry that only switches a user server off or on, or changes its settings, overlays it. */
+/** The settings a project entry may change on a user-level server, as Pi allows. */
+const OVERRIDE_KEYS: ReadonlySet<string> = new Set(["enabled", "exposure", "toolExposure"]);
+
+/** A project entry without a command or URL overlays the user's server of the same name. */
 function overlay(base: unknown, entry: unknown): unknown {
   const overridesOnly =
     isRecord(entry) && !("command" in entry || "url" in entry || "type" in entry);
-  return overridesOnly && isRecord(base) ? { ...base, ...entry } : entry;
+  if (!overridesOnly || !isRecord(base)) return entry;
+  // Pi rejects an override that sets anything else and keeps the user's server as it is.
+  const allowed = Object.keys(entry).every((key) => OVERRIDE_KEYS.has(key));
+  return allowed ? { ...base, ...entry } : base;
 }
 
 const fileSchema = z.object({ mcpServers: z.record(z.string(), z.unknown()) });
