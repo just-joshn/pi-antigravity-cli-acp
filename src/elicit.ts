@@ -59,19 +59,36 @@ async function fillForm(
   signal: AbortSignal,
 ): Promise<CreateElicitationResponse> {
   const required = Array.isArray(listed) ? listed : [];
-  const content: [string, ElicitationContentValue][] = [];
-  for (const [key, property] of Object.entries(properties)) {
-    if (!isRecord(property)) return DECLINE;
-    const title = describe(key, property);
-    const field = { title, schema: property, required: required.includes(key) };
-    // oxlint-disable-next-line no-await-in-loop -- one dialog at a time, in the form's order
-    const answer = await ask(field, dialogs, signal);
-    if (answer === "cancel") return CANCEL;
-    if (answer === "unsupported") return DECLINE;
-    if (answer !== "skip") content.push([key, answer.value]);
-  }
+  const fields = Object.entries(properties).map(([key, property]) =>
+    isRecord(property)
+      ? { key, title: describe(key, property), schema: property, required: required.includes(key) }
+      : undefined,
+  );
+  if (fields.some((field) => field === undefined)) return DECLINE;
+  const answers = await askAll(
+    fields.filter((field) => field !== undefined),
+    dialogs,
+    signal,
+  );
+  if (answers === "cancel") return CANCEL;
+  if (answers === "unsupported") return DECLINE;
   // fromEntries defines each key as its own field, even one named __proto__.
-  return { action: "accept", content: Object.fromEntries(content) };
+  return { action: "accept", content: Object.fromEntries(answers) };
+}
+
+/** The form's answers, one dialog at a time in its order; a cancel or an unsupported field ends it. */
+async function askAll(
+  fields: readonly (Field & { key: string })[],
+  dialogs: Dialogs,
+  signal: AbortSignal,
+): Promise<[string, ElicitationContentValue][] | "cancel" | "unsupported"> {
+  const [field, ...rest] = fields;
+  if (!field) return [];
+  const answer = await ask(field, dialogs, signal);
+  if (answer === "cancel" || answer === "unsupported") return answer;
+  const others = await askAll(rest, dialogs, signal);
+  if (typeof others === "string") return others;
+  return answer === "skip" ? others : [[field.key, answer.value], ...others];
 }
 
 function describe(key: string, property: Record<string, unknown>): string {

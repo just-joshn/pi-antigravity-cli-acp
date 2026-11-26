@@ -1,6 +1,6 @@
 import { constants } from "node:fs";
 import { mkdir, open, readFile, realpath, stat } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative } from "node:path";
 
 import {
   type ReadTextFileRequest,
@@ -60,23 +60,13 @@ export async function readTextFile({
 
 /** Resolves symlinks in the part of `path` that exists, so a link cannot lead out of the workspace. */
 async function canonical(path: string): Promise<string> {
-  const missing: string[] = [];
-  let existing = path;
-  for (;;) {
-    // oxlint-disable-next-line no-await-in-loop -- walks up one directory at a time until one exists
-    const real = await realpath(existing).catch((error: unknown) => {
-      if (codeOf(error) === "ENOENT") return undefined;
-      throw RequestError.internalError(
-        undefined,
-        `${path} could not be resolved (${codeOf(error)})`,
-      );
-    });
-    if (real !== undefined) return join(real, ...missing);
-    const parent = dirname(existing);
-    if (parent === existing) return path;
-    missing.unshift(existing.slice(parent.length).replaceAll(sep, ""));
-    existing = parent;
-  }
+  const real = await realpath(path).catch((error: unknown) => {
+    if (codeOf(error) === "ENOENT") return undefined;
+    throw RequestError.internalError(undefined, `${path} could not be resolved (${codeOf(error)})`);
+  });
+  if (real !== undefined) return real;
+  const parent = dirname(path);
+  return parent === path ? path : join(await canonical(parent), basename(path));
 }
 
 /**

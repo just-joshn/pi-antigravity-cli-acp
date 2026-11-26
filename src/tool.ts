@@ -1,6 +1,7 @@
 import { basename } from "node:path";
 
 import { isRecord } from "./guards.ts";
+import { occurrences } from "./occurrences.ts";
 import type { ToolView } from "./session.ts";
 
 export const TOOL_NAME = "antigravity_tool";
@@ -32,17 +33,21 @@ export function toolArguments(tool: ToolView) {
 /** Keys under which the Antigravity servers put a command's output in `rawOutput`. */
 const OUTPUT_KEYS = ["output", "combinedOutput", "formatted_output"];
 
+/** The output a command reported in `rawOutput`, under one of the keys the servers use. */
+function rawParts(raw: unknown): string[] {
+  if (typeof raw === "string") return [raw];
+  const found = isRecord(raw)
+    ? OUTPUT_KEYS.map((key) => raw[key]).find((value) => typeof value === "string")
+    : undefined;
+  return typeof found === "string" ? [found] : [];
+}
+
 function outputOf(tool: ToolView): string {
-  const parts = tool.content.flatMap((item) =>
+  const texts = tool.content.flatMap((item) =>
     item.type === "content" && item.content.type === "text" ? [item.content.text] : [],
   );
-  if (tool.terminalOutput) parts.push(tool.terminalOutput);
-  const raw = tool.rawOutput;
-  if (parts.length === 0 && typeof raw === "string") parts.push(raw);
-  else if (parts.length === 0 && isRecord(raw)) {
-    const found = OUTPUT_KEYS.map((key) => raw[key]).find((value) => typeof value === "string");
-    if (typeof found === "string") parts.push(found);
-  }
+  const shown = tool.terminalOutput ? [...texts, tool.terminalOutput] : texts;
+  const parts = shown.length > 0 ? shown : rawParts(tool.rawOutput);
   const text = parts.join("\n").replaceAll("\r\n", "\n");
   return text.length > OUTPUT_LIMIT ? `${text.slice(0, OUTPUT_LIMIT)}\n[output truncated]` : text;
 }
@@ -90,18 +95,13 @@ export function toolResult(tool: ToolView | undefined, state: "running" | "done"
 
 /** Dialog labels for the agent's permission options, made unique when two share a name. */
 export function choiceLabels(options: readonly { name: string; kind: string }[]): string[] {
-  const named = new Map<string, number>();
-  for (const { name } of options) named.set(name, (named.get(name) ?? 0) + 1);
-  const used = new Set<string>();
-  const result: string[] = [];
-  for (const [index, option] of options.entries()) {
-    const shared = (named.get(option.name) ?? 0) > 1;
-    const label = shared ? `${option.name} [${option.kind.replaceAll("_", " ")}]` : option.name;
-    const unique = used.has(label) ? `${label} #${index + 1}` : label;
-    used.add(unique);
-    result.push(unique);
-  }
-  return result;
+  const labels = occurrences(options, ({ name }) => name).map(({ item, of }, index) => ({
+    index,
+    label: of > 1 ? `${item.name} [${item.kind.replaceAll("_", " ")}]` : item.name,
+  }));
+  return occurrences(labels, ({ label }) => label).map(({ item, nth }) =>
+    nth > 1 ? `${item.label} #${item.index + 1}` : item.label,
+  );
 }
 
 type Watch = (

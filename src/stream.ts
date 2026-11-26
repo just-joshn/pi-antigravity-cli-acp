@@ -139,28 +139,32 @@ export function renderHistory(messages: Message[]): string {
   return `Conversation so far, supplied by the client as context:\n\n${kept}`;
 }
 
+/** One block of a user message as the agent takes it; an image needs an agent that accepts images. */
+function agentBlock(
+  block: TextContent | ImageContent,
+  accepts: Conversation["accepts"],
+): ContentBlock {
+  if (block.type === "text") return { type: "text", text: block.text };
+  if (!accepts.image) throw new AcpError("This Antigravity agent does not accept images.");
+  return { type: "image", data: block.data, mimeType: block.mimeType };
+}
+
 function promptBlocks(plan: TurnPlan, accepts: Conversation["accepts"]): ContentBlock[] {
   const history = renderHistory(plan.missed);
-  const blocks: ContentBlock[] = [];
-  if (history && accepts.embeddedContext) {
-    blocks.push({
-      type: "resource",
-      resource: { uri: "context://conversation-so-far", mimeType: "text/markdown", text: history },
-    });
-  } else if (history) blocks.push({ type: "text", text: history });
-  for (const message of plan.prompt) {
-    const content =
-      typeof message.content === "string"
-        ? [{ type: "text" as const, text: message.content }]
-        : message.content;
-    for (const block of content) {
-      if (block.type === "text") blocks.push({ type: "text", text: block.text });
-      else if (accepts.image)
-        blocks.push({ type: "image", data: block.data, mimeType: block.mimeType });
-      else throw new AcpError("This Antigravity agent does not accept images.");
-    }
-  }
-  return blocks;
+  const resource = {
+    uri: "context://conversation-so-far",
+    mimeType: "text/markdown",
+    text: history,
+  };
+  const context: ContentBlock[] = !history
+    ? []
+    : [accepts.embeddedContext ? { type: "resource", resource } : { type: "text", text: history }];
+  const prompt = plan.prompt.flatMap((message) =>
+    typeof message.content === "string"
+      ? [agentBlock({ type: "text", text: message.content }, accepts)]
+      : message.content.map((block) => agentBlock(block, accepts)),
+  );
+  return [...context, ...prompt];
 }
 
 async function applyChoices(

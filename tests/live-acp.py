@@ -99,7 +99,7 @@ class Rpc:
 
     def until(self, matches, timeout=200):
         end = time.monotonic() + timeout
-        events = []
+        events = ()
         while True:
             try:
                 event = self.pending.get(timeout=max(0.1, end - time.monotonic()))
@@ -109,7 +109,7 @@ class Rpc:
                 raise RuntimeError("Pi closed stdout unexpectedly")
             if event.get("type") == "unparsed":
                 raise RuntimeError(f"Pi wrote a line that is not JSON: {event['line'][:200]!r}")
-            events.append(event)
+            events = (*events, event)
             if event.get("type") == "extension_ui_request":
                 self._ui(event)
             elif event.get("type") == "response" and not event.get("success"):
@@ -388,8 +388,8 @@ def features(start, root):
 
 def environment(root, tools):
     """Pi's environment: a scratch agent directory, and for `agy` a shim that keeps its sessions apart."""
-    env = {k: os.environ[k] for k in ("HOME", "PATH", "USER", "LANG", "TMPDIR", "XDG_CONFIG_HOME", "XDG_DATA_HOME") if k in os.environ}
-    env["PI_CODING_AGENT_DIR"] = str(root / "pi")
+    inherited = {k: os.environ[k] for k in ("HOME", "PATH", "USER", "LANG", "TMPDIR", "XDG_CONFIG_HOME", "XDG_DATA_HOME") if k in os.environ}
+    env = {**inherited, "PI_CODING_AGENT_DIR": str(root / "pi")}
     if AGENT != "cli":
         return env
     real = shutil.which("agy")

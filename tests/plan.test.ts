@@ -90,7 +90,7 @@ test("a markdown plan shows above the editor until the agent removes it", async 
 });
 
 test("a plan step with a status the extension does not know is shown as not started", () => {
-  const odd = Object.assign(step("a", "pending"), { status: "constructor" });
+  const odd = Object.assign({}, step("a", "pending"), { status: "constructor" });
   expect(planLines(nextPlan(undefined, { sessionUpdate: "plan", entries: [odd] }))).toStrictEqual([
     "Antigravity plan",
     "[ ] a",

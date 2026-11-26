@@ -46,21 +46,24 @@ export function resultLines(
     return [theme.fg("muted", details.status === "pending" ? "waiting for approval…" : "running…")];
   if (details.declined) return [theme.fg("warning", "declined")];
   const failed = details.status === "failed";
-  const lines: string[] = [];
-  for (const diff of details.diffs) {
+  const diffs = details.diffs.flatMap((diff) => {
     const { added, removed } = changedLines(diff.oldText, diff.newText);
-    lines.push(
-      `${theme.fg("muted", diff.path)} ${theme.fg("toolDiffAdded", `+${added.length}`)} ${theme.fg("toolDiffRemoved", `-${removed.length}`)}`,
-    );
-    if (!view.expanded) continue;
-    lines.push(...removed.map((line) => theme.fg("toolDiffRemoved", `- ${line}`)));
-    lines.push(...added.map((line) => theme.fg("toolDiffAdded", `+ ${line}`)));
-  }
+    const header = `${theme.fg("muted", diff.path)} ${theme.fg("toolDiffAdded", `+${added.length}`)} ${theme.fg("toolDiffRemoved", `-${removed.length}`)}`;
+    if (!view.expanded) return [header];
+    return [
+      header,
+      ...removed.map((line) => theme.fg("toolDiffRemoved", `- ${line}`)),
+      ...added.map((line) => theme.fg("toolDiffAdded", `+ ${line}`)),
+    ];
+  });
   const output = details.output.trimEnd() === "" ? [] : details.output.trimEnd().split("\n");
   const shown = view.expanded ? output : output.slice(0, COLLAPSED_LINES);
-  lines.push(...shown.map((line) => theme.fg(failed ? "error" : "toolOutput", line)));
-  if (output.length > shown.length)
-    lines.push(theme.fg("muted", `… ${output.length - shown.length} more lines`));
+  const hidden = output.length - shown.length;
+  const lines = [
+    ...diffs,
+    ...shown.map((line) => theme.fg(failed ? "error" : "toolOutput", line)),
+    ...(hidden > 0 ? [theme.fg("muted", `… ${hidden} more lines`)] : []),
+  ];
   if (lines.length > 0) return lines;
   if (failed) return [theme.fg("error", "failed")];
   return [

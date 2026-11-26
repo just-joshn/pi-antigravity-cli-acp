@@ -111,6 +111,23 @@ async function drain(
   return events.all();
 }
 
+interface Loop {
+  step(model: Model<string>, request: StreamRequest): Promise<{ message: AssistantMessage }>;
+  mirror(message: AssistantMessage): Promise<unknown>;
+}
+
+/** Pi's replies to one user message: provider calls until one does not end with tool calls. */
+async function repliesTo(
+  loop: Loop,
+  model: Model<string>,
+  request: StreamRequest,
+): Promise<AssistantMessage[]> {
+  const { message } = await loop.step(model, request);
+  if (message.stopReason !== "toolUse") return [message];
+  await loop.mirror(message);
+  return [message, ...(await repliesTo(loop, model, request))];
+}
+
 /** Drives the provider the way Pi's agent loop does: stream, run the mirrored tools, stream again. */
 function piLoop(host: ReturnType<typeof scriptedHost>, mirrorTool: boolean) {
   let messages: readonly Message[] = [];
@@ -147,15 +164,7 @@ function piLoop(host: ReturnType<typeof scriptedHost>, mirrorTool: boolean) {
 
   async function turn(text: string, model: Model<string> = modelA, request: StreamRequest = {}) {
     add({ role: "user", content: text, timestamp: Date.now() });
-    const replies: AssistantMessage[] = [];
-    for (;;) {
-      // oxlint-disable-next-line no-await-in-loop -- each provider call depends on the previous one
-      const { message } = await step(model, request);
-      replies.push(message);
-      if (message.stopReason !== "toolUse") return replies;
-      // oxlint-disable-next-line no-await-in-loop -- tool results precede the next provider call
-      await mirror(message);
-    }
+    return repliesTo({ step, mirror }, model, request);
   }
 
   return { messages: () => messages, add, rewind, step, mirror, turn };

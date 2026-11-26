@@ -7,6 +7,7 @@ import type { SavedSession } from "./client.ts";
 import { anchorFor } from "./conversation.ts";
 import { noUsage } from "./draft.ts";
 import type { Exchange } from "./inbox.ts";
+import { occurrences } from "./occurrences.ts";
 import { pick } from "./pick.ts";
 
 /** An ISO time cut to the minute: `2026-11-25T10:00`. */
@@ -14,18 +15,15 @@ const MINUTE = "YYYY-MM-DDTHH:MM".length;
 
 /** One label per session, numbered when titles and times repeat. */
 export function labels(saved: readonly SavedSession[]): string[] {
-  const seen = new Map<string, number>();
-  const result: string[] = [];
-  for (const session of saved) {
+  const texts = saved.map((session) => {
     const when = session.updatedAt
       ? ` — ${session.updatedAt.slice(0, MINUTE).replace("T", " ")}`
       : "";
-    const text = `${session.title ?? "Untitled"}${when}`;
-    const count = (seen.get(text) ?? 0) + 1;
-    seen.set(text, count);
-    result.push(count > 1 ? `${text} (${count})` : text);
-  }
-  return result;
+    return `${session.title ?? "Untitled"}${when}`;
+  });
+  return occurrences(texts, (text) => text).map(({ item, nth }) =>
+    nth > 1 ? `${item} (${nth})` : item,
+  );
 }
 
 /** Pi messages for a replayed conversation. Each reply carries the agent session's position. */

@@ -328,19 +328,21 @@ export class AcpClient {
 
   /** The agent's saved conversations for `cwd`, newest first as the agent lists them. */
   async listSessions(cwd: string): Promise<SavedSession[]> {
-    if (!this.offers.list) return [];
-    const found: SavedSession[] = [];
-    let cursor: string | undefined;
-    for (let page = 0; page < LIST_PAGES; page++) {
-      // oxlint-disable-next-line no-await-in-loop -- each page names the next
-      const listed = await this.#connection.agent
-        .request(methods.agent.session.list, { cwd, ...(cursor ? { cursor } : {}) })
-        .catch(explain("list its sessions"));
-      found.push(...listed.sessions.map(savedSession));
-      cursor = listed.nextCursor ?? undefined;
-      if (!cursor) break;
-    }
-    return found;
+    return this.offers.list ? this.#listPages(cwd, undefined, LIST_PAGES) : [];
+  }
+
+  /** The sessions on this page and those after it, up to `pages` pages; each page names the next. */
+  async #listPages(
+    cwd: string,
+    cursor: string | undefined,
+    pages: number,
+  ): Promise<SavedSession[]> {
+    const listed = await this.#connection.agent
+      .request(methods.agent.session.list, { cwd, ...(cursor ? { cursor } : {}) })
+      .catch(explain("list its sessions"));
+    const found = listed.sessions.map(savedSession);
+    const next = listed.nextCursor ?? undefined;
+    return next && pages > 1 ? [...found, ...(await this.#listPages(cwd, next, pages - 1))] : found;
   }
 
   async #load(sessionId: string, where: Workspace, keepText: boolean) {
