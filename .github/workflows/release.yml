@@ -52,8 +52,13 @@ jobs:
           VERSION: ${{ steps.package.outputs.version }}
         # npm records the commit a version was published from. A version published
         # outside a Git checkout has none, and then no release is created for it.
+        # A package npm has never seen is E404, which means no version is published.
         run: |
-          published="$(npm view "$NAME" versions --json | jq --arg version "$VERSION" '[.] | flatten | any(. == $version)')"
+          versions="$(npm view "$NAME" versions --json)" || {
+            [[ "$(jq --raw-output '.error.code?' <<<"$versions")" == "E404" ]] || exit 1
+            versions='[]'
+          }
+          published="$(jq --arg version "$VERSION" '[.] | flatten | any(. == $version)' <<<"$versions")"
           if [[ "$published" == "true" ]]; then
             commit="$(npm view "$NAME@$VERSION" gitHead)"
           else
