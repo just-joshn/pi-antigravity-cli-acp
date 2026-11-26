@@ -152,3 +152,12 @@ test("dropping a session finishes the tool rows still waiting on it", async () =
   session.dispose();
   expect((await watched)?.settled).toBe(true);
 });
+
+test("a late update after the turn ended does not reopen a finished tool call", async () => {
+  const session = answering(undefined);
+  session.receive({ sessionUpdate: "tool_call", toolCallId: "t", title: "Run", status: "pending" });
+  session.dispose();
+  session.receive({ sessionUpdate: "tool_call_update", toolCallId: "t", status: "in_progress" });
+  const watched = await session.watchTool("t", undefined, () => {});
+  expect(watched?.settled).toBe(true);
+});

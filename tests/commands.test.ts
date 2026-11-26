@@ -49,3 +49,13 @@ test("an agent command named like an /agy subcommand is not offered under /agy",
     offered?.filter((option) => option.value === "status" || option.value === "mode").length,
   ).toBe(2);
 });
+
+test("/agy with a name only an object has, like constructor, shows the usage", async () => {
+  const { ui, notes } = fakeUi();
+  const { session } = await start({ ui });
+  for (const name of ["constructor", "__proto__", "toString"]) {
+    // oxlint-disable-next-line no-await-in-loop -- one command at a time, as typed
+    await session.prompt(`/agy ${name}`);
+    expect(notes().at(-1), name).toMatch(/^warning: Usage: \/agy status/);
+  }
+});

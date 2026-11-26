@@ -1,9 +1,9 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 
-import { expect, test } from "vitest";
+import { expect, onTestFinished, test } from "vitest";
 
-import { fakeUi, start } from "./support/pi.ts";
+import { fakeUi, said, start } from "./support/pi.ts";
 
 /** Prepares a scratch HOME whose Pi configuration lists these MCP servers. */
 const withMcp = (servers: unknown) => async (dir: string) => {
@@ -27,6 +27,23 @@ test("--agy-dir passes extra directories, resolved from the workspace, and repor
   expect(notes()).toContain(
     "warning: --agy-dir /no/such/dir is not a directory, so the agent does not get it.",
   );
+});
+
+test("--agy-dir reports a directory it may not look into instead of failing the message", async () => {
+  const { ui, notes } = fakeUi();
+  const { session, stop, assistants, home } = await start({
+    ui,
+    flags: { "agy-dir": "locked/inner" },
+    setup: async (dir) => {
+      await mkdir(join(dir, "work", "locked", "inner"), { recursive: true });
+      await chmod(join(dir, "work", "locked"), 0o000);
+    },
+  });
+  onTestFinished(() => chmod(join(home, "work", "locked"), 0o755));
+  await session.prompt("hello");
+  expect(said(assistants().at(-1))).toBe("echo: hello");
+  expect(notes().join("\n")).toMatch(/--agy-dir .*locked\/inner is not a directory/);
+  expect((await stop()).sessions[0]?.additionalDirectories).toBeUndefined();
 });
 
 test("--agy-mcp gives the agent Pi's stdio MCP servers; without it the agent gets none", async () => {

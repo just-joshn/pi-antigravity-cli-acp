@@ -42,21 +42,24 @@ export async function answerElicitation(
   }
   const schema = "requestedSchema" in request ? request.requestedSchema : undefined;
   if (!isRecord(schema)) return DECLINE;
+  const properties = isRecord(schema["properties"]) ? schema["properties"] : {};
+  // A form with more fields than Pi asks about cannot be answered in full.
+  if (Object.keys(properties).length > FIELD_LIMIT) return DECLINE;
   const picked = await dialogs.select(request.message, ["Answer", "Decline"], options);
   if (picked === undefined) return CANCEL;
   if (picked === "Decline") return DECLINE;
-  return fillForm(schema, dialogs, signal);
+  return fillForm(properties, schema["required"], dialogs, signal);
 }
 
 async function fillForm(
-  schema: Record<string, unknown>,
+  properties: Record<string, unknown>,
+  listed: unknown,
   dialogs: Dialogs,
   signal: AbortSignal,
 ): Promise<CreateElicitationResponse> {
-  const properties = isRecord(schema["properties"]) ? schema["properties"] : {};
-  const required = Array.isArray(schema["required"]) ? schema["required"] : [];
+  const required = Array.isArray(listed) ? listed : [];
   const content: [string, ElicitationContentValue][] = [];
-  for (const [key, property] of Object.entries(properties).slice(0, FIELD_LIMIT)) {
+  for (const [key, property] of Object.entries(properties)) {
     if (!isRecord(property)) return DECLINE;
     const title = describe(key, property);
     const field = { title, schema: property, required: required.includes(key) };

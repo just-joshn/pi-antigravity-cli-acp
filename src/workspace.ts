@@ -18,7 +18,12 @@ export function registerWorkspaceFlags(pi: ExtensionAPI) {
 }
 
 function isDirectory(path: string) {
-  return statSync(path, { throwIfNoEntry: false })?.isDirectory() === true;
+  try {
+    return statSync(path, { throwIfNoEntry: false })?.isDirectory() === true;
+  } catch {
+    // A directory Pi may not look into is reported like a missing one.
+    return false;
+  }
 }
 
 /** The workspace for a new or reopened agent session, and anything from the flags left out. */

@@ -274,16 +274,15 @@ class Reply {
     signal?.throwIfAborted();
     this.#conversation = conversation;
     const plan = planTurn(this.#context.messages, conversation.anchor);
-    const continuing = !plan.diverged && plan.prompt.length === 0;
+    const hasPrompt = plan.prompt.length > 0;
+    const running = conversation.session.turn !== undefined;
     const afterTools = this.#context.messages.at(-1)?.role === "toolResult";
-    if (continuing && afterTools && !conversation.session.turn) throw new AcpError(TURN_LOST);
-    if (!continuing || !conversation.session.turn) {
-      if (plan.prompt.length === 0) {
-        this.draft.finish("stop");
-        return;
-      }
-      conversation = await this.#prompt(conversation, plan);
+    if (!hasPrompt && !plan.diverged && afterTools && !running) throw new AcpError(TURN_LOST);
+    if (!hasPrompt && (plan.diverged || !running)) {
+      this.draft.finish("stop");
+      return;
     }
+    if (hasPrompt) conversation = await this.#prompt(conversation, plan);
     const tools = getCurrentTools(this.#context.messages);
     const mirrored = tools.some((tool) => tool.name === TOOL_NAME);
     const { turn } = conversation.session;

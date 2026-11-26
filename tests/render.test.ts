@@ -40,3 +40,8 @@ test("mirrored calls render as a tool row with progress, diff and output", () =>
   expect(collapsed.at(-1)).toBe("… 4 more lines");
   expect(resultLines(output, { ...closed, expanded: true }, plain).length).toBe(12);
 });
+
+test("a tool kind that names an object property is shown as it is", () => {
+  expect(callLine({ kind: "constructor", title: "x" }, plain)).toBe("constructor x");
+  expect(callLine({ kind: "toString", title: "x" }, plain)).toBe("toString x");
+});

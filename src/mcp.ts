@@ -57,6 +57,7 @@ function convert(
   if (!NAME.test(name)) return "the name has characters Pi does not allow";
   if (!isRecord(entry)) return "not a server entry";
   if (entry["enabled"] === false) return undefined;
+  if (entry["command"] === "" || entry["url"] === "") return "not a server entry";
   if (entry["type"] === "sse") return "the SSE transport is not supported";
   const pairs = typeof entry["url"] === "string" ? entry["headers"] : entry["env"];
   const values = expandAll(pairs ?? {}, env);

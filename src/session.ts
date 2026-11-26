@@ -436,7 +436,8 @@ export class AcpSession {
       rawOutput: patch.rawOutput ?? previous?.rawOutput,
       terminalOutput: this.#terminalOutputOf(content),
       decision: previous?.decision,
-      settled: status === "completed" || status === "failed",
+      // Once a call is settled it stays so, even if the agent sends another update for it.
+      settled: previous?.settled === true || status === "completed" || status === "failed",
     };
     this.#publish(tool);
     if (!previous) this.#turn?.push({ type: "tool", tool });

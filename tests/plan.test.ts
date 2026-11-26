@@ -88,3 +88,25 @@ test("a markdown plan shows above the editor until the agent removes it", async 
     .map(([, lines]) => lines);
   expect(plans).toStrictEqual([["Antigravity plan", "1. Look", "2. Write"], undefined]);
 });
+
+test("a plan step with a status the extension does not know is shown as not started", () => {
+  const odd = Object.assign(step("a", "pending"), { status: "constructor" });
+  expect(planLines(nextPlan(undefined, { sessionUpdate: "plan", entries: [odd] }))).toStrictEqual([
+    "Antigravity plan",
+    "[ ] a",
+  ]);
+});
+
+test("a long markdown plan keeps 100 lines and counts the rest", () => {
+  const huge = nextPlan(undefined, {
+    sessionUpdate: "plan_update",
+    plan: {
+      type: "markdown",
+      planId: "p",
+      content: Array.from({ length: 10_000 }, (_, i) => `line ${i}`).join("\n"),
+    },
+  });
+  expect.assert(huge && "markdown" in huge);
+  expect(huge.markdown.length).toBe(100);
+  expect(planLines(huge)?.at(-1)).toBe("… 9980 more lines");
+});

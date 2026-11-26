@@ -201,3 +201,14 @@ test("only url mode is a link, and a field named __proto__ is kept as an answer"
     ["__proto__", "x"],
   ]);
 });
+
+test("a form with more fields than Pi asks is declined, not sent back half answered", async () => {
+  const fields = Object.fromEntries(
+    Array.from({ length: 21 }, (_, i) => [`f${i}`, { type: "string" }]),
+  );
+  const { dialogs, shown } = scripted([]);
+  expect(await answerElicitation(form(fields), dialogs, signal)).toStrictEqual({
+    action: "decline",
+  });
+  expect(shown()).toStrictEqual([]);
+});

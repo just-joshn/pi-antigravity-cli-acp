@@ -145,7 +145,7 @@ export function registerAgyCommand(pi: ExtensionAPI, link: Antigravity) {
       link.commandStarted(ctx);
       const typed = args.trim();
       const [command = "status", value] = typed.split(/\s+/).filter(Boolean);
-      const own = OWN[command];
+      const own = Object.hasOwn(OWN, command) ? OWN[command] : undefined;
       try {
         if (own) await own(link, value, ctx);
         else if (link.commands.some((known) => known.name === command))

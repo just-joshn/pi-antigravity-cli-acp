@@ -3,12 +3,17 @@ import type { PlanEntry, SessionUpdate } from "@agentclientprotocol/sdk/unstable
 const PLAN_LIMIT = 100;
 const TEXT_LIMIT = 500;
 const MARKDOWN_LINES = 20;
-const MARK = { completed: "[x]", in_progress: "[>]", pending: "[ ]" } as const;
+/** Marks by step status; the agent may send a status this extension does not know. */
+const MARK: ReadonlyMap<string, string> = new Map([
+  ["completed", "[x]"],
+  ["in_progress", "[>]"],
+  ["pending", "[ ]"],
+]);
 
 /** The agent's current plan: a list of steps, or markdown it keeps until it removes the plan. */
 export type Plan =
   | { id: string | undefined; steps: readonly PlanEntry[] }
-  | { id: string; markdown: readonly string[] };
+  | { id: string; markdown: readonly string[]; total: number };
 
 type PlanUpdate = Extract<
   SessionUpdate,
@@ -38,7 +43,8 @@ export function nextPlan(current: Plan | undefined, update: PlanUpdate): Plan | 
     return { id: plan.planId, steps: steps(plan.entries) };
   if (plan.type === "markdown" && "content" in plan) {
     const lines = plan.content.split("\n").filter((line) => line.trim() !== "");
-    return { id: plan.planId, markdown: lines.map((line) => line.slice(0, TEXT_LIMIT)) };
+    const markdown = lines.slice(0, PLAN_LIMIT).map((line) => line.slice(0, TEXT_LIMIT));
+    return { id: plan.planId, markdown, total: lines.length };
   }
   return current;
 }
@@ -48,12 +54,12 @@ export function planLines(plan: Plan | undefined): string[] | undefined {
   if (!plan) return undefined;
   if ("markdown" in plan) {
     const shown = plan.markdown.slice(0, MARKDOWN_LINES);
-    const more = plan.markdown.length - shown.length;
+    const more = plan.total - shown.length;
     return ["Antigravity plan", ...shown, ...(more > 0 ? [`… ${more} more lines`] : [])];
   }
   if (plan.steps.every((entry) => entry.status === "completed")) return undefined;
   return [
     "Antigravity plan",
-    ...plan.steps.map((entry) => `${MARK[entry.status]} ${entry.content}`),
+    ...plan.steps.map((entry) => `${MARK.get(entry.status) ?? "[ ]"} ${entry.content}`),
   ];
 }

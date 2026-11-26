@@ -32,7 +32,7 @@ export function changedLines(oldText: string, newText: string) {
 
 /** Header of a mirrored tool call: what the agent is doing. */
 export function callLine(args: { kind: string; title: string }, theme: Paint): string {
-  const label = LABELS[args.kind] ?? args.kind;
+  const label = (Object.hasOwn(LABELS, args.kind) ? LABELS[args.kind] : undefined) ?? args.kind;
   return `${theme.fg("toolTitle", theme.bold(label))} ${theme.fg("accent", args.title)}`;
 }
 
