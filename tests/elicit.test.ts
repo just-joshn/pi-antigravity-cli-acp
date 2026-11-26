@@ -2,7 +2,7 @@ import type { CreateElicitationRequest } from "@agentclientprotocol/sdk/unstable
 import { expect, onTestFinished, test } from "vitest";
 
 import { answerElicitation, type Dialogs } from "../src/elicit.ts";
-import { connect } from "./support/harness.ts";
+import { collect, connect } from "./support/harness.ts";
 import { fakeUi, said, start } from "./support/pi.ts";
 import { answering, recorder } from "./support/record.ts";
 
@@ -173,13 +173,9 @@ test("without a UI the question is cancelled; one for an unknown session too", a
   );
   onTestFinished(close);
   const turn = (await client.newSession({ cwd: "/work" })).startTurn([{ type: "text", text: "x" }]);
-  const replies: string[] = [];
-  for (;;) {
-    // oxlint-disable-next-line no-await-in-loop -- reads the turn in order
-    const event = await turn.next();
-    if (event.type === "text") replies.push(event.text);
-    if (event.type === "end" || event.type === "failed") break;
-  }
+  const replies = (await collect(turn)).flatMap((event) =>
+    event.type === "text" ? [event.text] : [],
+  );
   expect(asked.all(), "a question outside any session is asked as well").toStrictEqual(["Outside"]);
   expect(replies).toStrictEqual(['{"action":"decline"}', '{"action":"cancel"}']);
 });

@@ -1,33 +1,12 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { expect, onTestFinished, test } from "vitest";
+import { expect, onTestFinished, test, vi } from "vitest";
 
-import type { TurnEvent } from "../src/session.ts";
-import { connect, identity, resolvable } from "./support/harness.ts";
+import { collect, connect, identity, resolvable } from "./support/harness.ts";
 import { allow, deny, readCall, type Step } from "./support/playback.ts";
 import { answering, recorder } from "./support/record.ts";
 import { scratchDir } from "./support/scratch.ts";
-
-async function eventually<T>(read: () => T | undefined): Promise<T> {
-  for (let attempt = 0; attempt < 200; attempt++) {
-    const value = read();
-    if (value !== undefined) return value;
-    // oxlint-disable-next-line no-await-in-loop -- polling for an event that arrives asynchronously
-    await new Promise((resolve) => setImmediate(resolve));
-  }
-  throw new Error("value never arrived");
-}
-
-async function collect(turn: { next(): Promise<TurnEvent> }) {
-  const events: TurnEvent[] = [];
-  for (;;) {
-    // oxlint-disable-next-line no-await-in-loop -- events are read in order until the turn ends
-    const event = await turn.next();
-    events.push(event);
-    if (event.type === "end" || event.type === "failed") return events;
-  }
-}
 
 test("the client introduces itself as Pi and offers files, terminals, questions and nothing else", async () => {
   const { log, close } = await connect({ script: () => [] });
@@ -50,6 +29,10 @@ test("a session reports the agent's choices, quota tier and early context usage"
   expect(log.sessions[0]?.mcpServers).toStrictEqual([]);
   expect(session.choices("model").map((c) => c.value)).toStrictEqual(["gemini-a", "gemini-b"]);
   expect(session.current("thought_level")).toBe("high");
+  expect(await session.select("thought_level", "low")).toBe("set");
+  expect(log.config, "the effort is changed by the agent's own option id").toStrictEqual([
+    ["thinking_level", "low"],
+  ]);
   expect(session.choices("mode").map((c) => c.value)).toStrictEqual(["default", "auto"]);
   expect(session.tier).toBe("Test Tier");
   expect(session.usage).toStrictEqual({ used: 0, size: 1_000_000 });
@@ -60,6 +43,7 @@ test("choosing a model, effort or mode is confirmed by the agent; unknown values
   const { client, log, close } = await connect({ script: () => [] }, { changed: () => changes++ });
   onTestFinished(close);
   const session = await client.newSession({ cwd: "/work" });
+  const before = changes;
   expect(await session.select("model", "gemini-a")).toBe("unchanged");
   expect(await session.select("model", "gemini-b")).toBe("set");
   expect(await session.select("thought_level", "xhigh")).toBe("set");
@@ -72,7 +56,7 @@ test("choosing a model, effort or mode is confirmed by the agent; unknown values
     ["mode", "auto"],
   ]);
   expect(session.current("mode")).toBe("auto");
-  expect(changes).toBeGreaterThanOrEqual(3);
+  expect(changes - before, "one change for each value the agent set").toBe(3);
 });
 
 test("a turn delivers thoughts, text, tool calls and the final usage in order", async () => {
@@ -133,7 +117,12 @@ test("watching a running tool reports progress and resolves when it finishes or 
   const session = await client.newSession({ cwd: "/work" });
   const turn = session.startTurn([{ type: "text", text: "go" }]);
   expect((await turn.next()).type).toBe("tool");
-  expect((await eventually(() => turn.takeTool())).id).toBe("t2");
+  const batched = await vi.waitFor(() => {
+    const tool = turn.takeTool();
+    expect.assert(tool);
+    return tool;
+  });
+  expect(batched.id).toBe("t2");
   expect(turn.takeTool()).toBe(undefined);
   const titles = recorder<string>();
   const first = session.watchTool("t1", undefined, (tool) => titles.record(tool.title));

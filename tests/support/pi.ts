@@ -102,6 +102,8 @@ export interface StartOptions {
   newSession?: ExtensionCommandContextActions["newSession"];
   /** Prepares the scratch HOME before Pi starts, for example with config files. */
   setup?: (home: string) => Promise<void>;
+  /** A session the scripted agent lists but cannot load. */
+  ghost?: string;
   /** Start the scripted agent signed out. */
   signedOut?: boolean;
   /** Start the scripted agent without session/load and session/close. */
@@ -130,6 +132,7 @@ async function scratchHome(options: StartOptions) {
   vi.stubEnv("FAKE_AGY_SIGNED_OUT", options.signedOut ? "1" : "0");
   vi.stubEnv("FAKE_AGY_RESTORE", options.restore === false ? "0" : "1");
   vi.stubEnv("FAKE_AGY_STORE", join(dir, "agy-sessions.json"));
+  vi.stubEnv("FAKE_AGY_GHOST", options.ghost ?? "");
   onTestFinished(() => {
     vi.unstubAllEnvs();
   });

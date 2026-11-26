@@ -100,6 +100,7 @@ test("history is rendered as text without thinking, and nothing is rendered for 
 test("long history keeps its most recent part", () => {
   const long = renderHistory([user("a".repeat(30_000)), user("END")]);
   expect(long.length).toBeLessThan(24_200);
+  expect(long.length, "the kept part is not cut short").toBeGreaterThan(24_000);
   expect(long).toMatch(/\[earlier conversation omitted\][\s\S]*END$/);
 });
 

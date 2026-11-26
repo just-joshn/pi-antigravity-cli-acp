@@ -47,8 +47,14 @@ const SCRIPTS: [keyword: string, steps: () => Step[]][] = [
   [
     "die planning",
     () => {
-      dieSoon(50);
-      return [{ plan: [entry("Look around", "in_progress")] }, { hold: never }];
+      // The command runs after Pi has the plan, since Pi answers the agent in order.
+      dieOnceWritten("planned");
+      const code = "require('fs').writeFileSync('planned', '')";
+      return [
+        { plan: [entry("Look around", "in_progress")] },
+        { run: [process.execPath, "-e", code] },
+        { hold: never },
+      ];
     },
   ],
   [

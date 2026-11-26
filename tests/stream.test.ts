@@ -43,6 +43,7 @@ interface ChatOptions {
 }
 
 type Client = Awaited<ReturnType<typeof connect>>["client"];
+type StreamRequest = Parameters<ReturnType<typeof createStream>>[2];
 
 /** What the extension does for the stream: one agent session at a time, recorded for the test. */
 function scriptedHost(client: Client, options: ChatOptions) {
@@ -123,7 +124,7 @@ function piLoop(host: ReturnType<typeof scriptedHost>, mirrorTool: boolean) {
 
   async function step(
     model: Model<string> = modelA,
-    request: { signal?: AbortSignal } = {},
+    request: StreamRequest = {},
     onEvent: (event: AssistantMessageEvent) => void = () => {},
   ) {
     const context = normalizeContext({
@@ -144,7 +145,7 @@ function piLoop(host: ReturnType<typeof scriptedHost>, mirrorTool: boolean) {
     return results;
   };
 
-  async function turn(text: string, model: Model<string> = modelA, request = {}) {
+  async function turn(text: string, model: Model<string> = modelA, request: StreamRequest = {}) {
     add({ role: "user", content: text, timestamp: Date.now() });
     const replies: AssistantMessage[] = [];
     for (;;) {

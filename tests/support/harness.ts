@@ -1,8 +1,9 @@
 import type { AnyMessage } from "@agentclientprotocol/sdk/unstable";
 
 import { AcpClient } from "../../src/client.ts";
-import type { SessionHooks } from "../../src/session.ts";
+import type { SessionHooks, TurnEvent } from "../../src/session.ts";
 import { type FakeAgentOptions, serveAgent } from "./fake-agent.ts";
+import { recorder } from "./record.ts";
 
 export const identity = { name: "pi", title: "Pi", version: "9.9.9" };
 
@@ -28,6 +29,17 @@ export const initialSession = {
   directories: [],
   turns: 0,
 };
+
+/** Every event of a prompt turn, read in order until it ends. */
+export async function collect(turn: { next(): Promise<TurnEvent> }) {
+  const events = recorder<TurnEvent>();
+  for (;;) {
+    // oxlint-disable-next-line no-await-in-loop -- events are read in order until the turn ends
+    const event = await turn.next();
+    events.record(event);
+    if (event.type === "end" || event.type === "failed") return events.all();
+  }
+}
 
 /** The two ends of an in-memory ACP connection. */
 export function pair() {

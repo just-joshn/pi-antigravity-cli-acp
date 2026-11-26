@@ -3,9 +3,17 @@ import { join } from "node:path";
 
 import { expect, test } from "vitest";
 
+import { parseAnchor } from "../src/conversation.ts";
 import { isRecord } from "../src/guards.ts";
 import { NOT_RESENT } from "../src/stream.ts";
 import { agentStore, said, start, texts } from "./support/pi.ts";
+
+/** The agent session an assistant message's anchor names. */
+function sessionOf(anchor: string) {
+  const at = parseAnchor(anchor);
+  expect.assert(at, `not an anchor: ${anchor}`);
+  return at.sessionId;
+}
 
 /** Runs one Pi session that talks to the agent, then quits Pi, as a user would. */
 async function earlierRun(prompts: string[]) {
@@ -14,7 +22,7 @@ async function earlierRun(prompts: string[]) {
   for (const prompt of prompts) await first.session.prompt(prompt);
   const anchor = first.assistants().at(-1)?.responseId ?? "";
   await first.stop();
-  return { home: first.home, agentSession: anchor.slice(0, anchor.indexOf("/")) };
+  return { home: first.home, agentSession: sessionOf(anchor) };
 }
 
 test("reopening a Pi session continues its agent conversation instead of replaying it", async () => {
@@ -83,7 +91,7 @@ test("after Pi reloads its extensions, the agent conversation continues in a new
   await session.prompt("again");
   const after = assistants().at(-1)?.responseId ?? "";
   const log = await stop();
-  const agentSession = before.slice(0, before.indexOf("/"));
+  const agentSession = sessionOf(before);
   expect(after).toBe(`${agentSession}/2.1`);
   expect(log.loads, "the reloaded extension started its own agent").toStrictEqual([agentSession]);
   expect(log.prompts.map(texts)).toStrictEqual([["again"]]);

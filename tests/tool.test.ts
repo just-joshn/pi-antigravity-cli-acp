@@ -35,6 +35,11 @@ test("a mirrored call records what the agent did: output, edits, refusals and fa
   expect(raw({ combinedOutput: "hi\r\nthere\r\n", exitCode: 0 })).toBe("hi\nthere\n");
   expect(raw({ output: "plain", exit_code: 0 })).toBe("plain");
   expect(raw("text")).toBe("text");
+  expect([raw(null), raw(undefined), raw({ output: null })]).toStrictEqual([
+    "File a.txt: completed",
+    "File a.txt: completed",
+    "File a.txt: completed",
+  ]);
   expect(raw({}), "an output-less result is not dumped as JSON").toBe("File a.txt: completed");
   const long = toolResult(view({ rawOutput: "x".repeat(30_000) }), "done");
   expect(long.content[0]?.text.length ?? 0).toBeLessThan(21_000);

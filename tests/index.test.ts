@@ -7,7 +7,8 @@ import { expect, test } from "vitest";
 
 import { PROVIDER, readCatalog } from "../src/catalog.ts";
 import { TOOL_NAME } from "../src/tool.ts";
-import { fakeUi, said, start } from "./support/pi.ts";
+import { fakeUi, said, start, texts } from "./support/pi.ts";
+import { recorder } from "./support/record.ts";
 
 test("an ordinary Pi prompt is answered by the agent, which Pi then knows by its models and context use", async () => {
   const { session, work, agentDir, stop, assistants } = await start();
@@ -206,7 +207,7 @@ test("rewinding Pi's conversation starts a new agent session with the visible hi
   await session.prompt("third");
   const log = await stop();
   expect(log.sessions.length).toBe(2);
-  expect(JSON.stringify(log.prompts.at(-1))).toMatch(/third/);
+  expect(texts(log.prompts.at(-1))).toStrictEqual(["third"]);
   expect(log.loads, "the rewound-from session went past this point").toStrictEqual([]);
   expect(log.closes.length, "the replaced session is freed").toBe(1);
 });
@@ -215,8 +216,13 @@ test("Pi's automatic compaction is declined without a notice", async () => {
   const { ui, notes } = fakeUi();
   const settings = { compaction: { enabled: true, reserveTokens: 999_000, keepRecentTokens: 0 } };
   const { session, assistants } = await start({ ui, settings });
+  const attempts = recorder<string>();
+  session.subscribe((event) => {
+    if (event.type === "compaction_start") attempts.record(event.reason);
+  });
   await session.prompt("hello");
   await session.prompt("again");
+  expect(attempts.all(), "Pi tried to compact").toContain("threshold");
   expect(assistants().map(said)).toStrictEqual(["echo: hello", "echo: again"]);
   expect(session.messages.some((message) => message.role === "compactionSummary")).toBe(false);
   expect(notes().join("\n")).not.toMatch(/compaction is skipped/);

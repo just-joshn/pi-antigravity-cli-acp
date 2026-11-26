@@ -25,14 +25,15 @@ async function installCopies() {
   return { home, root, newer, env: { HOME: home, PATH: join(home, "bin") } };
 }
 
-/** Resolves when the agent's output ends, whether it exited cleanly or not. */
-async function ended(stream: Stream) {
+/** Resolves when the agent's output ends: with the error that ended it, or undefined. */
+async function ended(stream: Stream): Promise<unknown> {
   const reader = stream.readable.getReader();
   try {
     // oxlint-disable-next-line no-await-in-loop -- drains the output until it ends
     while (!(await reader.read()).done);
-  } catch {
-    // A failed spawn ends the stream with an error.
+    return undefined;
+  } catch (error) {
+    return error;
   }
 }
 
@@ -149,9 +150,11 @@ test("stopping an agent that ignores SIGTERM kills it", async () => {
   const pidFile = join(dir, "pid");
   const script = `trap "" TERM; echo $$ > "${pidFile}"; while :; do sleep 0.05; done`;
   const agent = launch({ kind: "cli", command: "sh", args: ["-c", script] }, dir);
-  let pid = "";
-  // oxlint-disable-next-line no-await-in-loop -- waits for the script to record its pid
-  while (!pid) pid = await readFile(pidFile, "utf8").catch(() => "");
+  const pid = await vi.waitFor(async () => {
+    const recorded = await readFile(pidFile, "utf8").catch(() => "");
+    expect(recorded).toMatch(/\d/);
+    return recorded;
+  });
   agent.stop();
   await ended(agent.stream);
   // The output closes before the killed process is reaped; wait for it to be gone.
@@ -166,6 +169,6 @@ test("stopping an agent that already exited, or never started, does nothing", as
   expect(() => exited.stop()).not.toThrow();
 
   const missing = launch({ kind: "cli", command: join(dir, "absent"), args: [] }, dir);
-  await ended(missing.stream);
+  expect(await ended(missing.stream), "a failed spawn ends the output").toBeUndefined();
   expect(() => missing.stop()).not.toThrow();
 });

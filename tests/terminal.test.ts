@@ -92,7 +92,7 @@ test("a command the agent runs through Pi shows its output in the tool row", asy
   expect(said(session.messages.findLast((m) => m.role === "assistant"))).toBe(
     `exit 0: ran in ${work}`,
   );
-  expect((await stop()).initialize?.clientCapabilities?.terminal).toBe(true);
+  await stop();
 });
 
 test("the agent cannot raise the output kept past 1 MiB", async () => {

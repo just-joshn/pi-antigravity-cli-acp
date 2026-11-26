@@ -32,7 +32,7 @@ test("/agy login signs in with a chosen method; /agy logout asks first, then sig
   const { ui, notes } = fakeUi(["Gemini API key"]);
   const sure = answering([false, true]);
   const { session, stop } = await start({
-    ui: { ...ui, confirm: () => Promise.resolve(sure() ?? false) },
+    ui: { ...ui, confirm: () => Promise.resolve(sure() === true) },
   });
   await session.prompt("/agy login");
   expect(notes().at(-1)).toBe("info: Signed in to Antigravity with Gemini API key.");

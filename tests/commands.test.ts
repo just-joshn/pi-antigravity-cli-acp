@@ -45,9 +45,10 @@ test("an agent command named like an /agy subcommand is not offered under /agy",
   const { session } = await start();
   await session.prompt("hello");
   const offered = await completions(session, "");
-  expect(
-    offered?.filter((option) => option.value === "status" || option.value === "mode").length,
-  ).toBe(2);
+  const statuses = offered?.filter((option) => option.value === "status") ?? [];
+  expect(statuses, "only /agy's own status, without the agent's description").toStrictEqual([
+    { value: "status", label: "status" },
+  ]);
 });
 
 test("/agy with a name only an object has, like constructor, shows the usage", async () => {

@@ -13,7 +13,7 @@ const allow: PermissionOption = { kind: "allow_once", optionId: "allow", name: "
 const deny: PermissionOption = { kind: "reject_once", optionId: "deny", name: "Deny" };
 
 /** A session whose user answers every permission question with `answer`. */
-function answering(answer: PermissionOption | undefined | Error) {
+function answeredWith(answer: PermissionOption | undefined | Error) {
   const askPermission = () =>
     answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer);
   return new AcpSession("s", initialSession, port, { ...quietHooks, askPermission });
@@ -23,24 +23,29 @@ const ask = (session: AcpSession, options: PermissionOption[]) =>
   session.permission({ sessionId: "s", toolCall: { toolCallId: "t" }, options });
 
 test("a permission answer must be one of the agent's options; otherwise its deny option is sent", async () => {
-  expect(await ask(answering(allow), [allow, deny])).toStrictEqual({
+  expect(await ask(answeredWith(allow), [allow, deny])).toStrictEqual({
     outcome: { outcome: "selected", optionId: "allow" },
   });
-  expect(await ask(answering({ ...allow }), [allow, deny]), "matched by option id").toStrictEqual({
+  expect(
+    await ask(answeredWith({ ...allow }), [allow, deny]),
+    "matched by option id",
+  ).toStrictEqual({
     outcome: { outcome: "selected", optionId: "allow" },
   });
   const stranger = { ...allow, optionId: "other" };
-  expect(await ask(answering(stranger), [allow, deny])).toStrictEqual({
+  expect(await ask(answeredWith(stranger), [allow, deny])).toStrictEqual({
     outcome: { outcome: "selected", optionId: "deny" },
   });
-  expect(await ask(answering(new Error("dialog failed")), [allow, deny])).toStrictEqual({
+  expect(await ask(answeredWith(new Error("dialog failed")), [allow, deny])).toStrictEqual({
     outcome: { outcome: "selected", optionId: "deny" },
   });
 });
 
 test("a permission question with no options, or no deny option, is cancelled unless answered", async () => {
-  expect(await ask(answering(undefined), [])).toStrictEqual({ outcome: { outcome: "cancelled" } });
-  expect(await ask(answering(undefined), [allow])).toStrictEqual({
+  expect(await ask(answeredWith(undefined), [])).toStrictEqual({
+    outcome: { outcome: "cancelled" },
+  });
+  expect(await ask(answeredWith(undefined), [allow])).toStrictEqual({
     outcome: { outcome: "cancelled" },
   });
 });
@@ -78,7 +83,7 @@ test("a permission request cannot finish its tool call before the user answers",
 });
 
 test("an agent's plan, commands and title are capped", () => {
-  const session = answering(undefined);
+  const session = answeredWith(undefined);
   const long = "x".repeat(10_000);
   session.receive({
     sessionUpdate: "plan",
@@ -134,14 +139,14 @@ test("a mode the agent switches to itself becomes the current mode", () => {
 });
 
 test("a title the agent clears is cleared", () => {
-  const session = answering(undefined);
+  const session = answeredWith(undefined);
   session.receive({ sessionUpdate: "session_info_update", title: "Named" });
   session.receive({ sessionUpdate: "session_info_update", title: null });
   expect(session.title).toBeUndefined();
 });
 
 test("dropping a session finishes the tool rows still waiting on it", async () => {
-  const session = answering(undefined);
+  const session = answeredWith(undefined);
   session.receive({
     sessionUpdate: "tool_call",
     toolCallId: "t",
@@ -154,7 +159,7 @@ test("dropping a session finishes the tool rows still waiting on it", async () =
 });
 
 test("a late update after the turn ended does not reopen a finished tool call", async () => {
-  const session = answering(undefined);
+  const session = answeredWith(undefined);
   session.receive({ sessionUpdate: "tool_call", toolCallId: "t", title: "Run", status: "pending" });
   session.dispose();
   session.receive({ sessionUpdate: "tool_call_update", toolCallId: "t", status: "in_progress" });
