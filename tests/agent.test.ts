@@ -1,8 +1,8 @@
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { Stream } from "@agentclientprotocol/sdk/unstable";
-import { expect, test, vi } from "vitest";
+import { expect, onTestFinished, test, vi } from "vitest";
 
 import { findRegistryAgent, launch, registryRoot, resolveAgent } from "../src/agent.ts";
 import { AcpError } from "../src/client.ts";
@@ -41,9 +41,14 @@ test("the registry directory follows each platform's data directory", async () =
 	expect(registryRoot({ HOME: home }, "darwin")).toBe(
 		join(home, "Library", "Application Support", "Zed", "external_agents", "registry"),
 	);
-	expect(registryRoot({ HOME: "/h" }, "linux")).toMatch(/^\/h\/\.local\/share\/zed\//);
-	expect(registryRoot({ HOME: "/h", XDG_DATA_HOME: "/x" }, "linux")).toMatch(/^\/x\/zed\//);
-	expect(registryRoot({ LOCALAPPDATA: "/l" }, "win32")).toMatch(/^\/l\/Zed\//);
+	expect(registryRoot({ HOME: home }, "linux")).toBe(
+		join(home, ".local", "share", "zed", "external_agents", "registry"),
+	);
+	const data = join(home, "data");
+	expect(registryRoot({ HOME: home, XDG_DATA_HOME: data }, "linux")).toBe(
+		join(data, "zed", "external_agents", "registry"),
+	);
+	expect(registryRoot({ LOCALAPPDATA: data }, "win32")).toBe(join(data, "Zed", "external_agents", "registry"));
 });
 
 test("with no agent installed, each choice says what is missing", async () => {
@@ -89,19 +94,25 @@ test("auto prefers agy on PATH, and a registry copy must be executable", async (
 		args: ["acp"],
 	});
 	expect(resolveAgent("registry", env, "darwin", "arm64").command).toBe(newer);
-	await chmod(newer, 0o644);
-	expect(
-		findRegistryAgent(root, "darwin-aarch64")?.command,
-		"a newest copy that cannot run leaves the older one",
-	).toMatch(/v_1\.5\.2_aaaa/);
-	await chmod(join(root, "antigravity-acp", "v_1.5.2_aaaa", "agy_acp_server.par"), 0o644);
+	const older = join(root, "antigravity-acp", "v_1.5.2_aaaa", "agy_acp_server.par");
+	// Windows has no executable mode bit. A missing executable is not runnable on either platform.
+	if (process.platform === "win32") await rm(newer);
+	else await chmod(newer, 0o644);
+	expect(findRegistryAgent(root, "darwin-aarch64")?.command, "fall back to the older copy").toBe(older);
+	if (process.platform === "win32") await rm(older);
+	else await chmod(older, 0o644);
 	expect(findRegistryAgent(root, "darwin-aarch64"), "no copy can run").toBe(undefined);
 });
 
-test("the registry directory falls back to USERPROFILE and Windows' default", () => {
-	expect(registryRoot({ USERPROFILE: "/u" }, "darwin")).toMatch(/^\/u\/Library\//);
-	expect(registryRoot({}, "linux")).toMatch(/^\.local\/share\/zed\//);
-	expect(registryRoot({ HOME: "/h" }, "win32")).toMatch(/^\/h\/AppData\/Local\/Zed\//);
+test("the registry directory falls back to USERPROFILE and Windows' default", async () => {
+	const home = await scratchDir("agent");
+	expect(registryRoot({ USERPROFILE: home }, "darwin")).toBe(
+		join(home, "Library", "Application Support", "Zed", "external_agents", "registry"),
+	);
+	expect(registryRoot({}, "linux")).toBe(join(".local", "share", "zed", "external_agents", "registry"));
+	expect(registryRoot({ HOME: home }, "win32")).toBe(
+		join(home, "AppData", "Local", "Zed", "external_agents", "registry"),
+	);
 });
 
 test("a missing or malformed registry listing falls back to the default server binary", async () => {
@@ -143,8 +154,9 @@ test("a missing or malformed registry listing falls back to the default server b
 test("stopping an agent that ignores SIGTERM kills it", async () => {
 	const dir = await scratchDir("agent");
 	const pidFile = join(dir, "pid");
-	const script = `trap "" TERM; echo $$ > "${pidFile}"; while :; do sleep 0.05; done`;
-	const agent = launch({ command: "sh", args: ["-c", script] }, dir);
+	const script = `process.on('SIGTERM', () => {}); require('node:fs').writeFileSync(process.argv[1], String(process.pid)); setInterval(() => {}, 1000);`;
+	const agent = launch({ command: process.execPath, args: ["-e", script, pidFile] }, dir);
+	onTestFinished(() => agent.stop());
 	const pid = await vi.waitFor(async () => {
 		const recorded = await readFile(pidFile, "utf8").catch(() => "");
 		expect(recorded).toMatch(/\d/);
@@ -156,9 +168,26 @@ test("stopping an agent that ignores SIGTERM kills it", async () => {
 	await vi.waitFor(() => expect(alive(Number(pid))).toBe(false), { timeout: 3000 });
 });
 
+test("stopping an agent closes stdin so it can finish before forced termination", async () => {
+	const dir = await scratchDir("agent");
+	const script = `const { writeFileSync } = require('node:fs');
+		process.on('SIGTERM', () => {});
+		process.stdin.on('end', () => writeFileSync('finished', 'done')).resume();
+		writeFileSync('ready', 'yes');`;
+	const agent = launch({ command: process.execPath, args: ["-e", script] }, dir);
+	onTestFinished(() => agent.stop());
+	await vi.waitFor(async () => expect(await readFile(join(dir, "ready"), "utf8")).toBe("yes"));
+	agent.stop();
+	await ended(agent.stream);
+	expect(await readFile(join(dir, "finished"), "utf8")).toBe("done");
+});
+
 test("stopping an agent that already exited, or never started, does nothing", async () => {
 	const dir = await scratchDir("agent");
-	const exited = launch({ command: "sh", args: ["-c", 'echo "$$" > pid'] }, dir);
+	const exited = launch(
+		{ command: process.execPath, args: ["-e", "require('node:fs').writeFileSync('pid', String(process.pid))"] },
+		dir,
+	);
 	await ended(exited.stream);
 	const pid = Number(await readFile(join(dir, "pid"), "utf8"));
 	expect(pid).toBeGreaterThan(0);

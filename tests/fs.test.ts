@@ -102,7 +102,8 @@ test("reading refuses devices and files over 16 MB instead of loading them", asy
 	await writeFile(big, "");
 	await truncate(big, 16 * 1024 * 1024 + 1);
 	expect(await read(big)).toBe(RequestError.invalidParams().code);
-	expect(await read("/dev/zero")).toBe(RequestError.invalidParams().code);
+	const device = process.platform === "win32" ? "\\\\.\\NUL" : "/dev/zero";
+	expect(await read(device)).toBe(RequestError.invalidParams().code);
 });
 
 test("a write through a hard link is refused, as it could change a file outside the workspace", async () => {
@@ -117,8 +118,8 @@ test("a write through a hard link is refused, as it could change a file outside 
 
 test("a named pipe is refused for writing at once, not waited on", async () => {
 	const work = await scratchDir("fs");
-	const pipe = join(work, "pipe");
-	execFileSync("mkfifo", [pipe]);
+	const pipe = process.platform === "win32" ? "\\\\.\\pipe\\pi-acp-file-test" : join(work, "pipe");
+	if (process.platform !== "win32") execFileSync("mkfifo", [pipe]);
 	expect(await writeIn(work, pipe)).toBe(RequestError.invalidParams().code);
 	expect(await read(pipe), "and for reading").toBe(RequestError.invalidParams().code);
 });

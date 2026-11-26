@@ -161,7 +161,8 @@ export function launch(agent: AgentLaunch, cwd: string, env: Env = process.env):
 			stopping = true;
 			child.stdin.end();
 			if (child.exitCode !== null || child.signalCode !== null) return;
-			child.kill();
+			// Windows terminates the child immediately on SIGTERM. Give it time to handle stdin EOF.
+			if (process.platform !== "win32") child.kill();
 			const force = setTimeout(() => child.kill("SIGKILL"), STOP_GRACE_MS).unref();
 			child.once("close", () => clearTimeout(force));
 		},

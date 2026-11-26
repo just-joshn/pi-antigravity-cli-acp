@@ -12,6 +12,7 @@
 - Use Biome, TypeScript, and Vitest for local and CI checks. The package smoke test installs the tarball in a clean directory and loads the extension with Pi 1.6.1.
 - CI checks pull requests and `main` but no longer publishes automatically to npm.
 - Reuse session lookup tables and early-update queues without changing their limits, eviction order, or replay results.
+- On Windows, give the agent a chance to exit when its input closes before forcing termination. Refuse device paths in the Windows device namespace before opening them.
 
 ## 0.1.0 (2026-11-26)
 

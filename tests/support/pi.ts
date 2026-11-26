@@ -15,6 +15,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { expect, onTestFinished, vi } from "vitest";
 
+import * as agent from "../../src/agent.ts";
 import { emptyCatalog, piModels } from "../../src/catalog.ts";
 import { isRecord } from "../../src/guards.ts";
 import antigravityAcp from "../../src/index.ts";
@@ -23,6 +24,7 @@ import { answering, recorder } from "./record.ts";
 import { scratchDir } from "./scratch.ts";
 
 const fakeAgy = join(import.meta.dirname, "fake-agy.ts");
+const launchAgent = agent.launch;
 type ProcessLog = AgentLog & { argv: string[]; cwd: string };
 
 function isProcessLog(value: unknown): value is ProcessLog {
@@ -110,10 +112,10 @@ interface StartOptions {
 	restore?: boolean;
 }
 
-/** Puts the scripted `agy` on the PATH of a scratch HOME. */
+/** Adds the discovery marker for the scripted `agy` to a scratch PATH. */
 export async function installAgy(home: string) {
-	const script = `#!/bin/sh\nexec "${process.execPath}" "${fakeAgy}" "$@"\n`;
-	await writeFile(join(home, "bin", "agy"), script, { mode: 0o755 });
+	const name = process.platform === "win32" ? "agy.exe" : "agy";
+	await writeFile(join(home, "bin", name), "", { mode: 0o755 });
 }
 
 /** A scratch HOME whose PATH holds only the scripted `agy`, away from any editor-installed agent. */
@@ -124,8 +126,16 @@ async function scratchHome(options: StartOptions) {
 	await Promise.all([mkdir(work, { recursive: true }), mkdir(bin, { recursive: true })]);
 	await options.setup?.(dir);
 	if (options.agy ?? true) await installAgy(dir);
+	// Keep real discovery and subprocess I/O without asking the OS to execute a shell script.
+	const launcher = vi.spyOn(agent, "launch").mockImplementation((spec, cwd, env) => {
+		expect(spec.command).toBe("agy");
+		return launchAgent({ command: process.execPath, args: [fakeAgy, ...spec.args] }, cwd, env);
+	});
+	onTestFinished(() => launcher.mockRestore());
 	vi.stubEnv("PATH", bin);
 	vi.stubEnv("HOME", dir);
+	vi.stubEnv("USERPROFILE", dir);
+	vi.stubEnv("LOCALAPPDATA", join(dir, "AppData", "Local"));
 	vi.stubEnv("PI_CODING_AGENT_DIR", agentDir);
 	vi.stubEnv("FAKE_AGY_LOG", logFile);
 	vi.stubEnv("FAKE_AGY_PLAIN", options.plain ? "1" : "0");

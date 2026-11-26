@@ -1,6 +1,6 @@
 import { constants } from "node:fs";
 import { lstat, mkdir, open, realpath } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, normalize, relative, sep } from "node:path";
 import { buffer } from "node:stream/consumers";
 
 import {
@@ -21,6 +21,8 @@ function codeOf(error: unknown): string {
 
 function requireAbsolute(path: string) {
 	if (!isAbsolute(path)) throw RequestError.invalidParams(undefined, "path must be absolute");
+	// Opening a Windows device namespace path can connect to a pipe before we can inspect it.
+	if (process.platform === "win32" && normalize(path).startsWith("\\\\.\\")) throw notRegular(path);
 }
 
 function tooLarge(path: string) {

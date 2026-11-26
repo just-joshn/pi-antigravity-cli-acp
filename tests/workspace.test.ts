@@ -13,7 +13,7 @@ const withMcp = (servers: unknown) => async (dir: string) => {
 
 test("--agy-dir passes extra directories, resolved from the workspace, and reports missing ones", async () => {
 	const { ui, notes } = fakeUi();
-	const flags = { "agy-dir": ["lib", "/no/such/dir", ""].join(delimiter) };
+	const flags = { "agy-dir": ["lib", "missing", ""].join(delimiter) };
 	const { session, stop, work } = await start({
 		ui,
 		flags,
@@ -24,23 +24,32 @@ test("--agy-dir passes extra directories, resolved from the workspace, and repor
 	await session.prompt("hello");
 	const log = await stop();
 	expect(log.sessions[0]?.additionalDirectories).toStrictEqual([join(work, "lib")]);
-	expect(notes()).toContain("warning: --agy-dir /no/such/dir is not a directory, so the agent does not get it.");
+	expect(notes()).toContain(
+		`warning: --agy-dir ${join(work, "missing")} is not a directory, so the agent does not get it.`,
+	);
 });
 
-test("--agy-dir reports a directory it may not look into instead of failing the message", async () => {
+test("--agy-dir reports an inaccessible path instead of failing the message", async () => {
 	const { ui, notes } = fakeUi();
-	const { session, stop, assistants, home } = await start({
+	const { session, stop, assistants, work } = await start({
 		ui,
-		flags: { "agy-dir": "locked/inner" },
+		flags: { "agy-dir": join("locked", "inner") },
 		setup: async (dir) => {
-			await mkdir(join(dir, "work", "locked", "inner"), { recursive: true });
-			await chmod(join(dir, "work", "locked"), 0o000);
+			const locked = join(dir, "work", "locked");
+			if (process.platform === "win32") {
+				await writeFile(locked, "not a directory");
+			} else {
+				await mkdir(join(locked, "inner"), { recursive: true });
+				onTestFinished(() => chmod(locked, 0o755));
+				await chmod(locked, 0o000);
+			}
 		},
 	});
-	onTestFinished(() => chmod(join(home, "work", "locked"), 0o755));
 	await session.prompt("hello");
 	expect(said(assistants().at(-1))).toBe("echo: hello");
-	expect(notes().join("\n")).toMatch(/--agy-dir .*locked\/inner is not a directory/);
+	expect(notes()).toContain(
+		`warning: --agy-dir ${join(work, "locked", "inner")} is not a directory, so the agent does not get it.`,
+	);
 	expect((await stop()).sessions[0]?.additionalDirectories).toBeUndefined();
 });
 
