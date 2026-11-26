@@ -95,7 +95,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 - **Applies:** yes, limited to what this client implements. **ACP:** `initialize.clientCapabilities`.
 - **Implementation:** advertises `fs.readTextFile`, `fs.writeTextFile`, `terminal`, `elicitation` (form and URL) and `plan`. The SDK adds `auth.terminal: false`. Not `subagents` (CTX-7).
 - **Acceptance:** every advertised capability is implemented.
-- **Verification:** `tests/client.test.ts` ("the client introduces itself as Pi and offers files, terminals, questions and nothing else").
+- **Verification:** `tests/client.test.ts` ("the client introduces itself as Pi and offers files, terminals, questions, plans and nothing else").
 - **Status:** verified. **Evidence:** both agents accepted this set: the live run on 2026-11-25 (`agy` 1.5.17, `python3 tests/live-acp.py`, 19 steps passed) answered a structured question, and the registry run on 2026-11-25 (agent 1.5.2, `python3 tests/live-acp.py registry`, all steps passed) read and edited files through Pi. **Limits:** see CTX-7.
 
 ### PROTO-3 JSON-RPC framing and request correlation

@@ -8,7 +8,7 @@ import { allow, deny, readCall, type Step } from "./support/playback.ts";
 import { answering, recorder } from "./support/record.ts";
 import { scratchDir } from "./support/scratch.ts";
 
-test("the client introduces itself as Pi and offers files, terminals, questions and nothing else", async () => {
+test("the client introduces itself as Pi and offers files, terminals, questions, plans and nothing else", async () => {
   const { log, close } = await connect({ script: () => [] });
   onTestFinished(close);
   expect(log.initialize?.clientInfo).toStrictEqual(identity);

@@ -183,8 +183,9 @@ async function typed(
     // oxlint-disable-next-line no-await-in-loop -- asks again only after a wrong answer
     const text = await dialogs.input(title, undefined, { signal });
     if (text === undefined) return "cancel";
-    if (text.trim() === "" && !field.required) return "skip";
-    const parsed = text.trim() === "" ? { problem: "an answer is required" } : parse(text.trim());
+    const answer = text.trim();
+    if (answer === "" && !field.required) return "skip";
+    const parsed = answer === "" ? { problem: "an answer is required" } : parse(answer);
     if ("value" in parsed) return parsed;
     problem = parsed.problem;
   }
