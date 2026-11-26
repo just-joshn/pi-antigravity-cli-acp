@@ -71,7 +71,7 @@ async function sdkTurn(steps: Step[]) {
   }
 }
 
-async function extensionTurn(options: FakeAgentOptions): Promise<string> {
+async function extensionTurn(options: FakeAgentOptions) {
   const { client: acp, close } = await connect(options);
   let conversation: Conversation | undefined;
   const open = async () =>
@@ -91,13 +91,18 @@ async function extensionTurn(options: FakeAgentOptions): Promise<string> {
     close();
   }
   const message = await reply.result();
-  return message.content.map((block) => (block.type === "text" ? block.text : "")).join("");
+  const text = message.content.map((block) => (block.type === "text" ? block.text : "")).join("");
+  // The agent's tool call as the extension holds it once the turn is over.
+  const tool = await conversation?.session.watchTool("t", undefined, () => {});
+  return { text, tool };
 }
 
 test(`${CHUNKS} streamed text chunks`, async ({ bench }) => {
   // Both arms must do the whole exchange, or a dropped update would read as a speed-up.
   expect(await sdkTurn(chunks)).toBeGreaterThanOrEqual(CHUNKS);
-  expect(await extensionTurn({ script: () => chunks })).toBe(chunks.map((c) => c.say).join(""));
+  expect((await extensionTurn({ script: () => chunks })).text).toBe(
+    chunks.map((c) => c.say).join(""),
+  );
   await bench.compare(
     bench("ACP SDK alone", async () => {
       await sdkTurn(chunks);
@@ -110,7 +115,12 @@ test(`${CHUNKS} streamed text chunks`, async ({ bench }) => {
 
 test("a tool call with 200 KB of output, received but not mirrored", async ({ bench }) => {
   expect(await sdkTurn(toolTurn)).toBeGreaterThanOrEqual(toolTurn.length);
-  expect(await extensionTurn({ script: () => toolTurn })).toBe("done");
+  const { text, tool } = await extensionTurn({ script: () => toolTurn });
+  expect(text).toBe("done");
+  const output = tool?.content.flatMap((item) =>
+    item.type === "content" && item.content.type === "text" ? [item.content.text] : [],
+  );
+  expect(output, "the extension received the whole tool output").toStrictEqual([bigOutput]);
   await bench.compare(
     bench("ACP SDK alone", async () => {
       await sdkTurn(toolTurn);
