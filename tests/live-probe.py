@@ -8,7 +8,6 @@ normal quota; sessions go to ~/.gemini/antigravity-scratch, away from your agy h
     python3 tests/live-probe.py                  # gemini-3.8-flash at thinking level low
     ACP_LIVE_MODEL=gemini-4-hydrogen python3 tests/live-probe.py
 """
-import collections
 import json
 import os
 import subprocess
@@ -36,7 +35,10 @@ PROMPTS = [
 
 
 class Agent:
-    """`agy acp` over stdio, answering its requests the way a cooperative client would."""
+    """`agy acp` over stdio, answering its requests the way a cooperative client would.
+
+    What it records is replaced, never edited, as the reader thread and the main loop both see it.
+    """
 
     def __init__(self, cwd: Path):
         self.cwd = cwd
@@ -46,11 +48,18 @@ class Agent:
         )
         self.lock = threading.Lock()
         self.replies = {}
-        self.requests = collections.Counter()
-        self.updates = collections.Counter()
-        self.samples = []
         self.terminals = {}
+        self.forget()
         threading.Thread(target=self._read, daemon=True).start()
+
+    def forget(self):
+        """Starts recording afresh, for the next prompt."""
+        self.requests = {}
+        self.updates = {}
+        self.samples = ()
+
+    def _note(self, sample):
+        self.samples = (*self.samples, sample)
 
     def _send(self, payload):
         with self.lock:
@@ -62,28 +71,28 @@ class Agent:
             try:
                 message = json.loads(line)
             except json.JSONDecodeError:
-                self.samples.append(f"non-JSON line: {line[:200]!r}")
+                self._note(f"non-JSON line: {line[:200]!r}")
                 continue
             method = message.get("method")
             if method == "session/update":
                 update = message["params"]["update"]
                 kind = update["sessionUpdate"]
-                self.updates[kind] += 1
+                self.updates = {**self.updates, kind: self.updates.get(kind, 0) + 1}
                 if kind in ("plan", "subagent_update") or "terminal" in json.dumps(update.get("content", "")):
-                    self.samples.append(json.dumps(update)[:300])
+                    self._note(json.dumps(update)[:300])
             elif method and "id" in message:
-                self.requests[method] += 1
-                self.samples.append(f"{method} {json.dumps(message.get('params'))[:300]}")
+                self.requests = {**self.requests, method: self.requests.get(method, 0) + 1}
+                self._note(f"{method} {json.dumps(message.get('params'))[:300]}")
                 self._send({"jsonrpc": "2.0", "id": message["id"], **self._reply(method, message.get("params") or {})})
             elif "id" in message:
-                self.replies[message["id"]] = message
+                self.replies = {**self.replies, message["id"]: message}
 
     def _reply(self, method, params):
         """The answer to a request; a probe failure is sent back as an error and shown, not lost."""
         try:
             return self._answer(method, params)
         except Exception as error:  # the probe reports every failure instead of stopping its reader
-            self.samples.append(f"{method} failed in the probe: {error!r}")
+            self._note(f"{method} failed in the probe: {error!r}")
             return {"error": {"code": -32603, "message": f"probe failure: {error}"}}
 
     def _answer(self, method, params):
@@ -98,7 +107,7 @@ class Agent:
         if method == "terminal/create":
             run = subprocess.run([params["command"], *params.get("args", [])], cwd=params.get("cwd") or self.cwd, capture_output=True, text=True)
             terminal_id = f"t{len(self.terminals) + 1}"
-            self.terminals[terminal_id] = run
+            self.terminals = {**self.terminals, terminal_id: run}
             return {"result": {"terminalId": terminal_id}}
         if method in ("terminal/output", "terminal/wait_for_exit"):
             run = self.terminals[params["terminalId"]]
@@ -117,7 +126,9 @@ class Agent:
         end = time.monotonic() + wait
         while time.monotonic() < end:
             if request_id in self.replies:
-                return self.replies.pop(request_id)
+                reply = self.replies[request_id]
+                self.replies = {k: v for k, v in self.replies.items() if k != request_id}
+                return reply
             time.sleep(0.05)
         raise TimeoutError(method)
 
@@ -133,9 +144,7 @@ def main():
         agent.call(3, "session/set_config_option", {"sessionId": session, "configId": "model", "value": MODEL})
         agent.call(4, "session/set_config_option", {"sessionId": session, "configId": "thought_level", "value": "low"})
         for number, (name, text) in enumerate(PROMPTS, start=10):
-            agent.requests.clear()
-            agent.updates.clear()
-            agent.samples.clear()
+            agent.forget()
             reply = agent.call(number, "session/prompt", {"sessionId": session, "prompt": [{"type": "text", "text": text}]})
             print(f"\n== {name}: {reply.get('result', reply.get('error'))}")
             print("   client requests:", dict(agent.requests) or "none")

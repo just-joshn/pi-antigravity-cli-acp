@@ -4,6 +4,7 @@ import type {
   ElicitationContentValue,
 } from "@agentclientprotocol/sdk/unstable";
 import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
+import { z } from "zod";
 
 import { isRecord } from "./guards.ts";
 
@@ -161,23 +162,41 @@ function rangeHint(schema: Record<string, unknown>): string {
   return listed ? `comma-separated: ${listed.map((c) => c.label).join(", ")}` : "";
 }
 
+/** A bound the form sets, when it sets one as a number. */
+const boundOf = (value: unknown) => (typeof value === "number" ? value : undefined);
+
+/** The answer zod reads from the text, or the first problem it found, worded for the user. */
+function parsedWith(schema: z.ZodType<ElicitationContentValue>, text: string): Parsed {
+  const parsed = schema.safeParse(text);
+  return parsed.success
+    ? { value: parsed.data }
+    : { problem: parsed.error.issues[0]?.message ?? "not a valid answer" };
+}
+
 function toNumber(text: string, schema: Record<string, unknown>, integer: boolean): Parsed {
-  const value = Number(text);
-  if (!Number.isFinite(value) || (integer && !Number.isInteger(value)))
-    return { problem: integer ? "a whole number" : "a number" };
-  const { minimum, maximum } = schema;
-  if (typeof minimum === "number" && value < minimum) return { problem: `at least ${minimum}` };
-  if (typeof maximum === "number" && value > maximum) return { problem: `at most ${maximum}` };
-  return { value };
+  const kind = integer ? "a whole number" : "a number";
+  const number = z.coerce.number({ error: kind });
+  const whole = integer ? number.int({ error: kind }) : number;
+  const [minimum, maximum] = [boundOf(schema["minimum"]), boundOf(schema["maximum"])];
+  const atLeast =
+    minimum === undefined ? whole : whole.min(minimum, { error: `at least ${minimum}` });
+  const atMost =
+    maximum === undefined ? atLeast : atLeast.max(maximum, { error: `at most ${maximum}` });
+  return parsedWith(atMost, text);
 }
 
 function toText(text: string, schema: Record<string, unknown>): Parsed {
-  const { minLength, maxLength } = schema;
-  if (typeof minLength === "number" && text.length < minLength)
-    return { problem: `at least ${minLength} characters` };
-  if (typeof maxLength === "number" && text.length > maxLength)
-    return { problem: `at most ${maxLength} characters` };
-  return { value: text };
+  const [minLength, maxLength] = [boundOf(schema["minLength"]), boundOf(schema["maxLength"])];
+  const string = z.string();
+  const atLeast =
+    minLength === undefined
+      ? string
+      : string.min(minLength, { error: `at least ${minLength} characters` });
+  const atMost =
+    maxLength === undefined
+      ? atLeast
+      : atLeast.max(maxLength, { error: `at most ${maxLength} characters` });
+  return parsedWith(atMost, text);
 }
 
 function pickMany(text: string, listed: { value: string; label: string }[]): Parsed {

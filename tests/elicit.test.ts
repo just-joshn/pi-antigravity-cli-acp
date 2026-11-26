@@ -208,3 +208,36 @@ test("a form with more fields than Pi asks is declined, not sent back half answe
   });
   expect(shown()).toStrictEqual([]);
 });
+
+test("typed answers are checked against the form's type and bounds before they are sent", async () => {
+  const integer = scripted(["Answer", "abc", "1.5", "9"]);
+  const n = { type: "integer", title: "N", minimum: 1, maximum: 9 };
+  expect(await answerElicitation(form({ n }, ["n"]), integer.dialogs, signal)).toStrictEqual({
+    action: "accept",
+    content: { n: 9 },
+  });
+  expect(integer.shown().slice(1)).toStrictEqual([
+    "N (from 1 to 9)",
+    "N (from 1 to 9; try again: a whole number)",
+    "N (from 1 to 9; try again: a whole number)",
+  ]);
+
+  const number = scripted(["Answer", "Infinity", "-0.5"]);
+  const x = { type: "number", title: "X", minimum: -0.5 };
+  expect(await answerElicitation(form({ x }), number.dialogs, signal)).toStrictEqual({
+    action: "accept",
+    content: { x: -0.5 },
+  });
+  expect(number.shown().at(-1)).toBe("X (try again: a number)");
+
+  const text = scripted(["Answer", "a", "abcd", "abc"]);
+  const s = { type: "string", title: "S", minLength: 2, maxLength: 3 };
+  expect(await answerElicitation(form({ s }, ["s"]), text.dialogs, signal)).toStrictEqual({
+    action: "accept",
+    content: { s: "abc" },
+  });
+  expect(text.shown().slice(2)).toStrictEqual([
+    "S (try again: at least 2 characters)",
+    "S (try again: at most 3 characters)",
+  ]);
+});

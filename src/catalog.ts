@@ -2,8 +2,8 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 import type { Api, Model, ThinkingLevel } from "@earendil-works/pi-ai";
+import { z } from "zod";
 
-import { isRecord, isStringArray } from "./guards.ts";
 import type { AcpSession, AgentCommand, Choice } from "./session.ts";
 
 export const PROVIDER = "antigravity";
@@ -44,16 +44,14 @@ type LevelMap = NonNullable<Model<Api>["thinkingLevelMap"]>;
 const LEVELS = new Set<string>(PI_LEVELS);
 
 /** Splits per-level model ids such as `gemini-x-high` into each model's levels, in listed order. */
-function levelsByModel(variants: readonly string[]): Map<string, string[]> {
-  const levels = new Map<string, string[]>();
-  for (const variant of variants) {
+function levelsByModel(variants: readonly string[]): ReadonlyMap<string, string[]> {
+  const leveled = variants.flatMap((variant) => {
     const cut = variant.lastIndexOf("-");
     const level = variant.slice(cut + 1);
-    if (cut < 0 || !LEVELS.has(level)) continue;
-    const model = variant.slice(0, cut);
-    levels.set(model, [...(levels.get(model) ?? []), level]);
-  }
-  return levels;
+    return cut < 0 || !LEVELS.has(level) ? [] : [{ model: variant.slice(0, cut), level }];
+  });
+  const grouped = Map.groupBy(leveled, ({ model }) => model);
+  return new Map([...grouped].map(([model, items]) => [model, items.map(({ level }) => level)]));
 }
 
 /** Folds what a live session reports into the catalog. */
@@ -112,47 +110,40 @@ export function effortFor(
   return level === undefined ? undefined : (model.thinkingLevelMap?.[level] ?? undefined);
 }
 
-/** Commands saved by an older version may be missing; a malformed entry is dropped. */
-function parseCommands(value: unknown): AgentCommand[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((command: unknown) => {
-    if (!isRecord(command)) return [];
-    const { name, description, hint } = command;
-    if (typeof name !== "string" || name === "" || typeof description !== "string") return [];
-    return [{ name, description, hint: typeof hint === "string" ? hint : undefined }];
-  });
-}
+/** Text that may be absent; anything else in its place is read as absent. */
+const optionalText = z.string().optional().catch(undefined);
 
-function parseCatalog(value: unknown): Catalog | undefined {
-  if (!isRecord(value) || !Array.isArray(value["models"]) || !Array.isArray(value["modes"]))
-    return undefined;
-  const models: CatalogModel[] = [];
-  for (const model of value["models"]) {
-    if (!isRecord(model) || typeof model["id"] !== "string" || typeof model["name"] !== "string")
-      return undefined;
-    if (!isStringArray(model["efforts"])) return undefined;
-    models.push({ id: model["id"], name: model["name"], efforts: model["efforts"] });
-  }
-  const modes: Choice[] = [];
-  for (const mode of value["modes"]) {
-    if (!isRecord(mode) || typeof mode["value"] !== "string" || typeof mode["name"] !== "string")
-      return undefined;
-    const description = typeof mode["description"] === "string" ? mode["description"] : undefined;
-    modes.push({ value: mode["value"], name: mode["name"], description });
-  }
-  const size = value["contextWindow"];
-  return {
-    models,
-    modes,
-    commands: parseCommands(value["commands"]),
-    contextWindow: typeof size === "number" && size > 0 ? size : emptyCatalog.contextWindow,
-  };
-}
+const commandSchema = z
+  .object({ name: z.string().min(1), description: z.string(), hint: optionalText })
+  .transform(({ name, description, hint }): AgentCommand => ({ name, description, hint }));
+
+/** Commands saved by an older version may be missing; a malformed entry is dropped. */
+const commandsSchema = z
+  .array(z.unknown())
+  .catch([])
+  .transform((listed) =>
+    listed.flatMap((item) => {
+      const command = commandSchema.safeParse(item);
+      return command.success ? [command.data] : [];
+    }),
+  );
+
+const catalogSchema = z.object({
+  models: z.array(z.object({ id: z.string(), name: z.string(), efforts: z.array(z.string()) })),
+  modes: z.array(
+    z
+      .object({ value: z.string(), name: z.string(), description: optionalText })
+      .transform(({ value, name, description }): Choice => ({ value, name, description })),
+  ),
+  commands: commandsSchema,
+  contextWindow: z.number().positive().catch(DEFAULT_CONTEXT_WINDOW),
+});
 
 /** Reads a saved catalog. A missing or malformed file yields the empty catalog. */
 export function readCatalog(file: string): Catalog {
   try {
-    return parseCatalog(JSON.parse(readFileSync(file, "utf8"))) ?? emptyCatalog;
+    const saved = catalogSchema.safeParse(JSON.parse(readFileSync(file, "utf8")));
+    return saved.success ? saved.data : emptyCatalog;
   } catch {
     return emptyCatalog;
   }

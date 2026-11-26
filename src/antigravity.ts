@@ -1,10 +1,11 @@
 import { type ExtensionAPI, type ExtensionContext, VERSION } from "@earendil-works/pi-coding-agent";
 
-import { type AgentChoice, launch, resolveAgent, type RunningAgent } from "./agent.ts";
+import { launch, resolveAgent, type RunningAgent } from "./agent.ts";
 import { type Catalog, learn, piModels, PROVIDER, readCatalog, writeCatalog } from "./catalog.ts";
 import { AcpClient, SignInRequired, type Workspace } from "./client.ts";
 import { Conversation, parseAnchor } from "./conversation.ts";
 import { answerElicitation } from "./elicit.ts";
+import { readFlags } from "./flags.ts";
 import { pick } from "./pick.ts";
 import { planLines } from "./plan.ts";
 import type { AcpSession, SessionHooks } from "./session.ts";
@@ -15,12 +16,6 @@ import { workspaceFor } from "./workspace.ts";
 
 const STATUS = "antigravity";
 const PLAN = "antigravity-plan";
-const CHOICES: readonly string[] = ["auto", "cli", "registry"] satisfies AgentChoice[];
-
-function isChoice(value: unknown): value is AgentChoice {
-  return typeof value === "string" && CHOICES.includes(value);
-}
-
 export const selected = (ctx: ExtensionContext | undefined) => ctx?.model?.provider === PROVIDER;
 
 export function noSuchMode(wanted: string, session: AcpSession): string {
@@ -126,8 +121,8 @@ export class Antigravity {
 
   sessionStarted(ctx: ExtensionContext) {
     this.#pane = ctx;
-    const mode = this.#pi.getFlag("agy-mode");
-    if (typeof mode === "string" && mode !== "") this.#wantedMode = mode;
+    const { mode } = readFlags(this.#pi);
+    if (mode !== undefined) this.#wantedMode = mode;
     this.#syncTool();
     this.#showStatus();
   }
@@ -263,9 +258,8 @@ export class Antigravity {
   }
 
   async #connect(): Promise<AcpClient> {
-    const flag = this.#pi.getFlag("agy-agent");
     const cwd = this.#pane?.cwd ?? process.cwd();
-    const started = launch(resolveAgent(isChoice(flag) ? flag : "auto"), cwd);
+    const started = launch(resolveAgent(readFlags(this.#pi).agent), cwd);
     this.#agent = started;
     const identity = { name: "pi", title: "Pi", version: VERSION };
     const connected = await AcpClient.connect(started.stream, identity, this.#hooks);

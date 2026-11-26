@@ -4,9 +4,9 @@ import { delimiter, join } from "node:path";
 import { Readable, Writable } from "node:stream";
 
 import { ndJsonStream, type Stream } from "@agentclientprotocol/sdk/unstable";
+import { z } from "zod";
 
 import { AcpError } from "./client.ts";
-import { isRecord } from "./guards.ts";
 
 /** Which Antigravity ACP server to run. */
 export type AgentChoice = "auto" | "cli" | "registry";
@@ -47,22 +47,35 @@ function platformKey(platform: string, arch: string): string {
   return `${os}-${arch === "arm64" ? "aarch64" : "x86_64"}`;
 }
 
+const listingSchema = z.object({ agents: z.array(z.unknown()) });
+const listedAgentSchema = z.object({
+  id: z.literal(REGISTRY_ID),
+  distribution: z.object({ binary: z.record(z.string(), z.unknown()) }),
+});
+const binarySchema = z.object({
+  cmd: z.string(),
+  args: z
+    .array(z.unknown())
+    .catch([])
+    .transform((args) => args.filter((arg) => typeof arg === "string")),
+});
+
 /** The launch command the registry lists for this platform, as cached next to the installed agents. */
 function registryCommand(
   root: string,
   platform: string,
 ): { cmd: string; args: string[] } | undefined {
   try {
-    const registry: unknown = JSON.parse(readFileSync(join(root, "registry.json"), "utf8"));
-    const agents =
-      isRecord(registry) && Array.isArray(registry["agents"]) ? registry["agents"] : [];
-    const entry: unknown = agents.find((agent) => isRecord(agent) && agent["id"] === REGISTRY_ID);
-    const distribution = isRecord(entry) ? entry["distribution"] : undefined;
-    const binaries = isRecord(distribution) ? distribution["binary"] : undefined;
-    const binary = isRecord(binaries) ? binaries[platform] : undefined;
-    if (!isRecord(binary) || typeof binary["cmd"] !== "string") return undefined;
-    const args = Array.isArray(binary["args"]) ? binary["args"] : [];
-    return { cmd: binary["cmd"], args: args.filter((arg) => typeof arg === "string") };
+    const listing = listingSchema.safeParse(
+      JSON.parse(readFileSync(join(root, "registry.json"), "utf8")),
+    );
+    const agents = listing.success ? listing.data.agents : [];
+    const entry = agents.map((agent) => listedAgentSchema.safeParse(agent)).find((r) => r.success);
+    const binaries = entry?.data?.distribution.binary ?? {};
+    const binary = binarySchema.safeParse(
+      Object.hasOwn(binaries, platform) ? binaries[platform] : undefined,
+    );
+    return binary.success ? binary.data : undefined;
   } catch {
     // No readable listing: the caller falls back to the binary's usual name.
     return undefined;
