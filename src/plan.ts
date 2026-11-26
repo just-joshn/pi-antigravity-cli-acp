@@ -10,7 +10,7 @@ export type Plan =
   | { id: string | undefined; steps: readonly PlanEntry[] }
   | { id: string; markdown: readonly string[] };
 
-export type PlanUpdate = Extract<
+type PlanUpdate = Extract<
   SessionUpdate,
   { sessionUpdate: "plan" | "plan_update" | "plan_removed" }
 >;

@@ -9,7 +9,6 @@ const port: AgentPort = {
   cancel: () => Promise.resolve(),
   setConfigOption: () => Promise.resolve([]),
 };
-const initial = initialSession;
 const allow: PermissionOption = { kind: "allow_once", optionId: "allow", name: "Allow" };
 const deny: PermissionOption = { kind: "reject_once", optionId: "deny", name: "Deny" };
 
@@ -17,7 +16,7 @@ const deny: PermissionOption = { kind: "reject_once", optionId: "deny", name: "D
 function answering(answer: PermissionOption | undefined | Error) {
   const askPermission = () =>
     answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer);
-  return new AcpSession("s", initial, port, { ...quietHooks, askPermission });
+  return new AcpSession("s", initialSession, port, { ...quietHooks, askPermission });
 }
 
 const ask = (session: AcpSession, options: PermissionOption[]) =>
@@ -48,7 +47,7 @@ test("a permission question with no options, or no deny option, is cancelled unl
 
 test("a permission request cannot finish its tool call before the user answers", async () => {
   const answer = resolvable<PermissionOption | undefined>();
-  const session = new AcpSession("s", initial, port, {
+  const session = new AcpSession("s", initialSession, port, {
     ...quietHooks,
     askPermission: () => answer.promise,
   });
@@ -129,7 +128,7 @@ test("a mode the agent switches to itself becomes the current mode", () => {
       { value: "plan", name: "Plan" },
     ],
   };
-  const session = new AcpSession("s", { ...initial, options: [mode] }, port, quietHooks);
+  const session = new AcpSession("s", { ...initialSession, options: [mode] }, port, quietHooks);
   session.receive({ sessionUpdate: "current_mode_update", currentModeId: "plan" });
   expect(session.current("mode")).toBe("plan");
 });

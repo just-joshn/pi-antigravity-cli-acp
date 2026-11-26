@@ -7,7 +7,6 @@ import { haltTurn, NOT_RESENT } from "../src/stream.ts";
 import { initialSession, quietHooks, resolvable } from "./support/harness.ts";
 
 const hooks: SessionHooks = quietHooks;
-const initial = initialSession;
 /** An agent that never answers a prompt and whose connection is gone. */
 const gone: AgentPort = {
   prompt: () => new Promise(() => {}),
@@ -27,7 +26,7 @@ test("stopping a turn sends one cancel for concurrent callers and clears the tur
     },
     setConfigOption: () => Promise.resolve([]),
   };
-  const session = new AcpSession("s", initial, responsive, hooks);
+  const session = new AcpSession("s", initialSession, responsive, hooks);
   session.startTurn([]);
   expect(await Promise.all([haltTurn(session, 1000), haltTurn(session, 1000)])).toStrictEqual([
     true,
@@ -39,7 +38,7 @@ test("stopping a turn sends one cancel for concurrent callers and clears the tur
 });
 
 test("stopping a turn of an agent that is gone reports it unconfirmed without throwing", async () => {
-  const dead = new AcpSession("d", initial, gone, hooks);
+  const dead = new AcpSession("d", initialSession, gone, hooks);
   dead.startTurn([]);
   expect(await haltTurn(dead, 20)).toBe(false);
 });
@@ -50,7 +49,7 @@ test("an open permission dialog is withdrawn when its turn ends", async () => {
   let withdrawn = false;
   const asking = new AcpSession(
     "a",
-    initial,
+    initialSession,
     { ...gone, prompt: () => reply.promise },
     {
       ...hooks,

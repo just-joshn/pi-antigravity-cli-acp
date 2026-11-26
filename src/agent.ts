@@ -74,12 +74,14 @@ function versionOf(directory: string): Version | undefined {
   return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : undefined;
 }
 
-/** The directory with the newer version; both must have one. */
-function newer(a: string, b: string): string {
-  const [x, y] = [versionOf(a), versionOf(b)];
-  if (!x || !y) return x ? a : b;
-  const order = x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
-  return order > 0 ? a : b;
+interface Installed {
+  readonly directory: string;
+  readonly version: Version;
+}
+
+function newer(a: Installed, b: Installed): Installed {
+  const [x, y] = [a.version, b.version];
+  return (x[0] - y[0] || x[1] - y[1] || x[2] - y[2]) > 0 ? a : b;
 }
 
 /** The newest registry-installed Antigravity agent under `root`, if any. */
@@ -90,9 +92,12 @@ export function findRegistryAgent(root: string, platform: string): AgentLaunch |
   } catch {
     return undefined;
   }
-  const [first, ...rest] = installed.filter((name) => versionOf(name) !== undefined);
+  const [first, ...rest] = installed.flatMap((directory): Installed[] => {
+    const version = versionOf(directory);
+    return version ? [{ directory, version }] : [];
+  });
   if (first === undefined) return undefined;
-  const newest = rest.reduce(newer, first);
+  const newest = rest.reduce(newer, first).directory;
   const listed = registryCommand(root, platform);
   const fallback = platform.startsWith("windows") ? "agy_acp_server.exe" : "agy_acp_server.par";
   const command = join(root, REGISTRY_ID, newest, listed?.cmd ?? fallback);
