@@ -181,7 +181,6 @@ function describeFailure(error: unknown): string {
 export class AcpSession {
   readonly id: string;
   readonly tier: string | undefined;
-  /** The workspace directory the session was opened in. */
   readonly cwd: string;
   /** Where Pi writes files for the agent: the session's directory and its extra ones. */
   readonly workspaces: readonly string[];

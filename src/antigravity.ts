@@ -23,7 +23,6 @@ function isChoice(value: unknown): value is AgentChoice {
 
 export const selected = (ctx: ExtensionContext | undefined) => ctx?.model?.provider === PROVIDER;
 
-/** The notice for a permission mode the agent does not offer. */
 export function noSuchMode(wanted: string, session: AcpSession): string {
   const offered = session.choices("mode").map((mode) => mode.value);
   const available = offered.length ? ` Available: ${offered.join(", ")}.` : "";
@@ -214,7 +213,7 @@ export class Antigravity {
     if (!this.#running) this.publish();
   }
 
-  /** Runs a dialog after the previous one closes; the agent can ask several things at once. */
+  /** Runs a dialog after the previous one closes. */
   #dialog<T>(show: () => Promise<T>): Promise<T> {
     const shown = this.#asking.then(show);
     this.#asking = shown.catch(() => {});

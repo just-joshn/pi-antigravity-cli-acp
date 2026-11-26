@@ -222,13 +222,13 @@ export async function start(options: StartOptions = {}) {
   const { dir, work, agentDir, logFile } = home;
   const session = await piSession(home, options);
   let stopped = false;
-  /** Ends the session the way Pi does and returns what the scripted agent recorded. */
   const shutdown = async () => {
     if (stopped) return;
     stopped = true;
     await session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
     session.dispose();
   };
+  /** Ends the session the way Pi does and returns what the scripted agent recorded. */
   const stop = async (): Promise<ProcessLog> => {
     await shutdown();
     return agentLog(logFile);

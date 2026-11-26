@@ -11,7 +11,6 @@ export async function scratchDir(name: string): Promise<string> {
   return dir;
 }
 
-/** Whether a process with this id is running. */
 export function alive(pid: number): boolean {
   try {
     process.kill(pid, 0);

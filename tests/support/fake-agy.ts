@@ -139,10 +139,10 @@ const saved: unknown = store
 
 const isBlock = (item: unknown) => isRecord(item) && typeof item["type"] === "string";
 
-/** A saved store: prompts by session id, each prompt a list of content blocks. */
 const isPrompt = (item: unknown) => Array.isArray(item) && item.every(isBlock);
 const isPrompts = (item: unknown) => Array.isArray(item) && item.every(isPrompt);
 
+/** A saved store: prompts by session id, each prompt a list of content blocks. */
 function isHistory(value: unknown): value is Record<string, ContentBlock[][]> {
   return isRecord(value) && Object.values(value).every(isPrompts);
 }

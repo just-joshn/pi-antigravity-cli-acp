@@ -27,7 +27,6 @@ export class AcpError extends Error {}
 /** The agent needs the user to sign in before it can start a session. */
 export class SignInRequired extends AcpError {}
 
-/** A way the agent offers to sign in. */
 export interface SignInMethod {
   id: string;
   name: string;
