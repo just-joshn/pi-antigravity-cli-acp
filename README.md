@@ -128,3 +128,17 @@ python3 tests/live-acp.py            # agy acp; its sessions go to ~/.gemini/ant
 python3 tests/live-acp.py registry   # the agent Zed installed; sessions join that agent's history
 python3 tests/live-probe.py          # which ACP features agy uses when a client offers them
 ```
+
+## Continuous integration and releases
+
+Three workflows in `.github/workflows` run on GitHub-hosted runners:
+
+- `ci.yml` runs on every pull request. The `Lint` job runs the format check, oxlint, tsrs and a compile check of the live scripts, which need a signed-in agent and so do not run in CI. The `Test` jobs run the tests with the coverage gate and `verify:package` on Node 22.19.0, 24 and 26, with the Pi that `bun install` puts in `node_modules`.
+- `release.yml` runs on every push to `main`. It runs the same checks, then compares `version` in `package.json` with npm. If npm does not have that version, the workflow publishes the package with provenance, then creates the tag `v<version>` and its GitHub release, with generated notes, at the published commit.
+- `verify-lockfile.yml` runs on pull requests and on pushes to `main`. It fails when `.github/workflows/actions.lock` no longer matches the workflows or the commits it pins.
+
+To release, change `version` in `package.json` in a pull request and merge it. Do not create the tag or the release by hand: the workflow never touches an existing tag, and it stops before publishing when the tag exists and npm does not have the version. If a run fails after npm accepted the version, use **Re-run all jobs**; the run then skips publishing and creates the missing tag and release.
+
+Publishing uses an npm [trusted publisher](https://docs.npmjs.com/trusted-publishers) for this repository, with the workflow `release.yml` and the environment `npm`, so no secret is involved. The `npm` environment only allows deployments from `main`.
+
+`actions.lock` pins every action the workflows use to a commit. After you add or change a `uses:` line, run `gh actions-lock` and commit the result. Dependabot proposes new releases of the actions each week. CI installs Bun 1.4.5, the release the files were formatted with; change `BUN_VERSION` in `ci.yml` when you format with a newer Bun.
