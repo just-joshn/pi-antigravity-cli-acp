@@ -52,3 +52,10 @@ test("an edit in two places counts only the lines that changed", () => {
     added: ["A", "C"],
   });
 });
+
+test("adding or removing only the final newline still shows as a change", () => {
+  const marker = "\\ No newline at end of file";
+  expect(changedLines("hello", "hello\n")).toStrictEqual({ removed: [marker], added: [] });
+  expect(changedLines("hello\n", "hello")).toStrictEqual({ removed: [], added: [marker] });
+  expect(changedLines("", "")).toStrictEqual({ removed: [], added: [] });
+});

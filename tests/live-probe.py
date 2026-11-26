@@ -9,6 +9,7 @@ normal quota; sessions go to ~/.gemini/antigravity-scratch, away from your agy h
     ACP_LIVE_MODEL=gemini-4-hydrogen python3 tests/live-probe.py
 """
 import codecs
+import itertools
 import json
 import os
 import subprocess
@@ -119,7 +120,7 @@ class Agent:
     def _collect(self, terminal_id, proc):
         """Keeps a terminal's output as it arrives, so the command never blocks on a full pipe."""
         decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
-        for chunk in [*iter(lambda: proc.stdout.read1(4096), b""), None]:
+        for chunk in itertools.chain(iter(lambda: proc.stdout.read1(4096), b""), [None]):
             # One decoder for the stream keeps a character split across two reads whole.
             text = decoder.decode(b"", final=True) if chunk is None else decoder.decode(chunk)
             with self.lock:

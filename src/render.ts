@@ -13,12 +13,22 @@ const LABELS: Record<string, string> = {
   other: "tool",
 };
 
+/** Marks a text that does not end in a newline, as diff does, so adding one shows as a change. */
+const NO_NEWLINE = "\\ No newline at end of file";
+
+function linesOf(text: string): string[] {
+  if (text === "") return [];
+  const lines = text.replace(/\n$/, "").split("\n");
+  return text.endsWith("\n") ? lines : [...lines, NO_NEWLINE];
+}
+
 /** The lines one text removes and the other adds, from a line-by-line diff of the two. */
 export function changedLines(oldText: string, newText: string) {
-  const before = oldText === "" ? [] : oldText.replace(/\n$/, "").split("\n");
-  const after = newText === "" ? [] : newText.replace(/\n$/, "").split("\n");
+  const before = linesOf(oldText);
+  const after = linesOf(newText);
   // util.diff marks a line only in the first text 1 and a line only in the second -1.
-  const steps = lineDiff(before, after);
+  // util.diff throws when both lists are empty, as for an empty file written empty.
+  const steps = before.length === 0 && after.length === 0 ? [] : lineDiff(before, after);
   return {
     removed: steps.flatMap(([op, line]) => (op === 1 ? [line] : [])),
     added: steps.flatMap(([op, line]) => (op === -1 ? [line] : [])),
