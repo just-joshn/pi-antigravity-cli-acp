@@ -369,5 +369,5 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 ### PERF-1 Measured extension overhead
 
 - **Implementation:** `bun run bench` compares the bare SDK with the extension on the same exchange.
-- **Evidence:** about 1 µs per streamed chunk and 10 to 22 µs per 200 KB tool result, from two local runs; see [ARCHITECTURE.md](ARCHITECTURE.md#performance). Not compared with Zed, and not measured against the real agent.
+- **Evidence:** about 1 µs per streamed chunk and 10 to 22 µs to receive a tool call carrying 200 KB of output (not mirrored into a tool row), from two local runs; see [ARCHITECTURE.md](ARCHITECTURE.md#performance). Not compared with Zed, and not measured against the real agent.
 - **Status:** implemented_unverified.

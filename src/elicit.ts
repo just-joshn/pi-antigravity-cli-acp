@@ -239,18 +239,31 @@ function toText(text: string, schema: Record<string, unknown>): Parsed {
   return parsedWith(atMost, text);
 }
 
-function pickMany(
-  text: string,
-  listed: { value: string; label: string }[],
-  schema: Record<string, unknown>,
-): Parsed {
-  const picked = text
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean);
-  const values = picked.map(
-    (part) => listed.find((c) => c.label === part || c.value === part)?.value,
-  );
+type Listed = readonly { value: string; label: string }[];
+
+/**
+ * The values of the choices named in `text`, separated by commas, with undefined for a name that is
+ * not a choice. A choice may itself contain a comma, so the longest name that fits is read first.
+ */
+function readChoices(text: string, listed: Listed): (string | undefined)[] {
+  const rest = text.trim();
+  if (rest === "") return [];
+  if (rest.startsWith(",")) return readChoices(rest.slice(1), listed);
+  const named = listed.flatMap(({ value, label }) => [
+    { name: label, value },
+    { name: value, value },
+  ]);
+  const after = (name: string) => rest.slice(name.length).trimStart();
+  const [best] = named
+    .filter(({ name }) => rest.startsWith(name) && /^(,|$)/.test(after(name)))
+    .toSorted((a, b) => b.name.length - a.name.length);
+  if (best) return [best.value, ...readChoices(after(best.name), listed)];
+  const comma = rest.indexOf(",");
+  return [undefined, ...(comma < 0 ? [] : readChoices(rest.slice(comma), listed))];
+}
+
+function pickMany(text: string, listed: Listed, schema: Record<string, unknown>): Parsed {
+  const values = readChoices(text, listed);
   if (values.some((value) => value === undefined)) return { problem: "choose from the list" };
   const [minItems, maxItems] = [boundOf(schema["minItems"]), boundOf(schema["maxItems"])];
   const array =

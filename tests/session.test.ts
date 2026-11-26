@@ -197,3 +197,24 @@ test("a released terminal's output stays in its tool row after later updates", (
   const shown = session.watchTool("c", undefined, () => {});
   return expect(shown.then((tool) => tool?.terminalOutput)).resolves.toBe("hello");
 });
+
+test("a released terminal's output stays when another terminal in the same row writes", async () => {
+  const session = answeredWith(undefined);
+  const content = [
+    { type: "terminal" as const, terminalId: "a" },
+    { type: "terminal" as const, terminalId: "b" },
+  ];
+  session.receive({
+    sessionUpdate: "tool_call",
+    toolCallId: "c",
+    title: "Run",
+    status: "in_progress",
+    content,
+  });
+  session.terminalOutput("a", "first");
+  session.terminalOutput("a", undefined);
+  session.terminalOutput("b", "second");
+  session.receive({ sessionUpdate: "tool_call_update", toolCallId: "c", status: "completed" });
+  const tool = await session.watchTool("c", undefined, () => {});
+  expect(tool?.terminalOutput).toBe("first\nsecond");
+});

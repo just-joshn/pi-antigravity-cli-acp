@@ -74,6 +74,17 @@ test("an agent that cannot load sessions gets a new one with Pi's history", asyn
   expect(log.prompts.map(texts)).toStrictEqual([["[resource]", "again"]]);
 });
 
+test("changing the mode before the first message still reopens the saved conversation", async () => {
+  const { home, agentSession } = await earlierRun(["hello"]);
+  const { session, stop } = await start({ home });
+  await session.prompt("/agy mode auto");
+  await session.prompt("again");
+  const log = await stop();
+  expect(log.loads).toStrictEqual([agentSession]);
+  expect(log.sessions.length, "no new agent session").toBe(0);
+  expect(log.prompts.map(texts)).toStrictEqual([["again"]]);
+});
+
 test("a fresh Pi session never loads an agent conversation", async () => {
   const { session, stop } = await start();
   await session.prompt("hello");

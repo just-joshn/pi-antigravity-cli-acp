@@ -108,7 +108,7 @@ test(`${CHUNKS} streamed text chunks`, async ({ bench }) => {
   );
 });
 
-test("a tool call with 200 KB of output", async ({ bench }) => {
+test("a tool call with 200 KB of output, received but not mirrored", async ({ bench }) => {
   expect(await sdkTurn(toolTurn)).toBeGreaterThanOrEqual(toolTurn.length);
   expect(await extensionTurn({ script: () => toolTurn })).toBe("done");
   await bench.compare(

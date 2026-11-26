@@ -15,7 +15,7 @@ const USAGE =
 
 /** Sets the agent's permission mode, asking the user to pick one when `requested` is undefined. */
 async function chooseMode(link: Antigravity, requested: string | undefined, ctx: ExtensionContext) {
-  const { session } = await link.open();
+  const { session } = await link.openFor(ctx);
   const modes = session.choices("mode");
   let id = requested;
   if (id === undefined) {

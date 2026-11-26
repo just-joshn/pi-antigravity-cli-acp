@@ -1,12 +1,13 @@
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 
 import type { AcpClient, SignInMethod } from "./client.ts";
+import { uniqueLabels } from "./labels.ts";
 import { pick } from "./pick.ts";
 
 /** Asks the user how to sign in and has the agent do it. Undefined when nobody chose a method. */
 export async function signIn(
-  client: AcpClient,
-  pane: ExtensionContext | undefined,
+  client: Pick<AcpClient, "signInMethods" | "signIn">,
+  pane: { hasUI: boolean; ui: Pick<ExtensionUIContext, "select"> } | undefined,
   title: string,
 ): Promise<SignInMethod | undefined> {
   const methods = client.signInMethods;
@@ -14,7 +15,8 @@ export async function signIn(
   const labels = methods.map((method) =>
     method.description ? `${method.name} — ${method.description}` : method.name,
   );
-  const method = await pick(pane.ui, title, methods, labels);
+  const shown = uniqueLabels(labels, (label, n) => `${label} (${n})`);
+  const method = await pick(pane.ui, title, methods, shown);
   if (method) await client.signIn(method.id);
   return method;
 }

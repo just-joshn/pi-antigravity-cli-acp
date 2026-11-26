@@ -194,8 +194,10 @@ export class AcpSession {
   #options: SessionConfigOption[];
   #usage: { used: number; size: number } | undefined;
   #commands: readonly AgentCommand[] | undefined;
-  /** Latest output of each client terminal of this session. */
+  /** Latest output of each client terminal of this session, released ones until the next turn. */
   #terminals: ReadonlyMap<string, string> = new Map();
+  /** Terminals released during the turn; their output is dropped when the next turn starts. */
+  #released: ReadonlySet<string> = new Set();
   #plan: Plan | undefined;
   #tools: ReadonlyMap<string, ToolView> = new Map();
   /** The previous turn's tool calls; a late update to one of them is not a new call. */
@@ -294,6 +296,8 @@ export class AcpSession {
     this.#settleTools();
     this.#endedTools = new Set(this.#tools.keys());
     this.#tools = new Map();
+    this.#terminals = new Map([...this.#terminals].filter(([id]) => !this.#released.has(id)));
+    this.#released = new Set();
     const dialogs = new AbortController();
     this.#dialogs = dialogs;
     const finish = (event: TurnEvent) => {
@@ -439,8 +443,7 @@ export class AcpSession {
       status,
       content,
       rawOutput: patch.rawOutput ?? previous?.rawOutput,
-      // A released terminal's last output stays, even when the agent updates the call afterwards.
-      terminalOutput: this.#terminalOutputOf(content) || (previous?.terminalOutput ?? ""),
+      terminalOutput: this.#terminalOutputOf(content),
       decision: previous?.decision,
       // Once a call is settled it stays so, even if the agent sends another update for it.
       settled: previous?.settled === true || status === "completed" || status === "failed",
@@ -460,9 +463,9 @@ export class AcpSession {
 
   /** New output of a client terminal, or undefined once it is released; tool calls showing it are updated. */
   terminalOutput(terminalId: string, output: string | undefined) {
-    // A released terminal's last output stays in the tool calls that showed it.
+    // A released terminal's last output stays in the tool calls that showed it, for this turn.
     if (output === undefined) {
-      this.#terminals = without(this.#terminals, terminalId);
+      this.#released = new Set([...this.#released, terminalId]);
       return;
     }
     this.#terminals = put(this.#terminals, terminalId, output);

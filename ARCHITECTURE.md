@@ -84,10 +84,10 @@ Esc aborts Pi's request. The extension sends `session/cancel`, aborts any open p
 
 `bun run bench` runs the same exchange with the bare ACP SDK, which only counts the updates, and through the extension into Pi's provider events, with a scripted agent in the same process instead of a model. Before timing, it checks that both did the whole exchange. Two runs of `bun run bench` at commit `e8c54c9` on an otherwise idle Apple M2 Max with Node 24.22, mean time per exchange:
 
-| Workload                               | Bare SDK           | Extension to Pi events |
-| -------------------------------------- | ------------------ | ---------------------- |
-| 1,000 streamed text chunks             | 5.00 and 5.30 ms   | 6.00 and 6.15 ms       |
-| A tool call with 200 KB of output      | 0.168 and 0.172 ms | 0.178 and 0.194 ms     |
-| Reopening a saved session of 500 turns | n/a                | 4.70 and 4.71 ms       |
+| Workload                                        | Bare SDK           | Extension to Pi events |
+| ----------------------------------------------- | ------------------ | ---------------------- |
+| 1,000 streamed text chunks                      | 5.00 and 5.30 ms   | 6.00 and 6.15 ms       |
+| A tool call with 200 KB of output, not mirrored | 0.168 and 0.172 ms | 0.178 and 0.194 ms     |
+| Reopening a saved session of 500 turns          | n/a                | 4.70 and 4.71 ms       |
 
-The extension, including building Pi's events and assistant message, adds about 1 µs per streamed chunk and 10 to 22 µs for a 200 KB tool result. On a busy machine every number rises and varies more; compare the two columns of one run, not runs on different machines. Updates are handled as they arrive, without polling or batching, except that tool calls the agent starts within 25 ms of each other are shown together.
+The extension, including building Pi's events and assistant message, adds about 1 µs per streamed chunk and 10 to 22 µs to receive a tool call carrying 200 KB of output. That case does not mirror the tool call into a Pi tool row, which reads at most 20,000 characters of it. On a busy machine every number rises and varies more; compare the two columns of one run, not runs on different machines. Updates are handled as they arrive, without polling or batching, except that tool calls the agent starts within 25 ms of each other are shown together.

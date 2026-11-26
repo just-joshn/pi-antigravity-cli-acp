@@ -300,3 +300,12 @@ test("a multiple choice answer that must be unique cannot repeat a choice", asyn
   });
   expect(shown().at(-1)).toBe("Colors (comma-separated: a, b; try again: each choice once)");
 });
+
+test("a multiple choice option with a comma in it can be picked", async () => {
+  const pairs = { type: "array", title: "Pairs", items: { enum: ["red, blue", "green"] } };
+  const { dialogs } = scripted(["Answer", "red, blue, green"]);
+  expect(await answerElicitation(form({ pairs }, ["pairs"]), dialogs, signal)).toStrictEqual({
+    action: "accept",
+    content: { pairs: ["red, blue", "green"] },
+  });
+});

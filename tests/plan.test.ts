@@ -122,3 +122,11 @@ test("only plan updates count as plans, and an empty plan shows nothing", () => 
   });
   expect(planLines(empty)).toStrictEqual(["Antigravity plan"]);
 });
+
+test("a plan stays shown while a step past the 100 shown is unfinished", () => {
+  const steps = [
+    ...Array.from({ length: 100 }, () => step("done", "completed")),
+    step("last", "pending"),
+  ];
+  expect(planLines(nextPlan(undefined, { sessionUpdate: "plan", entries: steps }))).toBeDefined();
+});

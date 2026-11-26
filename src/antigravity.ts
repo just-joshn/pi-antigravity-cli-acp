@@ -10,7 +10,7 @@ import { pick } from "./pick.ts";
 import { planLines } from "./plan.ts";
 import type { AcpSession, SessionHooks } from "./session.ts";
 import { signIn } from "./sign-in.ts";
-import { createStream, haltTurn } from "./stream.ts";
+import { createStream, haltTurn, lastAnchor } from "./stream.ts";
 import { choiceLabels, TOOL_NAME, toolArguments } from "./tool.ts";
 import { workspaceFor } from "./workspace.ts";
 
@@ -161,6 +161,16 @@ export class Antigravity {
   modeChosen(id: string) {
     this.#wantedMode = id;
     this.#showStatus();
+  }
+
+  /** The agent session in use, reopening the one Pi's current transcript left off in, if any. */
+  openFor(ctx: ExtensionContext): Promise<Conversation> {
+    const messages = ctx.sessionManager
+      .getBranch()
+      .flatMap((entry) =>
+        entry.type === "message" && entry.message.role === "assistant" ? [entry.message] : [],
+      );
+    return this.open(lastAnchor(messages).anchor);
   }
 
   /** The agent session in use; the first call reopens the one at `anchor` when it is still there. */
