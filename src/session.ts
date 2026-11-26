@@ -240,7 +240,6 @@ export class AcpSession {
     return this.#commands;
   }
 
-  /** The agent's current plan, if it has one. */
   get plan() {
     return this.#plan;
   }

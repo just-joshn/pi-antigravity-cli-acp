@@ -30,7 +30,6 @@ function chunkText(update: SessionUpdate): string {
     : "";
 }
 
-/** The exchanges with `text` added to the last one's user or agent side. */
 function extend(exchanges: readonly Exchange[], side: keyof Exchange, text: string) {
   const last = exchanges.at(-1);
   if (!last) return exchanges;

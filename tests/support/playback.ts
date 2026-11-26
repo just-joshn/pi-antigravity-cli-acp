@@ -36,7 +36,6 @@ export type Step =
 export const allow: PermissionOption = { kind: "allow_once", optionId: "allow", name: "Allow" };
 export const deny: PermissionOption = { kind: "reject_once", optionId: "deny", name: "Deny" };
 
-/** One prompt turn being played back. */
 export interface Playback {
   client: AgentContext;
   sessionId: string;

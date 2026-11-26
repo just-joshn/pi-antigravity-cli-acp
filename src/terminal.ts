@@ -44,7 +44,6 @@ function keepEnd(text: string, limit: number): { text: string; cut: boolean } {
   return { text: bytes.subarray(start).toString("utf8"), cut: true };
 }
 
-/** The terminal with its output cut to its limit. */
 function trimmed(running: Running): Running {
   if (running.bytes <= running.limit) return running;
   const kept = keepEnd(running.output, running.limit);

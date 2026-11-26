@@ -38,7 +38,6 @@ export interface FakeAgentOptions {
   embeddedContext?: boolean;
   /** Report no quota tier, no settings and no context usage when a session starts. */
   plain?: boolean;
-  /** Commands the agent lists for its sessions. */
   commands?: AvailableCommand[];
   /** Extra sessions session/list reports that the agent cannot load. */
   ghosts?: string[];
@@ -125,7 +124,6 @@ function configOptions(offer: Offer, current: SessionState): SessionConfigOption
   ];
 }
 
-/** The session's settings after the client changes one of them. */
 function configure(offer: Offer, current: SessionState, configId: string, value: string) {
   if (configId === offer.effortId) return { ...current, effort: value };
   if (configId !== "model") return { ...current, mode: value };

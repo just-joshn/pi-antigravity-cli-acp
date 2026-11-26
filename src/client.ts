@@ -89,7 +89,6 @@ function explain(action: string) {
   };
 }
 
-/** Runs the agent's commands for the sessions in `sessions`. */
 function terminalsFor(sessions: Registry<AcpSession>) {
   return new Terminals((sessionId, terminalId, output) =>
     sessions.get(sessionId)?.terminalOutput(terminalId, output),
@@ -128,7 +127,6 @@ function serveTerminals(
     );
 }
 
-/** Answers the agent's requests for the sessions in `sessions`. */
 function serve(
   stream: Stream,
   identity: ClientIdentity,
