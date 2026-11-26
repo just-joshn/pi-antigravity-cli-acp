@@ -69,8 +69,9 @@ node -e '
 ' "$scratch/log-2.json" || fail "the restart did not continue the saved agent session"
 
 echo "== shutdown"
-# The scripted agent writes its log only when its process exits; both logs exist, so both exited.
+# The scripted agent writes its log as its process exits, so wait a moment for the process to go.
 [ -s "$scratch/log-1.json" ] && [ -s "$scratch/log-2.json" ] || fail "an agent did not exit"
+for _ in $(seq 50); do pgrep -f "$scratch" >/dev/null || break; sleep 0.1; done
 if pgrep -f "$scratch" >/dev/null; then fail "an agent process outlived Pi"; fi
 
 echo "PASS: packed, installed with pi install, prompted, reopened after restart, no agent left running"

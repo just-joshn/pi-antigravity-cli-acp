@@ -13,28 +13,37 @@ export const quietHooks: SessionHooks = {
   changed: () => {},
 };
 
-/** A promise the test settles by hand. */
-export function deferred() {
-  const { promise, resolve } = Promise.withResolvers<void>();
-  return { promise, resolve: () => resolve() };
-}
-
-/** A promise of a value the test supplies by hand. */
-export function resolvable<T>() {
+/** A promise the test settles by hand, with a value when it has one. */
+export function resolvable<T = void>() {
   const { promise, resolve } = Promise.withResolvers<T>();
   return { promise, resolve };
 }
 
-/** Connects a real ACP client to a scripted in-memory agent. */
-export async function connect(options: FakeAgentOptions, hooks: Partial<SessionHooks> = {}) {
+/** What a new AcpSession starts with in tests that build one by hand. */
+export const initialSession = {
+  options: [],
+  tier: undefined,
+  variants: [],
+  cwd: "/work",
+  directories: [],
+  turns: 0,
+};
+
+/** The two ends of an in-memory ACP connection. */
+export function pair() {
   const toAgent = new TransformStream<AnyMessage, AnyMessage>();
   const toClient = new TransformStream<AnyMessage, AnyMessage>();
-  const fake = serveAgent({ readable: toAgent.readable, writable: toClient.writable }, options);
-  const client = await AcpClient.connect(
-    { readable: toClient.readable, writable: toAgent.writable },
-    identity,
-    { ...quietHooks, ...hooks },
-  );
+  return {
+    agentSide: { readable: toAgent.readable, writable: toClient.writable },
+    clientSide: { readable: toClient.readable, writable: toAgent.writable },
+  };
+}
+
+/** Connects a real ACP client to a scripted in-memory agent. */
+export async function connect(options: FakeAgentOptions, hooks: Partial<SessionHooks> = {}) {
+  const { agentSide, clientSide } = pair();
+  const fake = serveAgent(agentSide, options);
+  const client = await AcpClient.connect(clientSide, identity, { ...quietHooks, ...hooks });
   return {
     client,
     log: fake.log,

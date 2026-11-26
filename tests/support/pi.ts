@@ -16,6 +16,7 @@ import {
 import { expect, onTestFinished, vi } from "vitest";
 
 import { emptyCatalog, piModels } from "../../src/catalog.ts";
+import { isRecord } from "../../src/guards.ts";
 import antigravityAcp from "../../src/index.ts";
 import type { AgentLog } from "./fake-agent.ts";
 import { answering, recorder } from "./record.ts";
@@ -30,6 +31,17 @@ function isProcessLog(value: unknown): value is ProcessLog {
 
 export const said = (message: AssistantMessage | undefined) =>
   (message?.content ?? []).map((block) => (block.type === "text" ? block.text : "")).join("");
+
+/** The scripted agents' saved conversations in a scratch HOME: prompts by agent session id. */
+export async function agentStore(home: string): Promise<Record<string, unknown[]>> {
+  const saved: unknown = JSON.parse(await readFile(join(home, "agy-sessions.json"), "utf8"));
+  if (!isRecord(saved)) throw new Error("the scripted agents' store is not an object");
+  const listed = Object.entries(saved).map(([id, prompts]): [string, unknown[]] => [
+    id,
+    Array.isArray(prompts) ? prompts : [],
+  ]);
+  return Object.fromEntries(listed);
+}
 
 /** A prompt as the agent received it: its text, with other blocks shown by type. */
 export const texts = (prompt: { type: string; text?: string }[] | undefined) =>
@@ -182,23 +194,26 @@ async function piSession(
   return session;
 }
 
+/** Resolves once no scripted agent process of this test is running; each marks itself running. */
+async function agentsExited(logFile: string) {
+  const marker = `${basename(logFile)}.running.`;
+  await vi.waitFor(
+    async () => {
+      const names = await readdir(dirname(logFile));
+      if (names.some((name) => name.startsWith(marker)))
+        throw new Error("an agent process has not exited");
+    },
+    { timeout: 5000, interval: 20 },
+  );
+}
+
 /** Reads what the newest scripted agent recorded, once every agent process has exited. */
 async function agentLog(logFile: string): Promise<ProcessLog> {
-  const marker = `${basename(logFile)}.running.`;
-  const settled = async () => {
-    const names = await readdir(dirname(logFile));
-    if (names.some((name) => name.startsWith(marker))) return "";
-    return readFile(logFile, "utf8").catch(() => "");
-  };
-  for (let attempt = 0; attempt < 100; attempt++) {
-    // oxlint-disable-next-line no-await-in-loop -- polls for the agent processes to exit
-    const text = await settled();
-    const recorded: unknown = text ? JSON.parse(text) : undefined;
-    if (isProcessLog(recorded)) return recorded;
-    // oxlint-disable-next-line no-await-in-loop -- see above
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-  throw new Error("the agent process did not exit");
+  await agentsExited(logFile);
+  // An agent writes its log as it exits, before it removes its running marker.
+  const recorded: unknown = JSON.parse(await readFile(logFile, "utf8"));
+  if (!isProcessLog(recorded)) throw new Error(`the agent log is incomplete: ${logFile}`);
+  return recorded;
 }
 
 /** A real Pi session with the extension loaded and a scripted `agy` first on PATH. */
@@ -208,16 +223,19 @@ export async function start(options: StartOptions = {}) {
   const session = await piSession(home, options);
   let stopped = false;
   /** Ends the session the way Pi does and returns what the scripted agent recorded. */
+  const shutdown = async () => {
+    if (stopped) return;
+    stopped = true;
+    await session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
+    session.dispose();
+  };
   const stop = async (): Promise<ProcessLog> => {
-    if (!stopped) {
-      stopped = true;
-      await session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
-      session.dispose();
-    }
+    await shutdown();
     return agentLog(logFile);
   };
   onTestFinished(async () => {
-    if (!stopped) await stop().catch(() => {});
+    await shutdown();
+    await agentsExited(logFile);
   });
   const assistants = () =>
     session.messages.filter((m): m is AssistantMessage => m.role === "assistant");

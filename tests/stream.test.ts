@@ -15,7 +15,7 @@ import { noUsage } from "../src/draft.ts";
 import { createStream, haltTurn, TURN_LOST } from "../src/stream.ts";
 import { runMirror, TOOL_NAME } from "../src/tool.ts";
 import { defaultModels, type FakeAgentOptions } from "./support/fake-agent.ts";
-import { connect, deferred } from "./support/harness.ts";
+import { connect, resolvable } from "./support/harness.ts";
 import { allow, type Step } from "./support/playback.ts";
 import { answering, recorder } from "./support/record.ts";
 
@@ -96,6 +96,19 @@ async function runTools(host: ReturnType<typeof scriptedHost>, message: Assistan
   return { results, toolResults };
 }
 
+/** Every event of a provider stream, each also handed to `onEvent` as it arrives. */
+async function drain(
+  running: AsyncIterable<AssistantMessageEvent>,
+  onEvent: (event: AssistantMessageEvent) => void,
+) {
+  const events = recorder<AssistantMessageEvent>();
+  for await (const event of running) {
+    events.record(event);
+    onEvent(event);
+  }
+  return events.all();
+}
+
 /** Drives the provider the way Pi's agent loop does: stream, run the mirrored tools, stream again. */
 function piLoop(host: ReturnType<typeof scriptedHost>, mirrorTool: boolean) {
   let messages: readonly Message[] = [];
@@ -107,15 +120,18 @@ function piLoop(host: ReturnType<typeof scriptedHost>, mirrorTool: boolean) {
   };
   const tools = mirrorTool ? [{ name: TOOL_NAME, description: "", parameters: {} }] : [];
 
-  async function step(model: Model<string> = modelA, request: { signal?: AbortSignal } = {}) {
+  async function step(
+    model: Model<string> = modelA,
+    request: { signal?: AbortSignal } = {},
+    onEvent: (event: AssistantMessageEvent) => void = () => {},
+  ) {
     const context = normalizeContext({
       systemPrompt: "PI-SYSTEM-PROMPT",
       tools,
       messages: [...messages],
     });
-    const events: AssistantMessageEvent[] = [];
     const running = host.stream(model, context, request);
-    for await (const event of running) events.push(event);
+    const events = await drain(running, onEvent);
     const message = await running.result();
     add(message);
     return { events, message };
@@ -261,7 +277,7 @@ test("a declined permission is reported on the tool and the turn ends without in
       declined: [{ update: { toolCallId: "t1", status: "failed" } }],
     },
   ];
-  const denied = await chat({ script: () => steps });
+  const denied = await chat({ script: () => steps }, { answers: [undefined] });
   const [call, end] = await denied.turn("clean up");
   expect(call?.stopReason).toBe("toolUse");
   const result = denied.messages().find((m) => m.role === "toolResult");
@@ -326,8 +342,11 @@ test("aborting from Pi cancels the agent's turn and the conversation stays usabl
   });
   const abort = new AbortController();
   c.add({ role: "user", content: "start", timestamp: 1 });
-  const running = c.step(modelA, { signal: abort.signal });
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  const streaming = resolvable();
+  const running = c.step(modelA, { signal: abort.signal }, (event) => {
+    if (event.type === "text_delta") streaming.resolve();
+  });
+  await streaming.promise;
   abort.abort();
   const { message, events } = await running;
   expect(message.stopReason).toBe("aborted");
@@ -372,8 +391,8 @@ test("history the agent has not seen is supplied as context; a rewound transcrip
 });
 
 test("an agent that ignores cancellation is abandoned, not prompted again while it works", async () => {
-  const never = deferred();
-  onTestFinished(never.resolve);
+  const never = resolvable();
+  onTestFinished(() => never.resolve());
   const c = await chat(
     {
       script: (_prompt, n) =>
@@ -383,8 +402,11 @@ test("an agent that ignores cancellation is abandoned, not prompted again while 
   );
   const abort = new AbortController();
   c.add({ role: "user", content: "start", timestamp: 1 });
-  const running = c.step(modelA, { signal: abort.signal });
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  const streaming = resolvable();
+  const running = c.step(modelA, { signal: abort.signal }, (event) => {
+    if (event.type === "text_delta") streaming.resolve();
+  });
+  await streaming.promise;
   abort.abort();
   const { message, events } = await running;
   expect([message.stopReason, events.at(-1)?.type]).toStrictEqual(["aborted", "error"]);
@@ -474,7 +496,7 @@ test("agent failures, refusals, truncation and unsupported images surface as Pi 
 });
 
 test("a mirrored call that Pi aborts, or that the agent never made, is reported as such", async () => {
-  const gate = deferred();
+  const gate = resolvable();
   const c = await chat({ script: () => [{ tool: readCall }, { hold: gate.promise }] });
   c.add({ role: "user", content: "go", timestamp: 1 });
   const { message } = await c.step();

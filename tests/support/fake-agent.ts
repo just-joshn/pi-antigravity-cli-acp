@@ -29,13 +29,11 @@ export interface FakeModel {
 export interface FakeAgentOptions {
   script: Script;
   models?: FakeModel[];
-  modes?: string[];
   /** Config option id for the effort selector; the two Antigravity servers name it differently. */
   effortId?: string;
   /** Also list every model once per thinking level, as the Antigravity servers do. */
   variants?: boolean;
   image?: boolean;
-  embeddedContext?: boolean;
   /** Report no quota tier, no settings and no context usage when a session starts. */
   plain?: boolean;
   commands?: AvailableCommand[];
@@ -100,7 +98,7 @@ function offerOf(options: FakeAgentOptions): Offer {
   const models = options.models ?? defaultModels;
   return {
     models,
-    modes: options.modes ?? ["default", "auto"],
+    modes: ["default", "auto"],
     effortId: options.effortId ?? "thought_level",
     names: new Map(models.map((m) => [m.id, m.name])),
   };
@@ -126,7 +124,8 @@ function configOptions(offer: Offer, current: SessionState): SessionConfigOption
 
 function configure(offer: Offer, current: SessionState, configId: string, value: string) {
   if (configId === offer.effortId) return { ...current, effort: value };
-  if (configId !== "model") return { ...current, mode: value };
+  if (configId === "mode") return { ...current, mode: value };
+  if (configId !== "model") throw RequestError.invalidParams(undefined, `no option ${configId}`);
   const efforts = offer.models.find((m) => m.id === value)?.efforts ?? [];
   const effort = efforts.includes(current.effort) ? current.effort : (efforts.at(-1) ?? "");
   return { ...current, model: value, effort };
@@ -177,13 +176,12 @@ async function replay(client: AgentContext, sessionId: string, prompts: readonly
 
 function hello(options: FakeAgentOptions) {
   const image = options.image ?? true;
-  const embeddedContext = options.embeddedContext ?? true;
   const restore = options.restore ?? true;
   return {
     protocolVersion: 1,
     agentInfo: { name: "fake-agent", title: "Fake Agent", version: "0.0.1" },
     agentCapabilities: {
-      promptCapabilities: { image, embeddedContext },
+      promptCapabilities: { image, embeddedContext: true },
       ...(restore ? { loadSession: true } : {}),
       sessionCapabilities: {
         ...(restore ? { close: {}, list: {} } : {}),

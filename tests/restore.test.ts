@@ -1,11 +1,11 @@
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { expect, test } from "vitest";
 
 import { isRecord } from "../src/guards.ts";
 import { NOT_RESENT } from "../src/stream.ts";
-import { said, start, texts } from "./support/pi.ts";
+import { agentStore, said, start, texts } from "./support/pi.ts";
 
 /** Runs one Pi session that talks to the agent, then quits Pi, as a user would. */
 async function earlierRun(prompts: string[]) {
@@ -43,13 +43,10 @@ test("when the agent no longer has the conversation, a new one starts with Pi's 
 test("when the agent's conversation went past Pi's transcript, it is closed and a new one starts", async () => {
   const { home, agentSession } = await earlierRun(["hello"]);
   const store = join(home, "agy-sessions.json");
-  const saved: unknown = JSON.parse(await readFile(store, "utf8"));
-  expect.assert(typeof saved === "object" && saved !== null);
+  const saved = await agentStore(home);
   const other = [{ type: "text", text: "a prompt Pi never saw" }];
-  const found: unknown = Reflect.get(saved, agentSession);
-  expect.assert(Array.isArray(found));
-  const prompts: unknown[] = found;
-  await writeFile(store, JSON.stringify({ ...saved, [agentSession]: [...prompts, other] }));
+  const prompts = [...(saved[agentSession] ?? []), other];
+  await writeFile(store, JSON.stringify({ ...saved, [agentSession]: prompts }));
 
   const { session, stop } = await start({ home });
   await session.prompt("again");
@@ -104,9 +101,7 @@ test("when the agent process dies mid-turn, the message is not sent again and th
   await session.prompt("after");
   expect(said(assistants().at(-1))).toMatch(/after$/);
   const log = await stop();
-  const saved: unknown = JSON.parse(await readFile(join(home, "agy-sessions.json"), "utf8"));
-  expect.assert(typeof saved === "object" && saved !== null);
-  const prompts = Object.values(saved).flat();
+  const prompts = Object.values(await agentStore(home)).flat();
   const crashes = prompts.filter(
     (prompt) =>
       Array.isArray(prompt) &&

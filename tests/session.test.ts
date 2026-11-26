@@ -2,21 +2,14 @@ import type { PermissionOption } from "@agentclientprotocol/sdk/unstable";
 import { expect, test } from "vitest";
 
 import { AcpSession, type AgentPort, Turn } from "../src/session.ts";
-import { quietHooks, resolvable } from "./support/harness.ts";
+import { initialSession, quietHooks, resolvable } from "./support/harness.ts";
 
 const port: AgentPort = {
   prompt: () => new Promise(() => {}),
   cancel: () => Promise.resolve(),
   setConfigOption: () => Promise.resolve([]),
 };
-const initial = {
-  options: [],
-  tier: undefined,
-  variants: [],
-  cwd: "/work",
-  directories: [],
-  turns: 0,
-};
+const initial = initialSession;
 const allow: PermissionOption = { kind: "allow_once", optionId: "allow", name: "Allow" };
 const deny: PermissionOption = { kind: "reject_once", optionId: "deny", name: "Deny" };
 

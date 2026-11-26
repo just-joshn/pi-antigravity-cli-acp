@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, onTestFinished, test } from "vitest";
 
 import type { TurnEvent } from "../src/session.ts";
-import { connect, deferred, identity } from "./support/harness.ts";
+import { connect, identity, resolvable } from "./support/harness.ts";
 import { allow, deny, type Step } from "./support/playback.ts";
 import { answering, recorder } from "./support/record.ts";
 import { scratchDir } from "./support/scratch.ts";
@@ -125,7 +125,7 @@ test("a turn delivers thoughts, text, tool calls and the final usage in order", 
 });
 
 test("watching a running tool reports progress and resolves when it finishes or its turn ends", async () => {
-  const gate = deferred();
+  const gate = resolvable();
   const steps: Step[] = [
     { tool: readCall },
     { tool: { toolCallId: "t2", kind: "execute", title: "sleep 9" } },

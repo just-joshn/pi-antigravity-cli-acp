@@ -6,7 +6,7 @@ import { expect, test, vi } from "vitest";
 
 import { findRegistryAgent, launch, registryRoot, resolveAgent } from "../src/agent.ts";
 import { AcpError } from "../src/client.ts";
-import { scratchDir } from "./support/scratch.ts";
+import { alive, scratchDir } from "./support/scratch.ts";
 
 async function program(file: string) {
   await mkdir(join(file, ".."), { recursive: true });
@@ -35,15 +35,6 @@ async function ended(stream: Stream) {
     // A failed spawn ends the stream with an error.
   }
 }
-
-const alive = (pid: number) => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-};
 
 test("the registry directory follows each platform's data directory", async () => {
   const home = await scratchDir("agent");

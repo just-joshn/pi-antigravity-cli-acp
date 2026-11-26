@@ -1,7 +1,6 @@
 import {
   agent,
   type AgentConnection,
-  type AnyMessage,
   methods,
   PROTOCOL_VERSION,
   RequestError,
@@ -9,25 +8,17 @@ import {
 import { expect, onTestFinished, test } from "vitest";
 
 import { AcpClient, AcpError } from "../src/client.ts";
-import { connect, identity, quietHooks } from "./support/harness.ts";
+import { connect, identity, pair, quietHooks } from "./support/harness.ts";
 import { answering, recorder } from "./support/record.ts";
 
 type Builder = ReturnType<typeof agent>;
 
 /** Connects the client to a hand-written agent, for replies the scripted agent never sends. */
 async function meet(build: (builder: Builder) => Builder) {
-  const toAgent = new TransformStream<AnyMessage, AnyMessage>();
-  const toClient = new TransformStream<AnyMessage, AnyMessage>();
-  const connection: AgentConnection = build(agent({ name: "bare" })).connect({
-    readable: toAgent.readable,
-    writable: toClient.writable,
-  });
+  const { agentSide, clientSide } = pair();
+  const connection: AgentConnection = build(agent({ name: "bare" })).connect(agentSide);
   onTestFinished(() => connection.close());
-  const client = await AcpClient.connect(
-    { readable: toClient.readable, writable: toAgent.writable },
-    identity,
-    quietHooks,
-  );
+  const client = await AcpClient.connect(clientSide, identity, quietHooks);
   onTestFinished(() => client.close());
   return client;
 }

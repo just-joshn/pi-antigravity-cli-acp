@@ -171,10 +171,9 @@ const save = () => {
   const previous: unknown = JSON.parse(
     readFileSync(logFile, { encoding: "utf8", flag: "a+" }) || "{}",
   );
-  const newer =
-    typeof previous !== "object" ||
-    previous === null ||
-    BigInt(String(Reflect.get(previous, "startedAt") ?? 0)) < startedAt;
+  const recorded = isRecord(previous) ? previous["startedAt"] : undefined;
+  const earlier = typeof recorded === "string" ? recorded : "0";
+  const newer = !/^\d+$/.test(earlier) || BigInt(earlier) < startedAt;
   const record = {
     ...log,
     argv: process.argv.slice(2),

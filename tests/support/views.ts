@@ -1,5 +1,5 @@
 import type { ToolView } from "../../src/session.ts";
-import { type ToolDetails, toolResult } from "../../src/tool.ts";
+import type { ToolDetails } from "../../src/tool.ts";
 
 /** A settled edit the agent made, with fields replaced by `patch`. */
 export function view(patch: Partial<ToolView>): ToolView {
@@ -20,6 +20,11 @@ export function view(patch: Partial<ToolView>): ToolView {
 
 /** The mirror tool's details for a finished call, with fields replaced by `patch`. */
 export const details = (patch: Partial<ToolDetails>): ToolDetails => ({
-  ...toolResult(view({}), "done").details,
+  kind: "edit",
+  title: "File a.txt",
+  status: "completed",
+  declined: false,
+  diffs: [],
+  output: "",
   ...patch,
 });

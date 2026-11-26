@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 
@@ -6,7 +5,7 @@ import { initTheme, type ToolDefinition } from "@earendil-works/pi-coding-agent"
 import type { Component } from "@earendil-works/pi-tui";
 import { expect, test } from "vitest";
 
-import { PROVIDER } from "../src/catalog.ts";
+import { PROVIDER, readCatalog } from "../src/catalog.ts";
 import { TOOL_NAME } from "../src/tool.ts";
 import { fakeUi, said, start } from "./support/pi.ts";
 
@@ -21,12 +20,12 @@ test("an ordinary Pi prompt is answered by the agent, which Pi then knows by its
   expect(
     ["gemini-a", "gemini-b"].map((id) => session.modelRuntime.getModel(PROVIDER, id)?.name),
   ).toStrictEqual(["Gemini A", "Gemini B"]);
-  const saved: unknown = JSON.parse(
-    await readFile(join(agentDir, "antigravity", "catalog.json"), "utf8"),
-  );
-  expect(JSON.stringify(saved)).toMatch(
-    /"id":"gemini-b","name":"Gemini B","efforts":\["low","high","xhigh"\]/,
-  );
+  const saved = readCatalog(join(agentDir, "antigravity", "catalog.json"));
+  expect(saved.models).toContainEqual({
+    id: "gemini-b",
+    name: "Gemini B",
+    efforts: ["low", "high", "xhigh"],
+  });
 
   const log = await stop();
   expect(log.argv).toStrictEqual(["acp"]);

@@ -7,7 +7,7 @@ import { expect, onTestFinished, test, vi } from "vitest";
 import { Terminals } from "../src/terminal.ts";
 import { said, start } from "./support/pi.ts";
 import { recorder } from "./support/record.ts";
-import { scratchDir } from "./support/scratch.ts";
+import { alive, scratchDir } from "./support/scratch.ts";
 
 function terminals() {
   const updates = recorder<[string, string, string | undefined]>();
@@ -132,12 +132,3 @@ test("a command still running when the agent process dies is stopped", async () 
   const pid = Number(await readFile(join(work, "runaway.pid"), "utf8"));
   await vi.waitFor(() => expect(alive(pid)).toBe(false), { timeout: 3000 });
 });
-
-function alive(pid: number) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}

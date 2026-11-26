@@ -4,17 +4,10 @@ import { expect, test } from "vitest";
 import { noUsage } from "../src/draft.ts";
 import { AcpSession, type AgentPort, type SessionHooks } from "../src/session.ts";
 import { haltTurn, NOT_RESENT } from "../src/stream.ts";
-import { quietHooks, resolvable } from "./support/harness.ts";
+import { initialSession, quietHooks, resolvable } from "./support/harness.ts";
 
 const hooks: SessionHooks = quietHooks;
-const initial = {
-  options: [],
-  tier: undefined,
-  variants: [],
-  cwd: "/work",
-  directories: [],
-  turns: 0,
-};
+const initial = initialSession;
 /** An agent that never answers a prompt and whose connection is gone. */
 const gone: AgentPort = {
   prompt: () => new Promise(() => {}),
