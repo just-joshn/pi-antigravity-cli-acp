@@ -38,6 +38,10 @@ test("reading returns the whole file, or limit lines from a 1-based line", async
   expect(await lines(2, 2)).toBe("two\nthree");
   expect(await lines(3)).toBe("three\nfour");
   expect(await lines(undefined, 1)).toBe("one");
+  expect(await lines(-5, 1), "a line before the first starts at the first").toBe("one");
+  expect(await lines(1, -1), "a negative limit gives nothing").toBe("");
+  expect(await lines(2.5, 1.5), "fractions are cut down").toBe("two");
+  expect(await lines(10, 2), "a line past the end gives nothing").toBe("");
   expect(await lines(0, 1), "line 0 reads from the start").toBe("one");
 });
 

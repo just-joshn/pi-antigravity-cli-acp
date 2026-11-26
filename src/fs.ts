@@ -47,10 +47,13 @@ export async function readTextFile({
   const first = line ?? undefined;
   const count = limit ?? undefined;
   if (first === undefined && count === undefined) return { content: text };
-  const start = Math.max((first ?? 1) - 1, 0);
+  // ACP's line and limit are whole numbers; a fraction is cut down and a negative count is none.
+  const start = Math.max(Math.trunc(first ?? 1) - 1, 0);
   const lines = text.split("\n");
   return {
-    content: lines.slice(start, count === undefined ? undefined : start + count).join("\n"),
+    content: lines
+      .slice(start, count === undefined ? undefined : start + Math.max(Math.trunc(count), 0))
+      .join("\n"),
   };
 }
 
