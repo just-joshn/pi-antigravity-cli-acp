@@ -92,9 +92,9 @@ export class Inbox {
     const held = this.#early.get(sessionId) ?? [];
     if (held.length >= EARLY_UPDATE_LIMIT) return;
     const refreshed = put(without(this.#early, sessionId), sessionId, [...held, update]);
-    const [oldest] = refreshed.keys();
-    const over = refreshed.size > EARLY_SESSION_LIMIT && oldest !== undefined;
-    this.#early = over ? without(refreshed, oldest) : refreshed;
+    // A Map keeps insertion order, so the first entry is the session held longest.
+    this.#early =
+      refreshed.size > EARLY_SESSION_LIMIT ? new Map([...refreshed].slice(1)) : refreshed;
   }
 
   /** The updates held for `sessionId`, which are no longer held. */
