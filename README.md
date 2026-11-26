@@ -1,144 +1,287 @@
 # pi-antigravity-acp
 
-Use Google's Antigravity agent from Pi the way Zed does. **Pi is the [ACP](https://agentclientprotocol.com/) client and Antigravity is the agent.** You pick an Antigravity model in Pi's model picker and type normally. The agent keeps the conversation, runs its own tools and asks Pi's user for permission.
+Talk to Google's Antigravity helper from inside Pi.
 
-Pi sends the agent your new message, plus the earlier conversation as context when the agent has not seen it, and nothing else: no Pi system prompt, no Pi tool list. Asked which harness it runs in, the model answers "Antigravity". Pi introduces itself to the agent as `pi` in the ACP handshake.
+## What is this?
 
-[ARCHITECTURE.md](ARCHITECTURE.md) explains how the pieces fit. [PARITY.md](PARITY.md) compares each Antigravity ACP capability with Zed's client and records the evidence.
+Pi is a program. You type to an AI in it, and the AI writes back.
 
-## Install
+Antigravity is an AI helper made by Google. It can read your files, change them and run commands.
 
-You need Pi 1.6 or later, Node.js 22.19 or later, and either the Antigravity CLI (`agy`) on `PATH` or the Antigravity agent Zed installs from the ACP registry.
+This package connects the two. You chat in Pi. Antigravity does the thinking and the work. Pi shows you what Antigravity does, and asks you first before Antigravity does something risky.
 
-From a checkout:
+The two programs talk using a shared language called [ACP](https://agentclientprotocol.com/). The Zed code editor uses the same language to talk to Antigravity. So Antigravity in Pi works the way it does in Zed.
 
-```sh
-bun install
-pi install "$PWD"
-```
+## How the pieces fit
 
-Pi loads a local package from its path, so keep the checkout where it is. To try it for one run without installing, use `pi -e ./src/index.ts`.
+1. You type a message in Pi.
+2. Pi sends your message to Antigravity.
+3. Antigravity thinks, reads files and runs tools.
+4. Pi shows you each step and the answer.
+
+Pi sends only your message. It does not send its own instructions or its own tools. If you ask the helper what program it runs in, it says "Antigravity".
+
+Do you want to know how it works inside? Read [ARCHITECTURE.md](ARCHITECTURE.md). Do you want to see what works and how it was checked? Read [PARITY.md](PARITY.md).
+
+## What you need
+
+- Pi, version 1.6 or newer.
+- Node.js, version 22.19 or newer.
+- Antigravity. You can get it one of two ways.
+  - The Antigravity command-line program, called `agy`.
+  - The Antigravity helper that Zed installs for you.
+
+## Set it up
+
+The package is not on npm yet. You install it from a copy of this repository.
+
+1. Get a copy of the code.
+
+   ```sh
+   git clone https://github.com/just-joshn/pi-antigravity-cli-acp.git
+   cd pi-antigravity-cli-acp
+   ```
+
+2. Get the parts the code needs.
+
+   ```sh
+   bun install
+   ```
+
+3. Add the package to Pi.
+
+   ```sh
+   pi install "$PWD"
+   ```
+
+Pi loads the package from this folder. Keep the folder where it is.
+
+Do you only want to try it once? Run `pi -e ./src/index.ts` instead of step 3.
 
 ## Sign in
 
-Sign-in belongs to the agent. Run `agy` once in a terminal and sign in there; the extension uses that sign-in and never reads a token.
+Antigravity needs your Google account. Antigravity keeps your sign-in, not Pi. This package never reads your password or your token.
 
-If the agent reports that you are signed out, Pi offers the agent's own sign-in methods (for `agy`: Google, Gemini Enterprise, a Gemini API key or Agent Platform) and asks the agent to sign in with the one you pick. `/agy login` does the same at any time, and `/agy logout` signs the agent out after asking you. Without a UI, as in `pi -p`, Pi shows "Antigravity needs you to sign in. Run `agy` in a terminal, sign in, then try again."
+1. Open a terminal.
+2. Run `agy`.
+3. Follow the steps to sign in.
 
-## Use it
+What if you forget? Pi notices when Antigravity says you are signed out. Pi then shows you Antigravity's ways to sign in. For `agy`, these are Google, Gemini Enterprise, a Gemini API key and Agent Platform. Pick one, and Pi asks Antigravity to sign you in.
+
+| To do this                   | Type this     |
+| ---------------------------- | ------------- |
+| Sign in at any time          | `/agy login`  |
+| Sign out. Pi asks you first. | `/agy logout` |
+
+Pi cannot show you a sign-in choice when it has no screen, as in `pi -p`. Then it tells you to run `agy` in a terminal and sign in.
+
+## Start chatting
+
+Run this:
 
 ```sh
 pi --model antigravity/default
 ```
 
-Say hello. `antigravity/default` uses whichever model the agent is set to. After the first reply, `/model` lists the agent's own models under `antigravity`, for example `gemini-4-hydrogen` and `gemini-3.8-flash`. Pi remembers the list, so later runs can start on one directly with `--model antigravity/gemini-3.8-flash`.
+Now say hello.
 
-| Control              | In Pi                                                                                                                                                  |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Model                | `/model`, Ctrl+P, or `--model antigravity/<id>`                                                                                                        |
-| Thinking level       | Shift+Tab, or `--thinking <level>`. Pi offers only the levels the agent has for that model.                                                            |
-| Permission requests  | A dialog with the agent's own choices, such as Allow and Deny. Esc picks the agent's reject choice.                                                    |
-| Permission mode      | `/agy mode` to choose, `/agy mode <id>` to set, `--agy-mode <id>` at launch. Shown in the footer.                                                      |
-| The agent's commands | `/agy <command> [input]`, for example `/agy goal ship the fix` or `/agy compact`. Tab completes.                                                       |
-| Saved sessions       | `/agy sessions` opens one of the agent's saved conversations for this directory as a new Pi session that continues it.                                 |
-| Questions            | When the agent asks a structured question, Pi asks it field by field with its own dialogs; an optional choice can be left with No answer. Esc cancels. |
-| Plan                 | While the agent works through a plan, its steps or its markdown plan show above the editor. `agy` 1.5.17 sends none.                                   |
-| Context              | Pi's footer shows the agent's context use. `/agy status` gives the exact numbers.                                                                      |
-| Stop                 | Esc cancels the agent's turn.                                                                                                                          |
+`antigravity/default` uses the model that Antigravity is set to. After the first answer, Pi knows all of Antigravity's models. Type `/model` to see them, for example `gemini-4-hydrogen` and `gemini-3.8-flash`.
 
-`/agy status` also shows the agent's version, the quota tier it reports for your account, and the agent session id.
+Pi remembers that list. Next time, you can start on one model right away.
 
-The agent's tool calls appear as Pi tool rows: `read`, `edit` with the changed line counts, `$` for commands with their output, up to 20,000 characters, including commands the agent runs through Pi's own terminals. Ctrl+O expands them. The `antigravity_tool` tool behind these rows is turned on while an antigravity model is selected and off otherwise.
+```sh
+pi --model antigravity/gemini-3.8-flash
+```
 
-`antigravity/default` has no thinking levels in Pi; pick one of the agent's models to choose one.
+## Things you can do
 
-Permission modes are the agent's. `agy acp` has `default`, `accept-edits`, `auto` and `plan`. In `default` it asks before every edit and command. When Pi has nobody to ask, as in `pi -p`, requests are declined; start in a mode that does not ask if you want unattended edits.
+| I want to…                        | Do this                                                                                |
+| --------------------------------- | -------------------------------------------------------------------------------------- |
+| Pick a model                      | Type `/model`, press Ctrl+P, or start Pi with `--model antigravity/<model>`.           |
+| Make it think harder or less      | Press Shift+Tab, or start Pi with `--thinking <level>`.                                |
+| Stop the helper                   | Press Esc.                                                                             |
+| See how much the helper remembers | Look at the bottom of Pi's screen. `/agy status` shows the exact numbers.              |
+| See the version and my quota      | Type `/agy status`.                                                                    |
+| Change how often it asks me       | Type `/agy mode`. Read [Modes](#modes) below.                                          |
+| Use one of Antigravity's commands | Type `/agy` and the command, for example `/agy compact`. Press Tab to finish the word. |
+| Open an old Antigravity chat      | Type `/agy sessions`, then pick a chat.                                                |
+| See more of a tool step           | Press Ctrl+O.                                                                          |
 
-`agy` lists its own slash commands, including its skills, and `/agy` runs them as an ordinary message so they cannot clash with Pi's commands such as `/compact`. An agent command named `status`, `mode`, `sessions`, `login` or `logout` is shadowed by `/agy`'s own; type it directly, for example `/status`. In `pi -p`, Pi exits before a run that a command starts, so type the agent's command directly instead, for example `pi -p "/compact"`.
+Thinking levels need a real model. `antigravity/default` has none. Pick one of Antigravity's models first. Pi shows only the levels that model has.
 
-### Conversations
+## Watching the helper work
 
-One Pi session drives one agent session. A follow-up sends only your new message. Each assistant message Pi saves carries the agent session id and position (`<session>/<turn>.<part>`), and the next request compares against it:
+Each thing Antigravity does shows up in Pi as a row.
 
-- **Reopening a Pi session** (`pi -c`, `/resume`, a restart or `/reload`) reopens the same agent conversation with ACP's `session/load`, if the agent still has it at the same point. Nothing is resent.
-- If the agent no longer has that conversation, or it went on without this Pi session, or Pi's conversation has history the agent never saw (for example after switching from another model), Pi starts a new agent session and supplies the visible conversation as context with your message.
-- **Rewinding or branching in Pi** starts a new agent session with the visible conversation as context. The one it replaces is closed.
-- A message typed while the agent is working is delivered when Pi's running tool rows finish. It cancels the rest of the agent's turn and is sent next.
-- If a turn fails after the message reached the agent, for example because the agent process died, Pi's automatic retry does not send it again: what the agent did is unknown. Send it again yourself if needed.
-- History sent as context is limited to the most recent 24,000 characters, with each tool result cut to 600.
+- `read` means it read a file.
+- `edit` means it changed a file. The row says how many lines changed.
+- `$` means it ran a command. The row shows what the command printed, up to 20,000 characters.
 
-## Configure
+Sometimes Antigravity makes a plan. Then Pi shows the steps above the box where you type. `agy` 1.5.17 does not send plans yet.
 
-| Flag                 | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--agy-agent <name>` | Which agent to run; see below. Default `auto`.                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `--agy-mode <id>`    | Permission mode for new agent sessions, such as `default`.                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `--agy-dir <dirs>`   | More directories the agent may work in, separated like `PATH` and resolved from the workspace.                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `--agy-mcp`          | Also give the agent Pi's configured MCP servers (stdio only for `agy`). Servers that cannot be passed are skipped with a notice: OAuth sign-in, `!command` values, an unset `${VAR}`, a `cwd`, SSE, a name Pi does not allow, a server or tools Pi keeps hidden, and HTTP servers for an agent that takes none. An HTTP server you signed in to with `/mcp` reaches the agent without that sign-in. Servers that other Pi extensions register are not passed on; Pi offers no way to read them. |
+Sometimes Antigravity has a question for you. Then Pi asks it one part at a time. You can skip a part that is optional by picking **No answer**. Press Esc to cancel.
 
-| `--agy-agent`    | Agent                                                         | Notes                                                                                                                                                             |
-| ---------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cli`            | `agy acp`, part of the Antigravity CLI                        | Its conversations are stored with your other `agy` conversations.                                                                                                 |
-| `registry`       | Google Antigravity from the ACP registry, as Zed installs it  | Found in Zed's data directory. Reads and writes files through Pi. Modes are `default`, `auto_edit` and `yolo`. Creates `skills/system/` in the project directory. |
-| `auto` (default) | `agy acp` if `agy` is on `PATH`, otherwise the registry agent |                                                                                                                                                                   |
+## When the helper asks first
 
-Everything else, such as models, quota, MCP servers and rules, is configured in the agent. The extension caches the agent's models, modes and commands in `antigravity/catalog.json` under Pi's agent directory so the model picker is filled before the agent starts; deleting it is safe.
+Before some steps, Antigravity asks if it may go ahead. Pi shows you the choices, such as **Allow** and **Deny**. Pressing Esc says no.
 
-## Compatibility
+If nobody is there to answer, as in `pi -p`, the answer is always no.
 
-Live-tested on macOS with Pi 1.6.1 and `agy` 1.5.17, using ACP protocol version 1 through `@agentclientprotocol/sdk` 2.12.0. The registry agent (`--agy-agent registry`, version 1.5.2) was also run live; it titles no sessions and has no `/compact`. The agent is started as a subprocess without a shell, and paths are handled with Node's platform functions; Linux and Windows have not been tested.
+## Modes
 
-## Troubleshooting
+A mode decides how often Antigravity asks you first. The modes belong to Antigravity.
 
-| Symptom                                                     | Cause and fix                                                                                                                                      |
-| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| "agy … not found on PATH"                                   | Install the Antigravity CLI, or pass `--agy-agent registry` if Zed installed the agent.                                                            |
-| "Antigravity needs you to sign in"                          | Run `agy` in a terminal and sign in.                                                                                                               |
-| A reply that says "Individual quota reached"                | The agent's message about your account's quota. It says when the quota resets; another model may still have quota.                                 |
-| `Model "…" not found for provider "antigravity"` at launch  | Pi has not seen that model yet. Start with `antigravity/default` once so the agent's model list is cached.                                         |
-| "Antigravity does not offer … right now"                    | The model is not available to your account now. Choose another with `/model`.                                                                      |
-| Tool activity appears as notices, not tool rows             | `--tools` or `--no-tools` left out the `antigravity_tool` tool.                                                                                    |
-| "Summaries and other background requests are not available" | Something other than the conversation, such as a branch summary, asked these models for text. The agent keeps its own context, so this is refused. |
+`agy` has four modes. They are `default`, `accept-edits`, `auto` and `plan`. In `default`, it asks before every edit and every command.
 
-## Limits
+- Type `/agy mode` to pick a mode from a list.
+- Type `/agy mode auto` to set the mode named `auto`.
+- Start Pi with `--agy-mode auto` to begin in that mode.
 
-- **The agent runs the tools, not Pi.** Pi's own tools, skills, context files and tool hooks do not apply to these models. The agent has its own equivalents.
-- **No Pi-side summaries.** The agent manages its context, so Pi's compaction and branch summaries are skipped or refused for these models. Use `/agy compact` for the agent's own.
-- When the agent writes files through Pi, as the registry agent does, Pi writes only inside the session's working directory and the directories given with `--agy-dir`.
-- Subagents: `agy` 1.5.17 reports a subagent's work as ordinary tool calls, which show as tool rows; ACP's separate subagent reporting is not implemented, as no agent sends it yet. [PARITY.md](PARITY.md) lists every capability with its status and evidence.
-- `/agy sessions` carries over a saved conversation's text, not the agent's tool calls in it.
-- Quota, model access and account policy are the agent's and Google's.
+Pi shows the mode at the bottom of the screen.
 
-## Develop
+Do you want Antigravity to change files while nobody watches, as in `pi -p`? Then start it in a mode that does not ask.
+
+## Antigravity's own commands
+
+Antigravity has its own slash commands and skills. To keep them apart from Pi's commands, you type `/agy` in front of them. For example, `/agy compact` shrinks Antigravity's memory of the chat, and `/compact` is Pi's own command.
+
+A few names are taken by `/agy` itself. These are `status`, `mode`, `sessions`, `login` and `logout`. To run Antigravity's command with one of those names, type it without `/agy`, for example `/status`.
+
+`pi -p` closes before an `/agy` command finishes. There, type Antigravity's command directly, for example `pi -p "/compact"`.
+
+## Coming back to a chat
+
+One Pi chat goes with one Antigravity chat. When you send another message, Pi sends only the new one. Antigravity already remembers the rest.
+
+**You open an old Pi chat again.** This happens with `pi -c`, `/resume`, a restart or `/reload`. Pi asks Antigravity to open the same chat. Nothing is sent twice.
+
+**Antigravity cannot continue that chat.** Maybe it forgot the chat. Maybe the chat went on without Pi. Maybe you talked to another model in Pi first. Then Pi starts a new Antigravity chat and gives it the old messages to read.
+
+**You go back to an earlier point in Pi.** Pi starts a new Antigravity chat and gives it the messages up to that point. Pi closes the old Antigravity chat.
+
+**You type while Antigravity is working.** Pi waits for the running tool rows to finish. Then it stops the rest of Antigravity's turn and sends your new message.
+
+**Something breaks after Antigravity got your message.** For example, the Antigravity program stops. Pi does not send the message again by itself, because Pi cannot know what Antigravity already did. Send it again yourself if you need to.
+
+When Pi gives old messages to a new chat, it sends only the newest 24,000 characters. Each tool result in them is cut to 600 characters.
+
+## Settings
+
+You add these when you start Pi.
+
+| Setting              | What it does                                                                                           |
+| -------------------- | ------------------------------------------------------------------------------------------------------ |
+| `--agy-agent <name>` | Picks which Antigravity to use. Read the next table.                                                   |
+| `--agy-mode <mode>`  | Picks the mode for new Antigravity chats.                                                              |
+| `--agy-dir <dirs>`   | Lets Antigravity work in more folders. Separate them the way `PATH` does, with `:` on macOS and Linux. |
+| `--agy-mcp`          | Gives Antigravity the MCP servers you set up in Pi. Read [MCP servers](#mcp-servers) below.            |
+
+| `--agy-agent` | Which Antigravity                                                              |
+| ------------- | ------------------------------------------------------------------------------ |
+| `auto`        | `agy` if Pi can find it, otherwise the one Zed installed. This is the default. |
+| `cli`         | `agy acp`. Its chats are saved with your other `agy` chats.                    |
+| `registry`    | The one Zed installed.                                                         |
+
+The one Zed installed works a little differently.
+
+- It reads and writes files through Pi.
+- Its modes are `default`, `auto_edit` and `yolo`.
+- It makes a `skills/system/` folder in your project.
+- It gives chats no titles, and it has no `/compact`.
+
+You set everything else inside Antigravity. That includes models, quota, MCP servers and rules.
+
+Pi saves Antigravity's list of models, modes and commands in `antigravity/catalog.json` in Pi's agent folder. Then the model list is ready before Antigravity starts. You can delete that file. Pi makes it again.
+
+### MCP servers
+
+An MCP server gives an AI more tools. With `--agy-mcp`, Pi passes its MCP servers to Antigravity. `agy` takes only servers that run as a local program.
+
+Pi skips a server it cannot pass on, and it tells you which one and why. Pi skips a server in these cases.
+
+- It needs an OAuth sign-in, or a value that starts with `!`.
+- It uses a `${VAR}` that is not set, or it sets `cwd`.
+- It uses SSE.
+- Pi does not allow its name, or Pi hides it or its tools.
+- It is an HTTP server, and this Antigravity takes no HTTP servers.
+
+If you signed in to an HTTP server with `/mcp`, Antigravity gets that server without your sign-in. Servers that other Pi extensions add are not passed on, because Pi has no way to read them.
+
+## Where it was tested
+
+- Tested by hand on macOS with Pi 1.6.1 and `agy` 1.5.17.
+- The one Zed installed, version 1.5.2, was also tested by hand.
+- It uses ACP version 1 through `@agentclientprotocol/sdk` 2.12.0.
+- The automatic tests also pass on Linux. Nobody has tried it on Linux or Windows with the real Antigravity.
+
+## If something goes wrong
+
+| You see                                                       | What to do                                                                                                  |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| "agy … not found on PATH"                                     | Install the Antigravity command-line program. Or, if Zed installed Antigravity, add `--agy-agent registry`. |
+| "Antigravity needs you to sign in"                            | Run `agy` in a terminal and sign in.                                                                        |
+| An answer that says "Individual quota reached"                | Your account used up its quota. The message says when it comes back. Another model may still have quota.    |
+| `Model "…" not found for provider "antigravity"` at the start | Pi has not seen that model yet. Start once with `antigravity/default`, so Pi learns the model list.         |
+| "Antigravity does not offer … right now"                      | Your account cannot use that model now. Pick another one with `/model`.                                     |
+| Tool steps show up as messages, not rows                      | `--tools` or `--no-tools` turned off the `antigravity_tool` tool. Pi needs it for the rows.                 |
+| "Summaries and other background requests are not available"   | Something in Pi asked these models for a summary. Antigravity keeps its own memory, so Pi says no.          |
+
+## What it cannot do
+
+- **Pi's tools do not run.** Antigravity uses its own tools. Pi's tools, skills, context files and tool hooks do nothing for these models.
+- **Pi does not shrink the chat.** Antigravity keeps its own memory. Use `/agy compact` to shrink it.
+- **Files stay inside your folders.** When Antigravity writes files through Pi, Pi writes only in your project folder and the folders you gave with `--agy-dir`.
+- **Helpers of the helper show up as normal steps.** `agy` 1.5.17 shows the work of its smaller helpers, called subagents, as ordinary tool rows.
+- **Old chats come back as text.** `/agy sessions` brings back the words of an old chat, not its tool steps.
+- **Google decides the rest.** Quota, which models you can use and your account rules come from Antigravity and Google.
+
+[PARITY.md](PARITY.md) lists every feature, if it works, and how it was checked.
+
+## For people who change the code
+
+These commands check your work.
 
 ```sh
 bun install --frozen-lockfile
-bun run check            # formatter, oxlint, tsrs, vitest with a per-file 80% coverage gate
-bun run bench            # the extension's own overhead against the bare ACP SDK
-bun run verify:package   # pack, install with pi install, prompt, restart and continue, shut down
-bun run pack             # npm pack: pi-antigravity-acp-<version>.tgz
+bun run check            # format, lint, type check, and tests that must cover 80% of each file
+bun run bench            # how much time this package adds compared with plain ACP
+bun run verify:package   # pack it, install it in Pi, chat, restart, continue, and close
+bun run pack             # make pi-antigravity-acp-<version>.tgz
 ```
 
-The tests run without a Google account: a scripted ACP agent stands in for `agy`, both in memory and as a process on `PATH` under a real Pi session.
+The tests do not need a Google account. A pretend Antigravity answers them instead.
 
-Live checks use your signed-in agent and normal quota. They drive real Pi in RPC mode through a greeting, model and thinking-level selection, a question about which harness it runs in, a file read, an allowed edit, a denied command, a follow-up, a mode change, the context meter, an abort, `/agy compact`, reopening a saved session after restarting Pi, then `--agy-dir`, an image, a command's output in its tool row, the session title, a plan, `/agy sessions` and a structured question from the agent:
+The live checks use your real Antigravity and your real quota. `live-acp.py` takes about ten minutes. They drive a real Pi through chats, models, thinking levels, files, edits, commands, modes, plans, questions, restarts and more.
 
 ```sh
-python3 tests/live-acp.py            # agy acp; its sessions go to ~/.gemini/antigravity-scratch
-python3 tests/live-acp.py registry   # the agent Zed installed; sessions join that agent's history
-python3 tests/live-probe.py          # which ACP features agy uses when a client offers them
+python3 tests/live-acp.py            # uses agy acp. Its chats go to ~/.gemini/antigravity-scratch.
+python3 tests/live-acp.py registry   # uses the one Zed installed. Its chats join that one's history.
+python3 tests/live-probe.py          # finds out which ACP features agy uses
 ```
 
-## Continuous integration and releases
+## How checks and new versions work
 
-Three workflows in `.github/workflows` run on GitHub-hosted runners:
+GitHub runs three jobs for this repository by itself.
 
-- `ci.yml` runs on every pull request. The `Lint` job runs the format check, oxlint, tsrs and a compile check of the live scripts, which need a signed-in agent and so do not run in CI. The `Test` jobs run the tests with the coverage gate and `verify:package` on Node 22.19.0, 24 and 26, with the Pi that `bun install` puts in `node_modules`.
-- `release.yml` runs on every push to `main`. It runs the same checks, then compares `version` in `package.json` with npm. If npm does not have that version, the workflow publishes the package with provenance, then creates the tag `v<version>` and its GitHub release, with generated notes, at the published commit.
-- `verify-lockfile.yml` runs on pull requests and on pushes to `main`. It fails when `.github/workflows/actions.lock` no longer matches the workflows or the commits it pins.
+| File                  | When it runs                   | What it does                                                                                                   |
+| --------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `ci.yml`              | On every pull request          | Checks format, lint and types. Runs the tests and `verify:package` on Node 22.19.0, 24 and 26.                 |
+| `release.yml`         | On every push to `main`        | Runs the same checks. Then, if npm does not have this version yet, it publishes it and makes a GitHub release. |
+| `verify-lockfile.yml` | On pull requests and on `main` | Checks that `actions.lock` still matches the workflows.                                                        |
 
-To release, change `version` in `package.json` in a pull request and merge it. Do not create the tag or the release by hand: the workflow never touches an existing tag, and it stops before publishing when the tag exists and npm does not have the version. If a run fails after npm accepted the version, use **Re-run all jobs**; the run then skips publishing and creates the missing tag and release.
+The live checks need a signed-in Antigravity, so GitHub only checks that they are valid Python.
 
-Publishing uses an npm [trusted publisher](https://docs.npmjs.com/trusted-publishers) for this repository, with the workflow `release.yml` and the environment `npm`, so no secret is involved. The `npm` environment only allows deployments from `main`.
+To make a new version, follow these steps.
 
-`actions.lock` pins every action the workflows use to a commit. After you add or change a `uses:` line, run `gh actions-lock` and commit the result. Dependabot proposes new releases of the actions each week. CI installs Bun 1.4.5, the release the files were formatted with; change `BUN_VERSION` in `ci.yml` when you format with a newer Bun.
+1. Change `version` in `package.json` in a pull request.
+2. Merge the pull request.
+
+Do not make the tag or the release by hand. The release job never changes a tag that already exists. It stops if the tag exists but npm does not have the version.
+
+If the release job fails after npm took the version, press **Re-run all jobs**. The job then skips npm and makes the missing tag and release.
+
+npm trusts this repository's `release.yml` and its `npm` environment, so no secret is needed. Only `main` can publish.
+
+`actions.lock` pins each GitHub action to one exact commit. When you add or change a `uses:` line, run `gh actions-lock` and commit the result. Dependabot suggests new action versions once a week.
+
+GitHub formats with Bun 1.4.5. If you format with a newer Bun, change `BUN_VERSION` in `ci.yml` too.
