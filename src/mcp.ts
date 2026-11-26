@@ -73,6 +73,8 @@ const entrySchema = z.looseObject({
   enabled: z.unknown().optional(),
   type: z.unknown().optional(),
   url: z.unknown().optional(),
+  exposure: z.unknown().optional(),
+  toolExposure: z.record(z.string(), z.unknown()).optional().catch(undefined),
 });
 const pairsSchema = z.record(z.string(), z.string()).default({});
 const httpSchema = z.object({
@@ -94,6 +96,10 @@ function convert(name: string, raw: unknown, env: Env): McpServer | string | und
   const entry = entrySchema.safeParse(raw);
   if (!entry.success) return NOT_AN_ENTRY;
   if (entry.data.enabled === false) return undefined;
+  // ACP passes a server whole, so tools Pi keeps out of reach would reach the agent.
+  if (entry.data.exposure === "hidden") return "Pi keeps it hidden";
+  if (Object.values(entry.data.toolExposure ?? {}).includes("hidden"))
+    return "Pi hides some of its tools, which ACP cannot pass on";
   if (entry.data.type === "sse") return "the SSE transport is not supported";
   return typeof entry.data.url === "string"
     ? httpServer(name, raw, env)

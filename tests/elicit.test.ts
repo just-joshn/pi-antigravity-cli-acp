@@ -374,3 +374,12 @@ test("an empty choice name does not match the separators between answers", async
     content: { colors: ["red", "red"] },
   });
 });
+
+test("text length counts characters as the form schema does, not UTF-16 units", async () => {
+  const face = { type: "string", title: "Face", minLength: 1, maxLength: 1 };
+  const { dialogs } = scripted(["Answer", "😀"]);
+  expect(await answerElicitation(form({ face }, ["face"]), dialogs, signal)).toStrictEqual({
+    action: "accept",
+    content: { face: "😀" },
+  });
+});

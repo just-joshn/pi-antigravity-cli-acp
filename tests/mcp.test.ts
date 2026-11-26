@@ -128,3 +128,23 @@ test("a project override may only switch a user's server off or on, as in Pi", a
     { name: "files", command: "/bin/fs", args: [], env: [{ name: "TOKEN", value: "user" }] },
   ]);
 });
+
+test("a server Pi keeps hidden, or that hides some of its tools, is not passed on", async () => {
+  const s = await scratch();
+  await s.user({
+    secret: { command: "/bin/secret", exposure: "hidden" },
+    partly: { command: "/bin/partly", toolExposure: { "delete_*": "hidden" } },
+    open: { command: "/bin/open", exposure: "direct", toolExposure: { read: "direct" } },
+  });
+  const read = readPiMcpServers({
+    agentDir: s.agentDir,
+    cwd: s.cwd,
+    projectTrusted: false,
+    env: {},
+  });
+  expect(read.servers.map((server) => server.name)).toStrictEqual(["open"]);
+  expect(read.skipped).toStrictEqual([
+    "secret: Pi keeps it hidden",
+    "partly: Pi hides some of its tools, which ACP cannot pass on",
+  ]);
+});
