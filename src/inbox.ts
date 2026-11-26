@@ -92,7 +92,8 @@ export class Inbox {
     const held = this.#early.get(sessionId) ?? [];
     if (held.length >= EARLY_UPDATE_LIMIT) return;
     const refreshed = put(without(this.#early, sessionId), sessionId, [...held, update]);
-    // A Map keeps insertion order, so the first entry is the session held longest.
+    // A Map keeps insertion order and each update re-inserts its session, so the first entry is the
+    // session updated least recently.
     this.#early =
       refreshed.size > EARLY_SESSION_LIMIT ? new Map([...refreshed].slice(1)) : refreshed;
   }

@@ -61,7 +61,8 @@ export function learn(catalog: Catalog, session: AcpSession): Catalog {
   const known = new Map(catalog.models.map((m) => [m.id, m.efforts]));
   const listed = levelsByModel(session.variants);
   // The config options give levels for the selected model only. For the others, read them off the
-  // per-level model ids when the agent lists those; otherwise assume the selected model's levels.
+  // per-level model ids when the agent lists those; otherwise keep what the catalog last knew for
+  // that model, or assume the selected model's levels for one it has not seen.
   const others = (id: string) =>
     session.variants.length ? (listed.get(id) ?? []) : (known.get(id) ?? efforts);
   const models = session.choices("model").map((c) => ({
