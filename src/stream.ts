@@ -159,9 +159,9 @@ function promptBlocks(plan: TurnPlan, accepts: Conversation["accepts"]): Content
   const context: ContentBlock[] = !history
     ? []
     : [accepts.embeddedContext ? { type: "resource", resource } : { type: "text", text: history }];
-  const prompt = plan.prompt.flatMap((message) =>
+  const prompt = plan.prompt.flatMap((message): ContentBlock[] =>
     typeof message.content === "string"
-      ? [agentBlock({ type: "text", text: message.content }, accepts)]
+      ? [{ type: "text", text: message.content }]
       : message.content.map((block) => agentBlock(block, accepts)),
   );
   return [...context, ...prompt];

@@ -15,7 +15,7 @@ import { noUsage } from "../src/draft.ts";
 import { createStream, haltTurn, TURN_LOST } from "../src/stream.ts";
 import { runMirror, TOOL_NAME } from "../src/tool.ts";
 import { defaultModels, type FakeAgentOptions } from "./support/fake-agent.ts";
-import { connect, resolvable } from "./support/harness.ts";
+import { connect } from "./support/harness.ts";
 import { said } from "./support/pi.ts";
 import { allow, readCall, type Step } from "./support/playback.ts";
 import { answering, recorder } from "./support/record.ts";
@@ -343,7 +343,7 @@ test("aborting from Pi cancels the agent's turn and the conversation stays usabl
   });
   const abort = new AbortController();
   c.add({ role: "user", content: "start", timestamp: 1 });
-  const streaming = resolvable();
+  const streaming = Promise.withResolvers<void>();
   const running = c.step(modelA, { signal: abort.signal }, (event) => {
     if (event.type === "text_delta") streaming.resolve();
   });
@@ -392,7 +392,7 @@ test("history the agent has not seen is supplied as context; a rewound transcrip
 });
 
 test("an agent that ignores cancellation is abandoned, not prompted again while it works", async () => {
-  const never = resolvable();
+  const never = Promise.withResolvers<void>();
   onTestFinished(() => never.resolve());
   const c = await chat(
     {
@@ -403,7 +403,7 @@ test("an agent that ignores cancellation is abandoned, not prompted again while 
   );
   const abort = new AbortController();
   c.add({ role: "user", content: "start", timestamp: 1 });
-  const streaming = resolvable();
+  const streaming = Promise.withResolvers<void>();
   const running = c.step(modelA, { signal: abort.signal }, (event) => {
     if (event.type === "text_delta") streaming.resolve();
   });
@@ -497,7 +497,7 @@ test("agent failures, refusals, truncation and unsupported images surface as Pi 
 });
 
 test("a mirrored call that Pi aborts, or that the agent never made, is reported as such", async () => {
-  const gate = resolvable();
+  const gate = Promise.withResolvers<void>();
   const c = await chat({ script: () => [{ tool: readCall }, { hold: gate.promise }] });
   c.add({ role: "user", content: "go", timestamp: 1 });
   const { message } = await c.step();

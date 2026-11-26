@@ -3,7 +3,7 @@ import { expect, test } from "vitest";
 
 import { noSuchMode } from "../src/antigravity.ts";
 import { AcpSession, type AgentPort, Turn } from "../src/session.ts";
-import { initialSession, quietHooks, resolvable } from "./support/harness.ts";
+import { initialSession, quietHooks } from "./support/harness.ts";
 import { allow, deny } from "./support/playback.ts";
 
 const port: AgentPort = {
@@ -51,7 +51,7 @@ test("a permission question with no options, or no deny option, is cancelled unl
 });
 
 test("a permission request cannot finish its tool call before the user answers", async () => {
-  const answer = resolvable<PermissionOption | undefined>();
+  const answer = Promise.withResolvers<PermissionOption | undefined>();
   const session = new AcpSession("s", initialSession, port, {
     ...quietHooks,
     askPermission: () => answer.promise,

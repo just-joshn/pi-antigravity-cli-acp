@@ -10,7 +10,7 @@ pi-antigravity-acp makes Pi an ACP client of the Antigravity agent. This page ex
 | Pi                      | The terminal UI, the transcript the user sees, model selection, dialogs and the session files.                                       |
 | This extension          | The ACP connection, the agent process, the mapping between a Pi session and an agent session, and showing agent activity in Pi's UI. |
 
-The extension registers an `antigravity` provider, because Pi's model picker, thinking levels and streaming only exist for providers. It does not treat the agent as a model API: it sends the user's new message, plus earlier conversation as context only when the agent session has not seen it, never Pi's system prompt or tools, and Pi never executes the agent's tools. The agent runs one turn per prompt; Pi's agent loop only displays it.
+The extension registers an `antigravity` provider, because Pi's model picker, thinking levels and streaming only exist for providers. It does not treat the agent as a model API: it sends the user's new message, plus earlier conversation as context only when the agent session has not seen it, never Pi's system prompt or tools. Pi never runs the agent's own tools; it only serves the file reads, writes and commands the agent asks of it as an ACP client. The agent runs one turn per prompt; Pi's agent loop only displays it.
 
 ## Modules
 

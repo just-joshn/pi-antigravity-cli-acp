@@ -36,21 +36,19 @@ interface Running {
   readonly exited: Promise<TerminalExitStatus>;
 }
 
-/** Keeps the last `limit` bytes of `text`, cut at a character boundary. */
-function keepEnd(text: string, limit: number): { text: string; cut: boolean } {
+/** The last `limit` bytes of `text`, which is longer, cut at a character boundary. */
+function keepEnd(text: string, limit: number): string {
   const bytes = Buffer.from(text, "utf8");
-  if (bytes.length <= limit) return { text, cut: false };
   let start = bytes.length - limit;
   // Continuation bytes are 10xxxxxx; a character starts at the first byte that is not one.
   while (start < bytes.length && ((bytes[start] ?? 0) & 0xc0) === 0x80) start += 1;
-  return { text: bytes.subarray(start).toString("utf8"), cut: true };
+  return bytes.subarray(start).toString("utf8");
 }
 
 function trimmed(running: Running): Running {
   if (running.bytes <= running.limit) return running;
-  const kept = keepEnd(running.output, running.limit);
-  const bytes = Buffer.byteLength(kept.text);
-  return { ...running, output: kept.text, bytes, truncated: running.truncated || kept.cut };
+  const output = keepEnd(running.output, running.limit);
+  return { ...running, output, bytes: Buffer.byteLength(output), truncated: true };
 }
 
 /** Signals the command and everything it started, where the platform allows. */

@@ -70,12 +70,8 @@ async function fillForm(
       ? { key, title: describe(key, property), schema: property, required: required.includes(key) }
       : undefined,
   );
-  if (fields.some((field) => field === undefined)) return DECLINE;
-  const answers = await askAll(
-    fields.filter((field) => field !== undefined),
-    dialogs,
-    signal,
-  );
+  if (!fields.every((field) => field !== undefined)) return DECLINE;
+  const answers = await askAll(fields, dialogs, signal);
   if (answers === "cancel") return CANCEL;
   if (answers === "unsupported") return DECLINE;
   // fromEntries defines each key as its own field, even one named __proto__.

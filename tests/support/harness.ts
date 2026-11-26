@@ -14,12 +14,6 @@ export const quietHooks: SessionHooks = {
   changed: () => {},
 };
 
-/** A promise the test settles by hand, with a value when it has one. */
-export function resolvable<T = void>() {
-  const { promise, resolve } = Promise.withResolvers<T>();
-  return { promise, resolve };
-}
-
 /** What a new AcpSession starts with in tests that build one by hand. */
 export const initialSession = {
   options: [],

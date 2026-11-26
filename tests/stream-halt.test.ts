@@ -4,7 +4,7 @@ import { expect, test } from "vitest";
 import { noUsage } from "../src/draft.ts";
 import { AcpSession, type AgentPort } from "../src/session.ts";
 import { haltTurn, NOT_RESENT } from "../src/stream.ts";
-import { initialSession, quietHooks, resolvable } from "./support/harness.ts";
+import { initialSession, quietHooks } from "./support/harness.ts";
 
 /** An agent that never answers a prompt and whose connection is gone. */
 const gone: AgentPort = {
@@ -14,7 +14,7 @@ const gone: AgentPort = {
 };
 
 test("stopping a turn sends one cancel for concurrent callers and clears the turn", async () => {
-  const prompt = resolvable<{ stopReason: "cancelled" }>();
+  const prompt = Promise.withResolvers<{ stopReason: "cancelled" }>();
   let cancels = 0;
   const responsive: AgentPort = {
     prompt: () => prompt.promise,
@@ -43,8 +43,8 @@ test("stopping a turn of an agent that is gone reports it unconfirmed without th
 });
 
 test("an open permission dialog is withdrawn when its turn ends", async () => {
-  const reply = resolvable<{ stopReason: "end_turn" }>();
-  const answer = resolvable<undefined>();
+  const reply = Promise.withResolvers<{ stopReason: "end_turn" }>();
+  const answer = Promise.withResolvers<undefined>();
   let withdrawn = false;
   const asking = new AcpSession(
     "a",
