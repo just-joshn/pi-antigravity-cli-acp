@@ -1,6 +1,7 @@
 import { constants } from "node:fs";
 import { mkdir, open, realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
+import { buffer } from "node:stream/consumers";
 
 import {
   type ReadTextFileRequest,
@@ -20,6 +21,10 @@ function codeOf(error: unknown): string {
 
 function requireAbsolute(path: string) {
   if (!isAbsolute(path)) throw RequestError.invalidParams(undefined, "path must be absolute");
+}
+
+function tooLarge(path: string) {
+  return RequestError.invalidParams(undefined, `${path} is larger than ${READ_LIMIT_MIB} MiB`);
 }
 
 function notRegular(path: string) {
@@ -42,11 +47,15 @@ async function readChecked(path: string): Promise<string> {
   try {
     const info = await file.stat();
     if (!info.isFile() && !info.isDirectory()) throw notRegular(path);
-    if (info.size > READ_LIMIT_MIB * MIB)
-      throw RequestError.invalidParams(undefined, `${path} is larger than ${READ_LIMIT_MIB} MiB`);
-    return await file.readFile("utf8").catch((error: unknown) => {
+    if (info.size > READ_LIMIT_MIB * MIB) throw tooLarge(path);
+    // At most one byte past the limit is read, so a file that grows after the check is refused too.
+    const bytes = await buffer(
+      file.createReadStream({ end: READ_LIMIT_MIB * MIB, autoClose: false }),
+    ).catch((error: unknown) => {
       throw RequestError.internalError(undefined, `${path} could not be read (${codeOf(error)})`);
     });
+    if (bytes.length > READ_LIMIT_MIB * MIB) throw tooLarge(path);
+    return bytes.toString("utf8");
   } finally {
     await file.close();
   }

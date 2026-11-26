@@ -314,7 +314,7 @@ class FakeAgent {
     const { sessionId } = request;
     const { loads, loadRequests } = this.#log;
     this.#note({ loads: [...loads, sessionId], loadRequests: [...loadRequests, request] });
-    const prompts = this.#history[sessionId];
+    const prompts = Object.hasOwn(this.#history, sessionId) ? this.#history[sessionId] : undefined;
     if (!prompts) throw RequestError.resourceNotFound(sessionId);
     await replay(client, sessionId, prompts);
     return this.#open(sessionId, client);

@@ -315,3 +315,9 @@ test("a new session never takes the id of a saved one", async () => {
   expect(session.id).not.toBe("s1");
   expect((await client.readTranscript("s1", { cwd: "/work" }))?.[0]?.user).toBe("kept");
 });
+
+test("a saved session named like an object property is not found, not replayed", async () => {
+  const { client, close } = await connect({ script: () => [] });
+  onTestFinished(close);
+  expect(await client.loadSession("toString", { cwd: "/work" })).toBeUndefined();
+});

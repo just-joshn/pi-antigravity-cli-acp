@@ -6,6 +6,7 @@ import type {
 
 import { type Antigravity, noSuchMode } from "./antigravity.ts";
 import { AcpError, reasonOf } from "./client.ts";
+import { uniqueLabels } from "./labels.ts";
 import { pick } from "./pick.ts";
 import { openSaved } from "./sessions.ts";
 import { signIn } from "./sign-in.ts";
@@ -19,7 +20,10 @@ async function chooseMode(link: Antigravity, requested: string | undefined, ctx:
   const modes = session.choices("mode");
   let id = requested;
   if (id === undefined) {
-    const labels = modes.map((mode) => `${mode.value} — ${mode.description ?? mode.name}`);
+    const labels = uniqueLabels(
+      modes.map((mode) => `${mode.value} — ${mode.description ?? mode.name}`),
+      (label, n) => `${label} (${n})`,
+    );
     const picked = ctx.hasUI
       ? await pick(ctx.ui, "Antigravity permission mode", modes, labels)
       : undefined;

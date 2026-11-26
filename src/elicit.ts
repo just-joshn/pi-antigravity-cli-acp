@@ -221,6 +221,26 @@ function toNumber(text: string, schema: Record<string, unknown>, integer: boolea
   return parsedWith(atMost, text);
 }
 
+/** The string formats of the ACP form schema, each with how a wrong answer is described. */
+const FORMATS: Readonly<Record<string, z.ZodType<string, string>>> = {
+  email: z.email({ error: "an email address" }),
+  uri: z.url({ error: "a URL" }),
+  date: z.iso.date({ error: "a date such as 2026-11-25" }),
+  "date-time": z.iso.datetime({ error: "a date and time such as 2026-11-25T10:00:00Z" }),
+};
+
+/** The form's pattern as a regular expression, or undefined when it has none it can use. */
+function patternOf(schema: Record<string, unknown>): RegExp | undefined {
+  const { pattern } = schema;
+  if (typeof pattern !== "string") return undefined;
+  try {
+    return new RegExp(pattern, "u");
+  } catch {
+    // A pattern JavaScript cannot read is not checked; the agent checks the answer itself.
+    return undefined;
+  }
+}
+
 function toText(text: string, schema: Record<string, unknown>): Parsed {
   const [minLength, maxLength] = [boundOf(schema["minLength"]), boundOf(schema["maxLength"])];
   const string = z.string();
@@ -232,7 +252,14 @@ function toText(text: string, schema: Record<string, unknown>): Parsed {
     maxLength === undefined
       ? atLeast
       : atLeast.max(maxLength, { error: `at most ${maxLength} characters` });
-  return parsedWith(atMost, text);
+  const pattern = patternOf(schema);
+  const shaped =
+    pattern === undefined
+      ? atMost
+      : atMost.regex(pattern, { error: `in the form ${String(schema["pattern"])}` });
+  const format = typeof schema["format"] === "string" ? schema["format"] : "";
+  const known = Object.hasOwn(FORMATS, format) ? FORMATS[format] : undefined;
+  return parsedWith(known ? shaped.pipe(known) : shaped, text);
 }
 
 type Listed = readonly { value: string; label: string }[];
@@ -244,7 +271,6 @@ type Listed = readonly { value: string; label: string }[];
 function readChoices(text: string, listed: Listed): (string | undefined)[] {
   const rest = text.trim();
   if (rest === "") return [];
-  if (rest.startsWith(",")) return readChoices(rest.slice(1), listed);
   // A label the user sees wins over another choice's value when both are spelled the same.
   const named = [
     ...listed.map(({ value, label }) => ({ name: label, value })),
@@ -256,6 +282,8 @@ function readChoices(text: string, listed: Listed): (string | undefined)[] {
     .toSorted((a, b) => b.name.length - a.name.length);
   // toSorted is stable, so among names of the same length the labels, listed first, stay first.
   if (best) return [best.value, ...readChoices(after(best.name), listed)];
+  // Commas with no name between them are skipped in one step, however many there are.
+  if (rest.startsWith(",")) return readChoices(rest.replace(/^[\s,]+/, ""), listed);
   const comma = rest.indexOf(",");
   return [undefined, ...(comma < 0 ? [] : readChoices(rest.slice(comma), listed))];
 }

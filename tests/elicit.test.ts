@@ -324,3 +324,35 @@ test("a typed name matching one choice's label and another's value picks the lab
     content: { letters: ["c"] },
   });
 });
+
+test("a typed answer must match the form's pattern and format", async () => {
+  const digits = { type: "string", title: "Code", pattern: "^[0-9]+$" };
+  const email = { type: "string", title: "Mail", format: "email" };
+  const { dialogs, shown } = scripted(["Answer", "abc", "42", "nope", "a@b.co"]);
+  expect(
+    await answerElicitation(form({ digits, email }, ["digits", "email"]), dialogs, signal),
+  ).toStrictEqual({
+    action: "accept",
+    content: { digits: "42", email: "a@b.co" },
+  });
+  expect(shown()).toContain("Code (try again: in the form ^[0-9]+$)");
+  expect(shown()).toContain("Mail (try again: an email address)");
+});
+
+test("a choice starting with a comma can be picked, and a run of commas is read as nothing", async () => {
+  const marks = { type: "array", title: "Marks", items: { enum: [",red", "blue"] } };
+  const picked = scripted(["Answer", ",red, blue"]);
+  expect(await answerElicitation(form({ marks }, ["marks"]), picked.dialogs, signal)).toStrictEqual(
+    {
+      action: "accept",
+      content: { marks: [",red", "blue"] },
+    },
+  );
+  const commas = scripted(["Answer", `${",".repeat(50_000)} blue`]);
+  expect(await answerElicitation(form({ marks }, ["marks"]), commas.dialogs, signal)).toStrictEqual(
+    {
+      action: "accept",
+      content: { marks: ["blue"] },
+    },
+  );
+});
