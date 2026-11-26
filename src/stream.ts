@@ -7,6 +7,7 @@ import {
   type Model,
   type StopReason,
   type StreamOptions,
+  type ThinkingLevel,
   type TranscriptContext,
   type UserMessage,
 } from "@earendil-works/pi-ai";
@@ -70,9 +71,8 @@ export interface TurnPlan {
 export function planTurn(messages: Message[], anchor: string | undefined): TurnPlan {
   const { index: ours, anchor: seen } = lastAnchor(messages);
   const diverged = seen !== anchor;
-  let cut = messages.length;
-  while (cut > 0 && messages[cut - 1]?.role === "user") cut--;
-  const prompt = messages.slice(cut).filter((m) => m.role === "user");
+  const prompt = pendingPrompt(messages);
+  const cut = messages.length - prompt.length;
   const last = diverged ? undefined : messages[ours];
   const answered = new Set(
     last?.role === "assistant"
@@ -83,6 +83,13 @@ export function planTurn(messages: Message[], anchor: string | undefined): TurnP
     .slice(diverged ? 0 : ours + 1, cut)
     .filter((m) => m.role !== "system" && !(m.role === "toolResult" && answered.has(m.toolCallId)));
   return { diverged, missed, prompt };
+}
+
+/** The user messages at the end of the transcript, which no reply has answered yet. */
+function pendingPrompt(messages: Message[]): UserMessage[] {
+  let cut = messages.length;
+  while (cut > 0 && messages[cut - 1]?.role === "user") cut--;
+  return messages.slice(cut).filter((m) => m.role === "user");
 }
 
 /** The last assistant message this provider wrote, and the agent session position it carries. */
@@ -152,7 +159,11 @@ function promptBlocks(plan: TurnPlan, accepts: Conversation["accepts"]): Content
   return blocks;
 }
 
-async function applyChoices(session: AcpSession, model: Model<string>, level: string | undefined) {
+async function applyChoices(
+  session: AcpSession,
+  model: Model<string>,
+  level: ThinkingLevel | undefined,
+) {
   if (model.id !== AGENT_DEFAULT && (await session.select("model", model.id)) === "unavailable")
     throw new AcpError(
       `Antigravity does not offer ${model.id} right now. Choose another model with /model.`,
@@ -202,7 +213,7 @@ const STOP: Record<Extract<TurnEvent, { type: "end" }>["stopReason"], StopReason
 
 class Aborted extends Error {}
 
-type Request = StreamOptions & { reasoning?: string };
+type Request = StreamOptions & { reasoning?: ThinkingLevel };
 type EndEvent = Extract<TurnEvent, { type: "end" | "failed" }>;
 
 const OUTSIDE_CONVERSATION =
@@ -254,7 +265,7 @@ class Reply {
     signal?.throwIfAborted();
     if (!this.#host.conversing(sessionId)) throw new AcpError(OUTSIDE_CONVERSATION);
     // An automatic retry would give the agent the same message twice, repeating whatever it did.
-    const pending = planTurn(this.#context.messages, undefined).prompt;
+    const pending = pendingPrompt(this.#context.messages);
     if (pending.some((message) => this.#unfinished.get(messageKey(message))))
       throw new AcpError(NOT_RESENT);
     const seen = lastAnchor(this.#context.messages).anchor;

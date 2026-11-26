@@ -11,7 +11,7 @@ import { isRecord } from "./guards.ts";
 /** Which Antigravity ACP server to run. */
 export type AgentChoice = "auto" | "cli" | "registry";
 
-export interface AgentCommand {
+export interface AgentLaunch {
   /** `cli`: the Antigravity CLI's `agy acp`. `registry`: the ACP registry agent an editor installed. */
   kind: "cli" | "registry";
   command: string;
@@ -66,25 +66,31 @@ function registryCommand(
   }
 }
 
+type Version = readonly [number, number, number];
+
+/** The version in an installed agent's directory name, such as `v_1.5.17`. */
+function versionOf(directory: string): Version | undefined {
+  const match = /^v_(\d+)\.(\d+)\.(\d+)/.exec(directory);
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : undefined;
+}
+
+/** The directory with the newer version; both must have one. */
 function newer(a: string, b: string): string {
   const [x, y] = [versionOf(a), versionOf(b)];
-  const order = (x[0] ?? 0) - (y[0] ?? 0) || (x[1] ?? 0) - (y[1] ?? 0) || (x[2] ?? 0) - (y[2] ?? 0);
+  if (!x || !y) return x ? a : b;
+  const order = x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
   return order > 0 ? a : b;
 }
 
-function versionOf(directory: string): number[] {
-  return (/^v_(\d+)\.(\d+)\.(\d+)/.exec(directory) ?? []).slice(1).map(Number);
-}
-
 /** The newest registry-installed Antigravity agent under `root`, if any. */
-export function findRegistryAgent(root: string, platform: string): AgentCommand | undefined {
+export function findRegistryAgent(root: string, platform: string): AgentLaunch | undefined {
   let installed: string[];
   try {
     installed = readdirSync(join(root, REGISTRY_ID));
   } catch {
     return undefined;
   }
-  const [first, ...rest] = installed.filter((name) => versionOf(name).length === 3);
+  const [first, ...rest] = installed.filter((name) => versionOf(name) !== undefined);
   if (first === undefined) return undefined;
   const newest = rest.reduce(newer, first);
   const listed = registryCommand(root, platform);
@@ -105,12 +111,12 @@ export function resolveAgent(
   env: Env = process.env,
   platform: string = process.platform,
   arch: string = process.arch,
-): AgentCommand {
-  const cli = (): AgentCommand | undefined =>
+): AgentLaunch {
+  const cli = (): AgentLaunch | undefined =>
     onPath("agy", env) ? { kind: "cli", command: "agy", args: ["acp"] } : undefined;
   const registry = () =>
     findRegistryAgent(registryRoot(env, platform), platformKey(platform, arch));
-  let agent: AgentCommand | undefined;
+  let agent: AgentLaunch | undefined;
   if (choice === "cli") agent = cli();
   else if (choice === "registry") agent = registry();
   else agent = cli() ?? registry();
@@ -128,7 +134,7 @@ export interface RunningAgent {
 }
 
 /** Starts the agent process and exposes its stdio as an ACP stream. */
-export function launch(agent: AgentCommand, cwd: string, env: Env = process.env): RunningAgent {
+export function launch(agent: AgentLaunch, cwd: string, env: Env = process.env): RunningAgent {
   const child = spawn(agent.command, agent.args, { cwd, env, stdio: ["pipe", "pipe", "ignore"] });
   // A failed spawn also closes the pipes, which ends the ACP connection with an error.
   child.once("error", () => {});

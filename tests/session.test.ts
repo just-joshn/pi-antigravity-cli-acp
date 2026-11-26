@@ -34,6 +34,9 @@ test("a permission answer must be one of the agent's options; otherwise its deny
   expect(await ask(answering(allow), [allow, deny])).toStrictEqual({
     outcome: { outcome: "selected", optionId: "allow" },
   });
+  expect(await ask(answering({ ...allow }), [allow, deny]), "matched by option id").toStrictEqual({
+    outcome: { outcome: "selected", optionId: "allow" },
+  });
   const stranger = { ...allow, optionId: "other" };
   expect(await ask(answering(stranger), [allow, deny])).toStrictEqual({
     outcome: { outcome: "selected", optionId: "deny" },

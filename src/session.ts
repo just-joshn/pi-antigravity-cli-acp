@@ -403,9 +403,8 @@ export class AcpSession {
       .catch(() => undefined);
     if (signal.aborted) return { outcome: { outcome: "cancelled" } };
     const picked =
-      choice !== undefined && request.options.includes(choice)
-        ? choice
-        : request.options.find((o) => o.kind === "reject_once");
+      request.options.find((o) => o.optionId === choice?.optionId) ??
+      request.options.find((o) => o.kind === "reject_once");
     const latest = this.#tools.get(tool.id) ?? tool;
     this.#publish({
       ...latest,

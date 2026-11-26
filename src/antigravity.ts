@@ -323,7 +323,7 @@ export class Antigravity {
     const { where, notes } = workspaceFor(this.#pi, pane?.cwd ?? process.cwd(), trusted);
     for (const note of notes) this.#pane?.ui.notify(note, "warning");
     for (const server of where.mcpServers ?? [])
-      if ("type" in server && !connected.offers.mcpHttp)
+      if (!connected.takes(server))
         this.#pane?.ui.notify(
           `MCP server ${server.name}: this agent takes no HTTP servers; it does not get it.`,
           "warning",

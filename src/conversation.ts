@@ -4,6 +4,11 @@ import { put } from "./immutable.ts";
 import type { AcpSession, ToolView, Turn } from "./session.ts";
 
 /** Where a saved assistant message left an agent session: `<session id>/<turns>.<segment>`. */
+export function anchorFor(sessionId: string, turns: number, segment: number): string {
+  return `${sessionId}/${turns}.${segment}`;
+}
+
+/** The session id and turn count of an anchor written by `anchorFor`. */
 export function parseAnchor(anchor: string): { sessionId: string; turns: number } | undefined {
   const match = /^(.+)\/(\d+)\.\d+$/.exec(anchor);
   return match?.[1] && match[2] ? { sessionId: match[1], turns: Number(match[2]) } : undefined;
@@ -43,7 +48,7 @@ export class Conversation {
   /** The session's position for the next assistant message, which becomes the anchor. */
   stamp(): string {
     this.#segment += 1;
-    this.#anchor = `${this.session.id}/${this.session.turns}.${this.#segment}`;
+    this.#anchor = anchorFor(this.session.id, this.session.turns, this.#segment);
     return this.#anchor;
   }
 

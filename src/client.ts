@@ -3,12 +3,13 @@ import {
   type ClientConnection,
   type InitializeRequest,
   type InitializeResponse,
+  type LoadSessionResponse,
   type McpServer,
   methods,
   type NewSessionRequest,
+  type NewSessionResponse,
   PROTOCOL_VERSION,
   RequestError,
-  type SessionConfigOption,
   type SessionInfo,
   type Stream,
 } from "@agentclientprotocol/sdk/unstable";
@@ -127,13 +128,18 @@ function serveTerminals(
     );
 }
 
+/** What a client shares with the requests it serves: its sessions and what they need. */
+interface Wiring {
+  sessions: Registry<AcpSession>;
+  inbox: Inbox;
+  hooks: SessionHooks;
+  terminals: Terminals;
+}
+
 function serve(
   stream: Stream,
   identity: ClientIdentity,
-  sessions: Registry<AcpSession>,
-  inbox: Inbox,
-  hooks: SessionHooks,
-  terminals: Terminals,
+  { sessions, inbox, hooks, terminals }: Wiring,
 ): ClientConnection {
   return serveTerminals(client({ name: identity.name }), sessions, terminals)
     .onRequest(methods.client.session.requestPermission, ({ params }) => {
@@ -225,19 +231,12 @@ export class AcpClient {
   #inbox: Inbox;
   #hooks: SessionHooks;
 
-  private constructor(
-    connection: ClientConnection,
-    sessions: Registry<AcpSession>,
-    inbox: Inbox,
-    hooks: SessionHooks,
-    terminals: Terminals,
-    hello: Introduced,
-  ) {
-    this.#terminals = terminals;
+  private constructor(connection: ClientConnection, wiring: Wiring, hello: Introduced) {
     this.#connection = connection;
-    this.#sessions = sessions;
-    this.#inbox = inbox;
-    this.#hooks = hooks;
+    this.#terminals = wiring.terminals;
+    this.#sessions = wiring.sessions;
+    this.#inbox = wiring.inbox;
+    this.#hooks = wiring.hooks;
     this.agent = hello.agent;
     this.accepts = hello.accepts;
     this.offers = hello.offers;
@@ -250,9 +249,8 @@ export class AcpClient {
     hooks: SessionHooks,
   ): Promise<AcpClient> {
     const sessions = new Registry<AcpSession>();
-    const inbox = new Inbox();
-    const terminals = terminalsFor(sessions);
-    const connection = serve(stream, identity, sessions, inbox, hooks, terminals);
+    const wiring = { sessions, inbox: new Inbox(), hooks, terminals: terminalsFor(sessions) };
+    const connection = serve(stream, identity, wiring);
     const introduction: InitializeRequest = {
       protocolVersion: PROTOCOL_VERSION,
       clientInfo: identity,
@@ -275,7 +273,7 @@ export class AcpClient {
         `This Antigravity agent speaks ACP version ${hello.protocolVersion}; this extension speaks version ${PROTOCOL_VERSION}.`,
       );
     }
-    return new AcpClient(connection, sessions, inbox, hooks, terminals, introduced(hello));
+    return new AcpClient(connection, wiring, introduced(hello));
   }
 
   /** Resolves when the connection ends, for whatever reason. */
@@ -283,11 +281,14 @@ export class AcpClient {
     return this.#connection.closed;
   }
 
+  /** Whether the agent can be given `server`: stdio servers always, HTTP ones if it says so. */
+  takes(server: McpServer): boolean {
+    return this.offers.mcpHttp || !("type" in server);
+  }
+
   /** The session/new and session/load fields for `where`, limited to what the agent accepts. */
   #place(where: Workspace): NewSessionRequest {
-    const mcpServers = (where.mcpServers ?? []).filter(
-      (server) => this.offers.mcpHttp || !("type" in server),
-    );
+    const mcpServers = (where.mcpServers ?? []).filter((server) => this.takes(server));
     const directories = where.directories ?? [];
     return {
       cwd: where.cwd,
@@ -384,7 +385,7 @@ export class AcpClient {
 
   #adopt(
     sessionId: string,
-    opened: { configOptions?: SessionConfigOption[] | null; _meta?: unknown },
+    opened: NewSessionResponse | LoadSessionResponse,
     placed: NewSessionRequest,
     turns: number,
   ): AcpSession {

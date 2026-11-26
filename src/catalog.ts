@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-import type { Api, Model } from "@earendil-works/pi-ai";
+import type { Api, Model, ThinkingLevel } from "@earendil-works/pi-ai";
 
 import { isRecord, isStringArray } from "./guards.ts";
 import type { AcpSession, AgentCommand, Choice } from "./session.ts";
@@ -100,9 +100,11 @@ export function piModels(catalog: Catalog): Model<typeof API>[] {
 }
 
 /** The agent's name for a Pi thinking level, when the model supports that level. */
-export function effortFor(model: Model<string>, level: string | undefined): string | undefined {
-  const levels: Record<string, string | null | undefined> = model.thinkingLevelMap ?? {};
-  return levels[level ?? ""] ?? undefined;
+export function effortFor(
+  model: Model<string>,
+  level: ThinkingLevel | undefined,
+): string | undefined {
+  return level === undefined ? undefined : (model.thinkingLevelMap?.[level] ?? undefined);
 }
 
 /** Commands saved by an older version may be missing; a malformed entry is dropped. */

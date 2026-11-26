@@ -10,7 +10,7 @@ export type Plan =
   | { id: string | undefined; steps: readonly PlanEntry[] }
   | { id: string; markdown: readonly string[] };
 
-type PlanUpdate = Extract<
+export type PlanUpdate = Extract<
   SessionUpdate,
   { sessionUpdate: "plan" | "plan_update" | "plan_removed" }
 >;
@@ -28,11 +28,10 @@ function steps(entries: readonly PlanEntry[]): PlanEntry[] {
 }
 
 /** The plan after an update: ACP's original `plan`, or the newer `plan_update` and `plan_removed`. */
-export function nextPlan(current: Plan | undefined, update: SessionUpdate): Plan | undefined {
+export function nextPlan(current: Plan | undefined, update: PlanUpdate): Plan | undefined {
   if (update.sessionUpdate === "plan") return { id: undefined, steps: steps(update.entries) };
   if (update.sessionUpdate === "plan_removed")
     return current?.id === update.planId ? undefined : current;
-  if (update.sessionUpdate !== "plan_update") return current;
   const { plan } = update;
   if (plan.type === "items" && "entries" in plan)
     return { id: plan.planId, steps: steps(plan.entries) };

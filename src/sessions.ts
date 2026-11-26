@@ -4,6 +4,7 @@ import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import type { Antigravity } from "./antigravity.ts";
 import { AGENT_DEFAULT, API, PROVIDER } from "./catalog.ts";
 import type { SavedSession } from "./client.ts";
+import { anchorFor } from "./conversation.ts";
 import { noUsage } from "./draft.ts";
 import type { Exchange } from "./inbox.ts";
 import { pick } from "./pick.ts";
@@ -35,7 +36,7 @@ function messages(sessionId: string, exchanges: readonly Exchange[]) {
       usage: noUsage(),
       stopReason: "stop",
       timestamp,
-      responseId: `${sessionId}/${index + 1}.1`,
+      responseId: anchorFor(sessionId, index + 1, 1),
     };
     return [{ role: "user" as const, content: exchange.user, timestamp }, reply];
   });

@@ -106,10 +106,10 @@ const OWN: Record<string, Subcommand> = {
 function runAgentCommand(
   pi: ExtensionAPI,
   link: Antigravity,
+  name: string,
   typed: string,
   ctx: ExtensionContext,
 ) {
-  const name = typed.split(/\s/, 1)[0];
   if (!link.selected) {
     ctx.ui.notify(
       `/agy ${name} runs in the Antigravity agent. Select an antigravity model with /model first.`,
@@ -117,8 +117,7 @@ function runAgentCommand(
     );
     return;
   }
-  if (ctx.isIdle()) pi.sendUserMessage(`/${typed}`);
-  else pi.sendUserMessage(`/${typed}`, { deliverAs: "followUp" });
+  pi.sendUserMessage(`/${typed}`, ctx.isIdle() ? {} : { deliverAs: "followUp" });
 }
 
 function completions(link: Antigravity, prefix: string) {
@@ -150,7 +149,7 @@ export function registerAgyCommand(pi: ExtensionAPI, link: Antigravity) {
       try {
         if (own) await own(link, value, ctx);
         else if (link.commands.some((known) => known.name === command))
-          runAgentCommand(pi, link, typed, ctx);
+          runAgentCommand(pi, link, command, typed, ctx);
         else ctx.ui.notify(USAGE, "warning");
       } catch (error) {
         ctx.ui.notify(
