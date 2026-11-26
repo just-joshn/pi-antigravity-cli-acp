@@ -10,7 +10,6 @@ import type { Exchange } from "./inbox.ts";
 import { occurrences } from "./occurrences.ts";
 import { pick } from "./pick.ts";
 
-/** An ISO time cut to the minute: `2026-11-25T10:00`. */
 const MINUTE = "YYYY-MM-DDTHH:MM".length;
 
 /** One label per session, numbered when titles and times repeat. */

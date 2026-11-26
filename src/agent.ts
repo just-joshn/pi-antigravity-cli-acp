@@ -8,7 +8,6 @@ import { z } from "zod";
 
 import { AcpError } from "./client.ts";
 
-/** Which Antigravity ACP server to run. */
 type AgentChoice = "auto" | "cli" | "registry";
 
 interface AgentLaunch {
