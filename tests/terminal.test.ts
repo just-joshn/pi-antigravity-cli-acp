@@ -48,6 +48,18 @@ test("output past the byte limit keeps its end", async () => {
   );
   await all.waitForExit("s", terminalId);
   expect(all.output("s", terminalId)).toMatchObject({ output: "efgh", truncated: true });
+  for (const outputByteLimit of [0, -5]) {
+    const none = all.create(
+      { sessionId: "s", ...node("process.stdout.write('ab')"), outputByteLimit },
+      "/",
+    );
+    // oxlint-disable-next-line no-await-in-loop -- one command at a time
+    await all.waitForExit("s", none.terminalId);
+    expect(all.output("s", none.terminalId), `limit ${outputByteLimit}`).toMatchObject({
+      output: "",
+      truncated: true,
+    });
+  }
 });
 
 test("kill stops a running command; release stops it and forgets it", async () => {

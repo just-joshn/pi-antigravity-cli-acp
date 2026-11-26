@@ -7,7 +7,7 @@ import {
 } from "@agentclientprotocol/sdk/unstable";
 import { expect, onTestFinished, test } from "vitest";
 
-import { AcpClient, AcpError } from "../src/client.ts";
+import { AcpClient, AcpError, reasonOf } from "../src/client.ts";
 import { connect, identity, pair, quietHooks } from "./support/harness.ts";
 import { answering, recorder } from "./support/record.ts";
 
@@ -297,4 +297,13 @@ test("extra directories and MCP servers reach the agent only as far as it accept
   await plain.client.newSession(where);
   expect(plain.log.sessions[0]?.additionalDirectories).toBeUndefined();
   expect(plain.log.sessions[0]?.mcpServers).toStrictEqual([stdio]);
+});
+
+test("an error's reason is its message, cut to 300 characters; anything else gives the fallback", () => {
+  expect(reasonOf(new Error("boom"), "none")).toBe("boom");
+  expect(reasonOf(new Error(""), "none")).toBe("");
+  expect(reasonOf(new Error("x".repeat(300)), "none")).toHaveLength(300);
+  expect(reasonOf(new Error("x".repeat(301)), "none")).toHaveLength(300);
+  for (const thrown of [null, undefined, "text", 42, { message: "not an Error" }])
+    expect(reasonOf(thrown, "none"), JSON.stringify(thrown)).toBe("none");
 });

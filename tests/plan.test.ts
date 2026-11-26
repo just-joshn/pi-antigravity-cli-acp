@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { nextPlan, planLines } from "../src/plan.ts";
+import { isPlanUpdate, nextPlan, planLines } from "../src/plan.ts";
 import { fakeUi, said, start } from "./support/pi.ts";
 
 test("the agent's plan shows above the editor while it works and goes away when every step is done", async () => {
@@ -109,4 +109,16 @@ test("a long markdown plan keeps 100 lines and counts the rest", () => {
   expect.assert(huge && "markdown" in huge);
   expect(huge.markdown.length).toBe(100);
   expect(planLines(huge)?.at(-1)).toBe("… 9980 more lines");
+});
+
+test("only plan updates count as plans, and an empty plan shows nothing", () => {
+  expect(isPlanUpdate({ sessionUpdate: "plan", entries: [] })).toBe(true);
+  expect(isPlanUpdate({ sessionUpdate: "plan_removed", planId: "p" })).toBe(true);
+  expect(isPlanUpdate({ sessionUpdate: "usage_update", used: 1, size: 2 })).toBe(false);
+  expect(planLines(nextPlan(undefined, { sessionUpdate: "plan", entries: [] }))).toBeUndefined();
+  const empty = nextPlan(undefined, {
+    sessionUpdate: "plan_update",
+    plan: { type: "markdown", planId: "m", content: "" },
+  });
+  expect(planLines(empty)).toStrictEqual(["Antigravity plan"]);
 });

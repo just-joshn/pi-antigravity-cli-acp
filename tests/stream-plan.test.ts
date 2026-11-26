@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { parseAnchor } from "../src/conversation.ts";
+import { anchorFor, parseAnchor } from "../src/conversation.ts";
 import { noUsage } from "../src/draft.ts";
 import { lastAnchor, planTurn, renderHistory } from "../src/stream.ts";
 
@@ -122,4 +122,10 @@ test("the last anchor is from the newest reply this provider stamped, or none", 
     index: 2,
     anchor: "s/2.0",
   });
+});
+
+test("an anchor written for a session reads back as that session and turn count", () => {
+  expect(parseAnchor(anchorFor("s1", 0, 1))).toStrictEqual({ sessionId: "s1", turns: 0 });
+  expect(parseAnchor(anchorFor("a/b", 7, 2))).toStrictEqual({ sessionId: "a/b", turns: 7 });
+  expect(parseAnchor(anchorFor("", 1, 1)), "an anchor needs a session id").toBe(undefined);
 });

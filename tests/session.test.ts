@@ -1,6 +1,7 @@
 import type { PermissionOption } from "@agentclientprotocol/sdk/unstable";
 import { expect, test } from "vitest";
 
+import { noSuchMode } from "../src/antigravity.ts";
 import { AcpSession, type AgentPort, Turn } from "../src/session.ts";
 import { initialSession, quietHooks, resolvable } from "./support/harness.ts";
 
@@ -165,4 +166,18 @@ test("a late update after the turn ended does not reopen a finished tool call", 
   session.receive({ sessionUpdate: "tool_call_update", toolCallId: "t", status: "in_progress" });
   const watched = await session.watchTool("t", undefined, () => {});
   expect(watched?.settled).toBe(true);
+});
+
+test("the notice for a missing mode lists the modes the agent has, or none", () => {
+  const mode = {
+    id: "mode",
+    name: "Mode",
+    category: "mode",
+    type: "select" as const,
+    currentValue: "default",
+    options: [{ value: "default", name: "Default" }],
+  };
+  const withModes = new AcpSession("s", { ...initialSession, options: [mode] }, port, quietHooks);
+  expect(noSuchMode("yolo", withModes)).toBe('Antigravity has no "yolo" mode. Available: default.');
+  expect(noSuchMode("", answeredWith(undefined))).toBe('Antigravity has no "" mode.');
 });
