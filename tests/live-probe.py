@@ -83,9 +83,13 @@ class Agent:
             elif method and "id" in message:
                 self.requests = {**self.requests, method: self.requests.get(method, 0) + 1}
                 self._note(f"{method} {json.dumps(message.get('params'))[:300]}")
-                self._send({"jsonrpc": "2.0", "id": message["id"], **self._reply(method, message.get("params") or {})})
+                # Answered on its own thread: a command that runs long must not stop the reader.
+                threading.Thread(target=self._respond, args=(message["id"], method, message.get("params") or {}), daemon=True).start()
             elif "id" in message:
                 self.replies = {**self.replies, message["id"]: message}
+
+    def _respond(self, request_id, method, params):
+        self._send({"jsonrpc": "2.0", "id": request_id, **self._reply(method, params)})
 
     def _reply(self, method, params):
         """The answer to a request; a probe failure is sent back as an error and shown, not lost."""

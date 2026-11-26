@@ -88,13 +88,16 @@ export async function writeTextFile(
   requireInside(roots, target);
   // Windows has no O_NOFOLLOW; there, creating a symbolic link needs privileges the agent lacks.
   const noFollow = process.platform === "win32" ? 0 : constants.O_NOFOLLOW;
-  const flags = constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | noFollow;
+  const flags = constants.O_WRONLY | constants.O_CREAT | noFollow;
   const file = await open(target, flags).catch((error: unknown) => {
     const code = codeOf(error);
     if (code === "ELOOP") throw outsideWorkspace();
     throw RequestError.internalError(undefined, `${path} could not be written (${code})`);
   });
   try {
+    // A hard link can name a file outside the workspace; it is not emptied or written.
+    if ((await file.stat()).nlink > 1) throw outsideWorkspace();
+    await file.truncate(0);
     await file.writeFile(content, "utf8");
   } finally {
     await file.close();

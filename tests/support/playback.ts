@@ -63,14 +63,16 @@ function say(pb: Playback, kind: "agent_message_chunk" | "agent_thought_chunk", 
 }
 
 async function ask(pb: Playback, step: Extract<Step, { ask: string }>) {
+  const offered = step.options ?? [allow, deny];
   const { outcome } = await pb.client.request(methods.client.session.requestPermission, {
     sessionId: pb.sessionId,
     toolCall: { toolCallId: step.ask },
-    options: step.options ?? [allow, deny],
+    options: offered,
   });
   pb.answered(outcome);
   if (outcome.outcome === "cancelled") return "cancelled";
-  const granted = outcome.optionId.startsWith("allow");
+  const chosen = offered.find((option) => option.optionId === outcome.optionId);
+  const granted = chosen?.kind.startsWith("allow") === true;
   return play(pb, (granted ? step.allowed : step.declined) ?? []);
 }
 

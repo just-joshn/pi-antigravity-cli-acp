@@ -7,11 +7,17 @@ import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import { z } from "zod";
 
 import { isRecord } from "./guards.ts";
+import { uniqueLabels } from "./labels.ts";
 
 export type Dialogs = Pick<ExtensionUIContext, "select" | "input">;
 
 const FIELD_LIMIT = 20;
 const TRIES = 3;
+/** Whether no choice is picked twice. */
+const once = (chosen: readonly string[]) => new Set(chosen).size === chosen.length;
+
+/** The choice an optional field offers for leaving it unanswered. */
+const NO_ANSWER = "No answer";
 const CANCEL: CreateElicitationResponse = { action: "cancel" };
 const DECLINE: CreateElicitationResponse = { action: "decline" };
 
@@ -105,36 +111,36 @@ function titleOf(option: Record<string, unknown>): string {
 function choices(schema: Record<string, unknown>): { value: string; label: string }[] | undefined {
   const source = isRecord(schema["items"]) ? schema["items"] : schema;
   const titled = source["oneOf"] ?? source["anyOf"];
-  if (Array.isArray(titled))
-    return titled.flatMap((option: unknown) =>
-      isRecord(option) && typeof option["const"] === "string"
-        ? [{ value: option["const"], label: titleOf(option) }]
-        : [],
-    );
-  const listed = source["enum"];
-  if (!Array.isArray(listed)) return undefined;
-  return listed.flatMap((value: unknown) =>
-    typeof value === "string" ? [{ value, label: value }] : [],
+  const enumerated = Array.isArray(source["enum"]) ? source["enum"] : undefined;
+  const found = Array.isArray(titled)
+    ? titled.flatMap((option: unknown) =>
+        isRecord(option) && typeof option["const"] === "string"
+          ? [{ value: option["const"], label: titleOf(option) }]
+          : [],
+      )
+    : enumerated?.flatMap((value: unknown) =>
+        typeof value === "string" ? [{ value, label: value }] : [],
+      );
+  if (!found) return undefined;
+  // Two choices with the same title must stay tellable apart, and picking one must return its value.
+  const labels = uniqueLabels(
+    found.map(({ label }) => label),
+    (label, n) => `${label} (${n})`,
   );
+  return found.map(({ value, label }, index) => ({ value, label: labels[index] ?? label }));
 }
 
 async function ask(field: Field, dialogs: Dialogs, signal: AbortSignal): Promise<Answer> {
   const type = field.schema["type"];
   const listed = choices(field.schema);
-  const options = { signal };
   if (type === "boolean") {
-    const picked = await dialogs.select(field.title, ["Yes", "No"], options);
-    return picked === undefined ? "cancel" : { value: picked === "Yes" };
+    const yesNo = [
+      { value: true, label: "Yes" },
+      { value: false, label: "No" },
+    ];
+    return selectOne(field, yesNo, dialogs, signal);
   }
-  if (type === "string" && listed) {
-    const picked = await dialogs.select(
-      field.title,
-      listed.map((c) => c.label),
-      options,
-    );
-    const chosen = listed.find((c) => c.label === picked);
-    return chosen ? { value: chosen.value } : "cancel";
-  }
+  if (type === "string" && listed) return selectOne(field, listed, dialogs, signal);
   if (type === "array" && listed)
     return typed(field, dialogs, signal, (text) => pickMany(text, listed, field.schema));
   if (type === "integer" || type === "number")
@@ -143,6 +149,24 @@ async function ask(field: Field, dialogs: Dialogs, signal: AbortSignal): Promise
     );
   if (type === "string") return typed(field, dialogs, signal, (text) => toText(text, field.schema));
   return "unsupported";
+}
+
+/** Picks one choice; an optional field also offers to leave it unanswered. Esc cancels the form. */
+async function selectOne(
+  field: Field,
+  listed: readonly { value: ElicitationContentValue; label: string }[],
+  dialogs: Dialogs,
+  signal: AbortSignal,
+): Promise<Answer> {
+  const offered = field.required ? listed : [...listed, { value: "", label: NO_ANSWER }];
+  const labels = uniqueLabels(
+    offered.map(({ label }) => label),
+    (label, n) => `${label} (${n})`,
+  );
+  const picked = await dialogs.select(field.title, labels, { signal });
+  if (picked === undefined) return "cancel";
+  const chosen = listed[labels.indexOf(picked)];
+  return chosen ? { value: chosen.value } : "skip";
 }
 
 /** A value read from text, or why the text is not one. */
@@ -229,7 +253,10 @@ function pickMany(
   );
   if (values.some((value) => value === undefined)) return { problem: "choose from the list" };
   const [minItems, maxItems] = [boundOf(schema["minItems"]), boundOf(schema["maxItems"])];
-  const array = z.array(z.string());
+  const array =
+    schema["uniqueItems"] === true
+      ? z.array(z.string()).refine(once, { error: "each choice once" })
+      : z.array(z.string());
   const atLeast =
     minItems === undefined ? array : array.min(minItems, { error: `at least ${minItems}` });
   const atMost =

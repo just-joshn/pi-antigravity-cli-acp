@@ -439,7 +439,8 @@ export class AcpSession {
       status,
       content,
       rawOutput: patch.rawOutput ?? previous?.rawOutput,
-      terminalOutput: this.#terminalOutputOf(content),
+      // A released terminal's last output stays, even when the agent updates the call afterwards.
+      terminalOutput: this.#terminalOutputOf(content) || (previous?.terminalOutput ?? ""),
       decision: previous?.decision,
       // Once a call is settled it stays so, even if the agent sends another update for it.
       settled: previous?.settled === true || status === "completed" || status === "failed",

@@ -97,3 +97,10 @@ test("/agy sessions does not reopen the session already in use", async () => {
   const log = await stop();
   expect([log.closes, log.loads]).toStrictEqual([[], []]);
 });
+
+const titled = (title: string) => ({ id: title, title, updatedAt: undefined });
+
+test("a numbered session label never repeats another session's title", () => {
+  const shown = labels([titled("Fix"), titled("Fix"), titled("Fix (2)")]);
+  expect(new Set(shown).size).toBe(3);
+});

@@ -180,3 +180,20 @@ test("the notice for a missing mode lists the modes the agent has, or none", () 
   expect(noSuchMode("yolo", withModes)).toBe('Antigravity has no "yolo" mode. Available: default.');
   expect(noSuchMode("", answeredWith(undefined))).toBe('Antigravity has no "" mode.');
 });
+
+test("a released terminal's output stays in its tool row after later updates", () => {
+  const session = answeredWith(undefined);
+  const content = [{ type: "terminal" as const, terminalId: "t" }];
+  session.receive({
+    sessionUpdate: "tool_call",
+    toolCallId: "c",
+    title: "Run",
+    status: "in_progress",
+    content,
+  });
+  session.terminalOutput("t", "hello");
+  session.terminalOutput("t", undefined);
+  session.receive({ sessionUpdate: "tool_call_update", toolCallId: "c", status: "completed" });
+  const shown = session.watchTool("c", undefined, () => {});
+  return expect(shown.then((tool) => tool?.terminalOutput)).resolves.toBe("hello");
+});

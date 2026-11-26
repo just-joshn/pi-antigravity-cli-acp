@@ -39,6 +39,8 @@ const AGENT_TURN = new Set([
   "tool_call",
   "tool_call_update",
   "plan",
+  "plan_update",
+  "plan_removed",
 ]);
 
 /** The replay after one more update; each user message after an agent update starts a turn. */

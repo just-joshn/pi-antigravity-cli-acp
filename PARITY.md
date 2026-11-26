@@ -249,7 +249,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 
 - **Reference:** Zed handles form and URL elicitation.
 - **Applies:** yes; `agy` 1.5.17 asks with a form of `oneOf` choices plus an optional free-form field (`tests/live-probe.py`). **ACP:** `elicitation/create`, `elicitation/complete`. **Pi:** select and input dialogs.
-- **Implementation:** `src/elicit.ts`. A form offers Answer or Decline, then asks each field with Pi's dialogs (choices for enums and yes/no, text for strings and numbers within their limits, comma-separated multi-select), asking again after a wrong answer, at most three times in all; Esc cancels. A URL question shows the link with Continue or Decline. Questions share the permission dialogs' queue and close with their turn; without a UI they are cancelled.
+- **Implementation:** `src/elicit.ts`. A form offers Answer or Decline, then asks each field with Pi's dialogs (choices for enums and yes/no, with No answer for an optional one; text for strings and numbers within their limits; comma-separated multi-select within its item count and uniqueness), asking again after a wrong answer, at most three times in all; Esc cancels. A URL question shows the link with Continue or Decline. Questions share the permission dialogs' queue and close with their turn; without a UI they are cancelled.
 - **Verification:** `tests/elicit.test.ts`; the question step of `features()` in `tests/live-acp.py`.
 - **Status:** verified. **Evidence:** in the live run on 2026-11-25 (`agy` 1.5.17, `python3 tests/live-acp.py`, 19 steps passed), the agent's question was answered in Pi's dialogs (Answer, Blue, the optional field left blank) and the agent replied "Blue". **Limits:** Pi does not open the link itself.
 

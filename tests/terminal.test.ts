@@ -183,3 +183,27 @@ test("a character split across two writes is kept whole", async () => {
   await all.waitForExit("s", terminalId);
   expect(all.output("s", terminalId).output).toBe("€");
 });
+
+test("output that arrives just before release is still reported", async () => {
+  vi.useFakeTimers({ toFake: ["setImmediate"] });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+  const { all, updates } = terminals();
+  const { terminalId } = all.create(
+    { sessionId: "s", ...node("process.stdout.write('last'); setInterval(() => {}, 1000)") },
+    "/",
+  );
+  // vi.waitFor would run the faked setImmediate; poll with real timers instead.
+  const arrived = async (): Promise<void> => {
+    if (all.output("s", terminalId).output === "last") return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    return arrived();
+  };
+  await arrived();
+  all.release("s", terminalId);
+  expect(updates()).toStrictEqual([
+    ["s", terminalId, "last"],
+    ["s", terminalId, undefined],
+  ]);
+});

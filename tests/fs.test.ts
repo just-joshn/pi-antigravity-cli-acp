@@ -1,4 +1,4 @@
-import { mkdir, readFile, symlink, truncate, writeFile } from "node:fs/promises";
+import { link, mkdir, readFile, symlink, truncate, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { RequestError } from "@agentclientprotocol/sdk/unstable";
@@ -113,4 +113,14 @@ test("reading refuses devices and files over 16 MB instead of loading them", asy
   await truncate(big, 16 * 1024 * 1024 + 1);
   expect(await read(big)).toBe(RequestError.invalidParams().code);
   expect(await read("/dev/zero")).toBe(RequestError.invalidParams().code);
+});
+
+test("a write through a hard link is refused, as it could change a file outside the workspace", async () => {
+  const dir = await scratchDir("fs");
+  const work = join(dir, "work");
+  await mkdir(work);
+  await writeFile(join(dir, "outside.txt"), "keep");
+  await link(join(dir, "outside.txt"), join(work, "linked.txt"));
+  expect(await writeIn(work, join(work, "linked.txt"))).toBe(RequestError.invalidParams().code);
+  expect(await readFile(join(dir, "outside.txt"), "utf8")).toBe("keep");
 });

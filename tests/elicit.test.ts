@@ -260,3 +260,43 @@ test("a multiple choice answer must pick as many options as the form allows", as
     "Colors (comma-separated: red, blue, green; try again: at most 2)",
   ]);
 });
+
+test("choices with the same title stay distinguishable and return their own value", async () => {
+  const pickSecond = scripted(["Answer", "Same (2)"]);
+  const same = {
+    type: "string",
+    title: "Pick",
+    oneOf: [
+      { const: "a", title: "Same" },
+      { const: "b", title: "Same" },
+    ],
+  };
+  expect(
+    await answerElicitation(form({ same }, ["same"]), pickSecond.dialogs, signal),
+  ).toStrictEqual({
+    action: "accept",
+    content: { same: "b" },
+  });
+});
+
+test("an optional choice can be left unanswered without dropping the form", async () => {
+  const optional = scripted(["Answer", "No answer", "No answer"]);
+  const fields = {
+    flag: { type: "boolean", title: "Flag" },
+    color: { type: "string", title: "Color", enum: ["red"] },
+  };
+  expect(await answerElicitation(form(fields), optional.dialogs, signal)).toStrictEqual({
+    action: "accept",
+    content: {},
+  });
+});
+
+test("a multiple choice answer that must be unique cannot repeat a choice", async () => {
+  const colors = { type: "array", title: "Colors", uniqueItems: true, items: { enum: ["a", "b"] } };
+  const { dialogs, shown } = scripted(["Answer", "a, a", "a, b"]);
+  expect(await answerElicitation(form({ colors }, ["colors"]), dialogs, signal)).toStrictEqual({
+    action: "accept",
+    content: { colors: ["a", "b"] },
+  });
+  expect(shown().at(-1)).toBe("Colors (comma-separated: a, b; try again: each choice once)");
+});

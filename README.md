@@ -33,18 +33,18 @@ pi --model antigravity/default
 
 Say hello. `antigravity/default` uses whichever model the agent is set to. After the first reply, `/model` lists the agent's own models under `antigravity`, for example `gemini-4-hydrogen` and `gemini-3.8-flash`. Pi remembers the list, so later runs can start on one directly with `--model antigravity/gemini-3.8-flash`.
 
-| Control              | In Pi                                                                                                                  |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Model                | `/model`, Ctrl+P, or `--model antigravity/<id>`                                                                        |
-| Thinking level       | Shift+Tab, or `--thinking <level>`. Pi offers only the levels the agent has for that model.                            |
-| Permission requests  | A dialog with the agent's own choices, such as Allow and Deny. Esc picks the agent's reject choice.                    |
-| Permission mode      | `/agy mode` to choose, `/agy mode <id>` to set, `--agy-mode <id>` at launch. Shown in the footer.                      |
-| The agent's commands | `/agy <command> [input]`, for example `/agy goal ship the fix` or `/agy compact`. Tab completes.                       |
-| Saved sessions       | `/agy sessions` opens one of the agent's saved conversations for this directory as a new Pi session that continues it. |
-| Questions            | When the agent asks a structured question, Pi asks it field by field with its own dialogs. Esc cancels.                |
-| Plan                 | While the agent works through a plan, its steps or its markdown plan show above the editor. `agy` 1.5.17 sends none.   |
-| Context              | Pi's footer shows the agent's context use. `/agy status` gives the exact numbers.                                      |
-| Stop                 | Esc cancels the agent's turn.                                                                                          |
+| Control              | In Pi                                                                                                                                                  |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Model                | `/model`, Ctrl+P, or `--model antigravity/<id>`                                                                                                        |
+| Thinking level       | Shift+Tab, or `--thinking <level>`. Pi offers only the levels the agent has for that model.                                                            |
+| Permission requests  | A dialog with the agent's own choices, such as Allow and Deny. Esc picks the agent's reject choice.                                                    |
+| Permission mode      | `/agy mode` to choose, `/agy mode <id>` to set, `--agy-mode <id>` at launch. Shown in the footer.                                                      |
+| The agent's commands | `/agy <command> [input]`, for example `/agy goal ship the fix` or `/agy compact`. Tab completes.                                                       |
+| Saved sessions       | `/agy sessions` opens one of the agent's saved conversations for this directory as a new Pi session that continues it.                                 |
+| Questions            | When the agent asks a structured question, Pi asks it field by field with its own dialogs; an optional choice can be left with No answer. Esc cancels. |
+| Plan                 | While the agent works through a plan, its steps or its markdown plan show above the editor. `agy` 1.5.17 sends none.                                   |
+| Context              | Pi's footer shows the agent's context use. `/agy status` gives the exact numbers.                                                                      |
+| Stop                 | Esc cancels the agent's turn.                                                                                                                          |
 
 `/agy status` also shows the agent's version, the quota tier it reports for your account, and the agent session id.
 

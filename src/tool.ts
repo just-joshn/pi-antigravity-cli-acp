@@ -1,6 +1,7 @@
 import { basename } from "node:path";
 
 import { isRecord } from "./guards.ts";
+import { uniqueLabels } from "./labels.ts";
 import { occurrences } from "./occurrences.ts";
 import type { ToolView } from "./session.ts";
 
@@ -95,30 +96,10 @@ export function toolResult(tool: ToolView | undefined, state: "running" | "done"
 
 /** Dialog labels for the agent's permission options, made unique when two share a name. */
 export function choiceLabels(options: readonly { name: string; kind: string }[]): string[] {
-  const labels = occurrences(options, ({ name }) => name).map(({ item, of }, index) => ({
-    index,
-    label: of > 1 ? `${item.name} [${item.kind.replaceAll("_", " ")}]` : item.name,
-  }));
-  return distinct(labels, new Set());
-}
-
-/** Each label, numbered when it is one already given out, so no two are the same. A dialog has few options. */
-function distinct(
-  labels: readonly { index: number; label: string }[],
-  used: ReadonlySet<string>,
-): string[] {
-  const [first, ...rest] = labels;
-  if (!first) return [];
-  const label = unused(first.label, first.index + 1, used);
-  return [label, ...distinct(rest, new Set([...used, label]))];
-}
-
-/** `label`, or `label #n` with the first `n` from `from` that gives a label not yet used. */
-function unused(label: string, from: number, used: ReadonlySet<string>): string {
-  if (!used.has(label)) return label;
-  const numbered = (n: number): string =>
-    used.has(`${label} #${n}`) ? numbered(n + 1) : `${label} #${n}`;
-  return numbered(from);
+  const labels = occurrences(options, ({ name }) => name).map(({ item, of }) =>
+    of > 1 ? `${item.name} [${item.kind.replaceAll("_", " ")}]` : item.name,
+  );
+  return uniqueLabels(labels, (label, n) => `${label} #${n}`);
 }
 
 type Watch = (

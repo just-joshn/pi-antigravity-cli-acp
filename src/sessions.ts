@@ -7,7 +7,7 @@ import type { SavedSession } from "./client.ts";
 import { anchorFor } from "./conversation.ts";
 import { noUsage } from "./draft.ts";
 import type { Exchange } from "./inbox.ts";
-import { occurrences } from "./occurrences.ts";
+import { uniqueLabels } from "./labels.ts";
 import { pick } from "./pick.ts";
 
 const MINUTE = "YYYY-MM-DDTHH:MM".length;
@@ -20,9 +20,7 @@ export function labels(saved: readonly SavedSession[]): string[] {
       : "";
     return `${session.title ?? "Untitled"}${when}`;
   });
-  return occurrences(texts, (text) => text).map(({ item, nth }) =>
-    nth > 1 ? `${item} (${nth})` : item,
-  );
+  return uniqueLabels(texts, (text, n) => `${text} (${n})`);
 }
 
 /** Pi messages for a replayed conversation. Each reply carries the agent session's position. */

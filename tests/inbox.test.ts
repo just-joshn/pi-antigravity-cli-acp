@@ -61,3 +61,12 @@ test("settings sent in the middle of a user message do not start a new turn", ()
   inbox.hold("s", said("agent_message_chunk", "hi"));
   expect(inbox.endReplay("s")?.exchanges).toStrictEqual([{ user: "hello world", agent: "hi" }]);
 });
+
+test("a newer plan update from the agent ends the user's turn like any agent update", () => {
+  const inbox = new Inbox();
+  inbox.startReplay("s", false);
+  inbox.hold("s", said("user_message_chunk", "one"));
+  inbox.hold("s", { sessionUpdate: "plan_removed", planId: "p" });
+  inbox.hold("s", said("user_message_chunk", "two"));
+  expect(inbox.endReplay("s")?.turns).toBe(2);
+});

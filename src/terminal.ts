@@ -133,6 +133,8 @@ export class Terminals {
 
   release(sessionId: string, terminalId: string): Record<string, never> {
     this.kill(sessionId, terminalId);
+    // Output not reported yet is reported now, before the terminal is forgotten.
+    if (this.#all.get(terminalId)?.reporting) this.#reportOutput(terminalId);
     this.#all = without(this.#all, terminalId);
     this.#report(sessionId, terminalId, undefined);
     return {};

@@ -38,7 +38,8 @@ The extension registers an `antigravity` provider, because Pi's model picker, th
 | `plan.ts`                | The agent's plan from `plan`, `plan_update` and `plan_removed`, and the widget's lines.                                                             |
 | `draft.ts`               | `Draft`: one Pi assistant message built as the agent's events arrive, and the events Pi streams for it.                                             |
 | `pick.ts`                | Shows a select dialog and returns the item behind the chosen label.                                                                                 |
-| `occurrences.ts`         | Each item's place among items that share a key, for labels that must stay distinct.                                                                 |
+| `occurrences.ts`         | Each item's place among items that share a key, so permission options that share a name can show their kind.                                        |
+| `labels.ts`              | Numbers labels that repeat, so the choices in a dialog stay distinct and picking one finds it.                                                      |
 | `immutable.ts`           | Copy-on-write maps and `Registry`, which hold sessions and tool calls without editing shared state.                                                 |
 
 ## A prompt, end to end
@@ -68,7 +69,7 @@ Esc aborts Pi's request. The extension sends `session/cancel`, aborts any open p
 
 - The agent starts without a shell, with its stderr discarded, so output cannot be mistaken for protocol messages.
 - The extension never sees the agent's sign-in: tokens and quota stay in the agent. The one exception is `--agy-mcp`, below, which passes the MCP servers' configured credentials on.
-- Permission requests always reach the user as a dialog with the agent's own options. With no UI, the request is answered with the agent's reject option, or cancelled if it has none. A dialog still open when its turn ends is closed and the request cancelled. Nothing is approved without the user.
+- Permission requests always reach the user as a dialog with the agent's own options. With no UI, the request is answered with the agent's reject-once option, or cancelled if it has none; a reject-always option is never chosen for the user. A dialog still open when its turn ends is closed and the request cancelled. Nothing is approved without the user.
 - Writes requested by the agent go only inside the session's working directory and the directories given with `--agy-dir`. The path is checked after resolving symbolic links, the real parent directory is checked again after it is created, and a symbolic link at the file itself is not followed.
 - Reads requested by the agent take any absolute path, as an editor's would, but refuse devices, pipes and files over 16 MiB.
 - What the user supplies is validated with zod schemas: the flags, `mcp.json`, typed answers to the agent's questions, and the files the extension reads back (its catalog and Zed's registry listing). Untyped fields the agent sends, such as its metadata and raw tool output, are narrowed with type guards before use.
