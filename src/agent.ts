@@ -9,7 +9,7 @@ import { z } from "zod";
 import { AcpError } from "./client.ts";
 
 /** Which Antigravity ACP server to run. */
-export type AgentChoice = "auto" | "cli" | "registry";
+type AgentChoice = "auto" | "cli" | "registry";
 
 interface AgentLaunch {
   /** `cli`: the Antigravity CLI's `agy acp`. `registry`: the ACP registry agent an editor installed. */

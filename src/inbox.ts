@@ -1,6 +1,5 @@
 import type { SessionUpdate } from "@agentclientprotocol/sdk/unstable";
 
-import { isRecord } from "./guards.ts";
 import { put, without } from "./immutable.ts";
 
 const EARLY_UPDATE_LIMIT = 64;
@@ -17,17 +16,16 @@ export interface Exchange {
  * Prompt turns an agent replays while it loads a saved session; each starts with the user speaking.
  * With `exchanges`, their text is kept as well.
  */
-export interface Replay {
+interface Replay {
   readonly turns: number;
   readonly userSpeaking: boolean;
   readonly exchanges: readonly Exchange[] | undefined;
 }
 
 function chunkText(update: SessionUpdate): string {
-  const content = "content" in update ? update.content : undefined;
-  return isRecord(content) && content["type"] === "text" && typeof content["text"] === "string"
-    ? content["text"]
-    : "";
+  const chunk =
+    update.sessionUpdate === "user_message_chunk" || update.sessionUpdate === "agent_message_chunk";
+  return chunk && update.content.type === "text" ? update.content.text : "";
 }
 
 function extend(exchanges: readonly Exchange[], side: keyof Exchange, text: string) {

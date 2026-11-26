@@ -109,9 +109,9 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 
 ### PROTO-4 Malformed messages and metadata
 
-- **Reference:** the SDK validates messages against the schema.
+- **Reference:** the SDK validates `initialize` against the schema and forwards later messages as they are.
 - **Applies:** yes. **ACP:** all.
-- **Implementation:** schema validation by the SDK; Antigravity's untyped extras (`_meta.antigravity.tier`, `models.availableModels`) are read through type guards and ignored when malformed. Saved catalogs are validated the same way.
+- **Implementation:** the fields the extension reads are narrowed before use: Antigravity's untyped extras (`_meta.antigravity.tier`, `models.availableModels`) through type guards, ignored when malformed; the saved catalog through a zod schema.
 - **Acceptance:** malformed extras and files never break a session.
 - **Verification:** `tests/client-handshake.test.ts` ("a tier or per-level model list of the wrong shape is ignored"), `tests/catalog.test.ts`.
 - **Status:** implemented_unverified: malformed JSON-RPC frames are left to the SDK and not tested here. **Limits:** none known.

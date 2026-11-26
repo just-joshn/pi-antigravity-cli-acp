@@ -4,14 +4,13 @@ import { expect, test } from "vitest";
 import { noSuchMode } from "../src/antigravity.ts";
 import { AcpSession, type AgentPort, Turn } from "../src/session.ts";
 import { initialSession, quietHooks, resolvable } from "./support/harness.ts";
+import { allow, deny } from "./support/playback.ts";
 
 const port: AgentPort = {
   prompt: () => new Promise(() => {}),
   cancel: () => Promise.resolve(),
   setConfigOption: () => Promise.resolve([]),
 };
-const allow: PermissionOption = { kind: "allow_once", optionId: "allow", name: "Allow" };
-const deny: PermissionOption = { kind: "reject_once", optionId: "deny", name: "Deny" };
 
 /** A session whose user answers every permission question with `answer`. */
 function answeredWith(answer: PermissionOption | undefined | Error) {

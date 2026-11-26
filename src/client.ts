@@ -41,7 +41,7 @@ export function reasonOf(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message.slice(0, REASON_LIMIT) : fallback;
 }
 
-export interface ClientIdentity {
+interface ClientIdentity {
   name: string;
   title: string;
   version: string;

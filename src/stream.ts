@@ -41,7 +41,7 @@ export const TURN_LOST =
 export const NOT_RESENT =
   "Antigravity stopped before it finished this message, so what it did is unknown. It was not sent again; check the workspace, then send it again if needed.";
 
-export interface StreamHost {
+interface StreamHost {
   /** Whether Pi is running a turn of the session this extension serves. */
   conversing(piSessionId: string | undefined): boolean;
   /**
@@ -59,7 +59,7 @@ export interface StreamHost {
   noteTool(tool: ToolView): void;
 }
 
-export interface TurnPlan {
+interface TurnPlan {
   /** The transcript no longer continues what the agent session has seen. */
   diverged: boolean;
   /** Conversation the agent session has not seen, oldest first. */
@@ -211,13 +211,13 @@ export function haltTurn(session: AcpSession, graceMs = CANCEL_GRACE_MS): Promis
   });
 }
 
-const STOP: Record<Extract<TurnEvent, { type: "end" }>["stopReason"], StopReason> = {
+const STOP = {
   end_turn: "stop",
   max_turn_requests: "stop",
   max_tokens: "length",
   refusal: "error",
   cancelled: "aborted",
-};
+} satisfies Record<Extract<TurnEvent, { type: "end" }>["stopReason"], StopReason>;
 
 class Aborted extends Error {}
 
@@ -362,7 +362,7 @@ class Reply {
     const reason = STOP[event.stopReason];
     if (reason === "aborted") throw new Aborted();
     if (reason === "error") throw new AcpError("Antigravity refused this request.");
-    this.draft.finish(reason === "length" ? "length" : "stop");
+    this.draft.finish(reason);
   }
 
   async #fail(error: unknown) {

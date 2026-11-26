@@ -15,7 +15,7 @@ const flagsSchema = z.object({
   mcp: z.boolean().catch(false),
 });
 
-export type Flags = z.output<typeof flagsSchema>;
+type Flags = z.output<typeof flagsSchema>;
 
 export function readFlags(pi: Pick<ExtensionAPI, "getFlag">): Flags {
   return flagsSchema.parse({

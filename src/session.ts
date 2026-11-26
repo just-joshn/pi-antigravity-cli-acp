@@ -20,7 +20,7 @@ import { put, without } from "./immutable.ts";
 import { isPlanUpdate, nextPlan, type Plan } from "./plan.ts";
 
 /** The agent settings a client can change, named by ACP's config-option categories. */
-export type OptionCategory = "model" | "thought_level" | "mode";
+type OptionCategory = "model" | "thought_level" | "mode";
 
 /** A command the agent runs when a prompt starts with `/name`. */
 export interface AgentCommand {
@@ -400,6 +400,7 @@ export class AcpSession {
     // The answer decides the tool call's fate; a status sent with the question cannot.
     const tool = this.#mergeTool({ ...request.toolCall, status: null });
     const { signal } = this.#dialogs;
+    // A dialog that fails decides nothing, so the request falls back to the agent's reject option.
     const choice = await this.#hooks
       .askPermission(tool, request.options, signal)
       .catch(() => undefined);
@@ -421,6 +422,7 @@ export class AcpSession {
   async elicit(request: CreateElicitationRequest): Promise<CreateElicitationResponse> {
     const { signal } = this.#dialogs;
     const cancel: CreateElicitationResponse = { action: "cancel" };
+    // A question nobody could answer is cancelled, as when the user dismisses it.
     const reply = await this.#hooks.elicit(request, signal).catch(() => cancel);
     return signal.aborted ? cancel : reply;
   }

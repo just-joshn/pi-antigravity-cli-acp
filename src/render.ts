@@ -56,7 +56,8 @@ export function resultLines(
       ...added.map((line) => theme.fg("toolDiffAdded", `+ ${line}`)),
     ];
   });
-  const output = details.output.trimEnd() === "" ? [] : details.output.trimEnd().split("\n");
+  const trimmed = details.output.trimEnd();
+  const output = trimmed === "" ? [] : trimmed.split("\n");
   const shown = view.expanded ? output : output.slice(0, COLLAPSED_LINES);
   const hidden = output.length - shown.length;
   const lines = [

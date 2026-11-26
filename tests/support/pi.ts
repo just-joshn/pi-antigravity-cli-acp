@@ -23,7 +23,7 @@ import { answering, recorder } from "./record.ts";
 import { scratchDir } from "./scratch.ts";
 
 const fakeAgy = join(import.meta.dirname, "fake-agy.ts");
-export type ProcessLog = AgentLog & { argv: string[]; cwd: string };
+type ProcessLog = AgentLog & { argv: string[]; cwd: string };
 
 function isProcessLog(value: unknown): value is ProcessLog {
   return isRecord(value) && "prompts" in value && "argv" in value;
@@ -88,7 +88,7 @@ export function fakeUi(answers: readonly (string | undefined)[] = []) {
   return { ui, notes: notes.all, dialogs: dialogs.all, status, widgets: widgets.all };
 }
 
-export interface StartOptions {
+interface StartOptions {
   agy?: boolean;
   /** Dialogs and notices; Pi's no-op UI supplies everything else. */
   ui?: Partial<ExtensionUIContext>;

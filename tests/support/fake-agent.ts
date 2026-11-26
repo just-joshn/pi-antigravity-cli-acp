@@ -18,9 +18,9 @@ import {
 
 import { play, type Step } from "./playback.ts";
 
-export type Script = (prompt: ContentBlock[], turn: number) => Step[];
+type Script = (prompt: ContentBlock[], turn: number) => Step[];
 
-export interface FakeModel {
+interface FakeModel {
   id: string;
   name: string;
   efforts: string[];

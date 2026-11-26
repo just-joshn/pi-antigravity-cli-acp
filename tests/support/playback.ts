@@ -44,7 +44,7 @@ export const readCall = {
 export const allow: PermissionOption = { kind: "allow_once", optionId: "allow", name: "Allow" };
 export const deny: PermissionOption = { kind: "reject_once", optionId: "deny", name: "Deny" };
 
-export interface Playback {
+interface Playback {
   client: AgentContext;
   sessionId: string;
   cancelled: Promise<void>;
