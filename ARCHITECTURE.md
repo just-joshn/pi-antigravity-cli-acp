@@ -51,7 +51,7 @@ The extension registers an `antigravity` provider, because Pi's model picker, th
 5. Agent updates arrive in order on one queue per turn. Text and thoughts become Pi text and thinking blocks. A tool call ends the current Pi message with a call to `antigravity_tool`; Pi runs that tool, which waits for the agent's own tool call to finish and shows its updates. Pi then calls the stream again, which continues the same agent turn.
 6. The turn's end stamps the last message with the new anchor and the usage the agent reported.
 
-The mirror tool is why the agent's tool calls look like Pi's own: Pi renders, collapses and expands them, and the tool result in the transcript is what the agent's tool returned.
+The mirror tool is why the agent's tool calls look like Pi's own: Pi renders, collapses and expands them, and the tool result in the transcript is built from what the agent's tool returned: its output, cut to 20,000 characters, or a line for an edit, a refusal or a status.
 
 ## Process and session lifetime
 
