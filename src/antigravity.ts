@@ -156,12 +156,7 @@ export class Antigravity {
   }
 
   shutdown() {
-    const connected = this.#client;
     this.#forget();
-    void connected?.then(
-      (c) => c.close(),
-      () => {},
-    );
   }
 
   /** Remembers a permission mode the agent confirmed, for this and later sessions. */
@@ -245,13 +240,19 @@ export class Antigravity {
     },
   };
 
+  /** Closes the connection, which also stops the commands the agent ran, and stops the agent. */
   #forget() {
+    const connected = this.#client;
     this.#live?.session.dispose();
     this.#agent?.stop();
     this.#agent = undefined;
     this.#client = undefined;
     this.#opening = undefined;
     this.#live = undefined;
+    void connected?.then(
+      (c) => c.close(),
+      () => {},
+    );
   }
 
   /** Drops a dead or stuck agent and clears what Pi showed for it. */

@@ -60,7 +60,13 @@ async function canonical(path: string): Promise<string> {
   let existing = path;
   for (;;) {
     // oxlint-disable-next-line no-await-in-loop -- walks up one directory at a time until one exists
-    const real = await realpath(existing).catch(() => undefined);
+    const real = await realpath(existing).catch((error: unknown) => {
+      if (codeOf(error) === "ENOENT") return undefined;
+      throw RequestError.internalError(
+        undefined,
+        `${path} could not be resolved (${codeOf(error)})`,
+      );
+    });
     if (real !== undefined) return join(real, ...missing);
     const parent = dirname(existing);
     if (parent === existing) return path;

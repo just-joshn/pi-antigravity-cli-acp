@@ -196,6 +196,8 @@ export class AcpSession {
   #terminals: ReadonlyMap<string, string> = new Map();
   #plan: Plan | undefined;
   #tools: ReadonlyMap<string, ToolView> = new Map();
+  /** The previous turn's tool calls; a late update to one of them is not a new call. */
+  #endedTools: ReadonlySet<string> = new Set();
   #watchers: ReadonlyMap<string, readonly ((tool: ToolView) => void)[]> = new Map();
   #turn: Turn | undefined;
   #dialogs = new AbortController();
@@ -288,6 +290,7 @@ export class AcpSession {
     this.#turns += 1;
     this.#turn = turn;
     this.#settleTools();
+    this.#endedTools = new Set(this.#tools.keys());
     this.#tools = new Map();
     const dialogs = new AbortController();
     this.#dialogs = dialogs;
@@ -363,6 +366,7 @@ export class AcpSession {
       update.sessionUpdate === "tool_call" ||
       update.sessionUpdate === "tool_call_update"
     ) {
+      if (!this.#tools.has(update.toolCallId) && this.#endedTools.has(update.toolCallId)) return;
       this.#mergeTool(update);
     } else if (update.sessionUpdate === "usage_update") {
       this.#usage = { used: update.used, size: update.size };

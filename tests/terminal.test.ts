@@ -126,6 +126,13 @@ test("stopping a command stops what it started, and a child left behind does not
   ).toBeLessThan(3000);
 });
 
+test("a command still running when the agent process dies is stopped", async () => {
+  const { session, work } = await start();
+  await session.prompt("runaway command");
+  const pid = Number(await readFile(join(work, "runaway.pid"), "utf8"));
+  await vi.waitFor(() => expect(alive(pid)).toBe(false), { timeout: 3000 });
+});
+
 function alive(pid: number) {
   try {
     process.kill(pid, 0);

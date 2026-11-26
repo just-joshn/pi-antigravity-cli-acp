@@ -78,6 +78,17 @@ test("writing stays inside the workspace, even through a symlink", async () => {
   expect(await readFile(join(work, "new", "deeper", "in.txt"), "utf8")).toBe("x");
 });
 
+test("writing through a symbolic link loop is refused with the reason", async () => {
+  const work = await scratchDir("fs");
+  await symlink(join(work, "loop"), join(work, "loop"));
+  const failure = await writeTextFile(
+    { sessionId: "s", path: join(work, "loop", "x.txt"), content: "x" },
+    [work],
+  ).catch((error: unknown) => error);
+  expect.assert(failure instanceof RequestError);
+  expect(failure.message).toContain(`${join(work, "loop", "x.txt")} could not be resolved (ELOOP)`);
+});
+
 test("a file that cannot be read is named in the error with the reason", async () => {
   const dir = await scratchDir("fs");
   const failure = await readTextFile({ sessionId: "s", path: dir }).catch(

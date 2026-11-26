@@ -159,6 +159,21 @@ test("watching a running tool reports progress and resolves when it finishes or 
   expect(await session.watchTool("missing", undefined, () => {})).toBe(undefined);
 });
 
+test("an update to a tool call of an earlier turn is not a new tool call in the current one", async () => {
+  const late = { toolCallId: "t1", status: "completed" as const };
+  const { client, close } = await connect({
+    script: (_prompt, n) =>
+      n === 0
+        ? [{ tool: { toolCallId: "t1", kind: "read", title: "File a.txt", status: "pending" } }]
+        : [{ update: late }, { say: "second" }],
+  });
+  onTestFinished(close);
+  const session = await client.newSession({ cwd: "/work" });
+  await collect(session.startTurn([{ type: "text", text: "one" }]));
+  const events = await collect(session.startTurn([{ type: "text", text: "two" }]));
+  expect(events.map((event) => event.type)).toStrictEqual(["text", "end"]);
+});
+
 test("permission: the user's choice is passed on; no decision means the agent's deny option, never allow", async () => {
   const asked = recorder<string>();
   const next = answering([allow, undefined, undefined]);

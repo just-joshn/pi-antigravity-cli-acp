@@ -1,5 +1,5 @@
 /** A scripted ACP agent on stdio, started by tests in place of the real `agy acp`. */
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { Readable, Writable } from "node:stream";
 
 import { type ContentBlock, ndJsonStream } from "@agentclientprotocol/sdk/unstable";
@@ -13,6 +13,15 @@ const entry = (content: string, status: "pending" | "in_progress" | "completed")
   status,
   priority: "medium" as const,
 });
+
+/** Exits the agent process once `file` exists, as if it crashed then. */
+function dieOnceWritten(file: string) {
+  const poll = setInterval(() => {
+    // oxlint-disable-next-line unicorn/no-process-exit -- simulates the agent process dying mid-turn
+    if (existsSync(file)) process.exit(3);
+  }, 10);
+  poll.unref();
+}
 
 /** Exits the agent process shortly, as if it crashed. */
 function dieSoon(delayMs: number) {
@@ -98,6 +107,15 @@ const SCRIPTS: [keyword: string, steps: () => Step[]][] = [
     },
   ],
   ["question", () => [{ elicit: colorQuestion }]],
+  [
+    "runaway",
+    () => {
+      dieOnceWritten("runaway.pid");
+      const code =
+        "require('fs').writeFileSync('runaway.pid', String(process.pid)); setInterval(() => {}, 1000)";
+      return [{ run: [process.execPath, "-e", code] }];
+    },
+  ],
   [
     "run",
     () => [{ run: [process.execPath, "-e", "process.stdout.write('ran in ' + process.cwd())"] }],
