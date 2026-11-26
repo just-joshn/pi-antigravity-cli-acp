@@ -71,14 +71,14 @@ Esc aborts Pi's request. The extension sends `session/cancel`, aborts any open p
 - Reads requested by the agent take any absolute path, as an editor's would, but refuse devices, pipes and files over 16 MiB.
 - What the agent sends is bounded: plans to 100 entries, commands to 200, each text to 500 characters, titles to 200, tool output shown to 20,000 characters, and updates held for not-yet-known sessions to 64 each for the newest 16 sessions.
 - The agent process inherits Pi's environment, because `agy` needs it to find its sign-in. Do not run Pi with secrets in its environment that the agent should not see.
-- Commands the agent runs through Pi's terminals start without a shell in their own process group, keep at most 1 MiB of output whatever the agent asks, and are stopped with everything they started when released or when their session or the connection closes. Pi runs what the agent asks; whether to ask the user first is the agent's permission policy, as for its own tools.
+- Commands the agent runs through Pi's terminals start without a shell in their own process group, report at most 1 MiB of output whatever the agent asks (holding up to twice that between trims), and are stopped with everything they started when released or when their session or the connection closes. Pi runs what the agent asks; whether to ask the user first is the agent's permission policy, as for its own tools.
 - Structured questions are cancelled without a UI, and close with their turn like permission dialogs.
 - `--agy-mcp` passes the MCP servers' configured environment and headers to the agent, credentials included; it is off by default.
 - Nothing is logged.
 
 ## Performance
 
-`bun run bench` runs the same exchange with the bare ACP SDK, which only counts the updates, and through the extension into Pi's provider events, with a scripted agent in the same process instead of a model. Before timing, it checks that both did the whole exchange. Two local runs on an Apple M2 Max with Node 24.22, mean time per exchange:
+`bun run bench` runs the same exchange with the bare ACP SDK, which only counts the updates, and through the extension into Pi's provider events, with a scripted agent in the same process instead of a model. Before timing, it checks that both did the whole exchange. Two runs of `bun run bench` at commit `e8c54c9` on an otherwise idle Apple M2 Max with Node 24.22, mean time per exchange:
 
 | Workload                               | Bare SDK           | Extension to Pi events |
 | -------------------------------------- | ------------------ | ---------------------- |
@@ -86,4 +86,4 @@ Esc aborts Pi's request. The extension sends `session/cancel`, aborts any open p
 | A tool call with 200 KB of output      | 0.168 and 0.172 ms | 0.178 and 0.194 ms     |
 | Reopening a saved session of 500 turns | n/a                | 4.70 and 4.71 ms       |
 
-The extension, including building Pi's events and assistant message, adds about 1 µs per streamed chunk and 10 to 22 µs for a 200 KB tool result. Updates are handled as they arrive, without polling or batching, except that tool calls the agent starts within 25 ms of each other are shown together.
+The extension, including building Pi's events and assistant message, adds about 1 µs per streamed chunk and 10 to 22 µs for a 200 KB tool result. On a busy machine every number rises and varies more; compare the two columns of one run, not runs on different machines. Updates are handled as they arrive, without polling or batching, except that tool calls the agent starts within 25 ms of each other are shown together.

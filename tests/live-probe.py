@@ -62,6 +62,7 @@ class Agent:
             try:
                 message = json.loads(line)
             except json.JSONDecodeError:
+                self.samples.append(f"non-JSON line: {line[:200]!r}")
                 continue
             method = message.get("method")
             if method == "session/update":
@@ -73,9 +74,17 @@ class Agent:
             elif method and "id" in message:
                 self.requests[method] += 1
                 self.samples.append(f"{method} {json.dumps(message.get('params'))[:300]}")
-                self._send({"jsonrpc": "2.0", "id": message["id"], **self._answer(method, message["params"])})
+                self._send({"jsonrpc": "2.0", "id": message["id"], **self._reply(method, message.get("params") or {})})
             elif "id" in message:
                 self.replies[message["id"]] = message
+
+    def _reply(self, method, params):
+        """The answer to a request; a probe failure is sent back as an error and shown, not lost."""
+        try:
+            return self._answer(method, params)
+        except Exception as error:  # the probe reports every failure instead of stopping its reader
+            self.samples.append(f"{method} failed in the probe: {error!r}")
+            return {"error": {"code": -32603, "message": f"probe failure: {error}"}}
 
     def _answer(self, method, params):
         if method == "session/request_permission":

@@ -26,8 +26,8 @@
   "scripts": {
     "format": "bun fmt",
     "format:check": "bun fmt --check",
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix",
+    "lint": "oxlint --deny-warnings",
+    "lint:fix": "oxlint --fix --deny-warnings",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

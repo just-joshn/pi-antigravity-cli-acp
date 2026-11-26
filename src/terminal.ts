@@ -10,7 +10,7 @@ import {
 
 import { put, without } from "./immutable.ts";
 
-/** Most output kept per terminal, whatever the agent asks for, so a noisy command cannot exhaust memory. */
+/** Most output reported per terminal, whatever the agent asks for; up to twice this is held between trims. */
 const OUTPUT_LIMIT = 1024 * 1024;
 const KILL_GRACE_MS = 1000;
 /** After the command exits, how long to wait for output still held by processes it left behind. */

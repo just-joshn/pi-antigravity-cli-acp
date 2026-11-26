@@ -26,8 +26,12 @@ from pathlib import Path
 ENTRY = Path(__file__).resolve().parents[1] / "src" / "index.ts"
 PROVIDER = "antigravity"
 TOOL = "antigravity_tool"
+EDIT_MODES = {"cli": "accept-edits", "registry": "auto_edit"}
 AGENT = sys.argv[1] if len(sys.argv) > 1 else "cli"
-EDIT_MODE = {"cli": "accept-edits", "registry": "auto_edit"}[AGENT]
+if AGENT not in EDIT_MODES:
+    sys.exit(f"usage: python3 tests/live-acp.py [{'|'.join(EDIT_MODES)}]")
+EDIT_MODE = EDIT_MODES[AGENT]
+DEFAULT_MODEL = os.environ.get("ACP_LIVE_MODEL")
 PI_FLAGS = ["--mode", "rpc", "--offline", "--no-extensions", "--no-context-files", "--no-skills", "--no-mcp", "--no-prompt-templates", "--no-themes"]
 
 
@@ -50,7 +54,10 @@ class Rpc:
 
     def _read(self):
         for line in self.pipe.stdout:
-            self.pending.put(json.loads(line))
+            try:
+                self.pending.put(json.loads(line))
+            except json.JSONDecodeError:
+                self.pending.put({"type": "unparsed", "line": line})
         self.pending.put(None)
 
     def answer(self, choice):
@@ -94,9 +101,14 @@ class Rpc:
         end = time.monotonic() + timeout
         events = []
         while True:
-            event = self.pending.get(timeout=max(0.1, end - time.monotonic()))
+            try:
+                event = self.pending.get(timeout=max(0.1, end - time.monotonic()))
+            except queue.Empty:
+                raise TimeoutError(f"no matching event within {timeout} s; last: {events[-1:]}") from None
             if event is None:
                 raise RuntimeError("Pi closed stdout unexpectedly")
+            if event.get("type") == "unparsed":
+                raise RuntimeError(f"Pi wrote a line that is not JSON: {event['line'][:200]!r}")
             events.append(event)
             if event.get("type") == "extension_ui_request":
                 self._ui(event)
@@ -154,7 +166,7 @@ def greet(rpc):
 def pick_model(rpc):
     offered = [m for m in rpc.models() if m != "default"]
     assert offered, "the agent's models did not reach Pi's model list"
-    model = os.environ.get("ACP_LIVE_MODEL") or next((m for m in offered if "flash" in m), offered[0])
+    model = DEFAULT_MODEL or next((m for m in offered if "flash" in m), offered[0])
     rpc.request("set_model", provider=PROVIDER, modelId=model)
     rpc.request("set_thinking_level", level="low")
     ok(f"Pi's model list now offers {offered}; selected {model} at thinking level low")
@@ -274,12 +286,16 @@ def restore(start):
     """Quits Pi and reopens its saved session: the agent conversation continues where it was."""
     word = "pelican-" + secrets.token_hex(4)
     first = Rpc(start([]))
-    first.request("set_model", provider=PROVIDER, modelId="default")
-    _, _, before, _ = first.turn(f"Remember the code word {word}. Reply only: noted")
-    first.quit()
+    try:
+        first.request("set_model", provider=PROVIDER, modelId="default")
+        _, _, before, _ = first.turn(f"Remember the code word {word}. Reply only: noted")
+    finally:
+        first.quit()
     again = Rpc(start(["--continue"]))
-    _, _, after, said = again.turn("What was the code word? Reply with just the word.")
-    again.quit()
+    try:
+        _, _, after, said = again.turn("What was the code word? Reply with just the word.")
+    finally:
+        again.quit()
     agent_session = before["responseId"].split("/")[0]
     assert word in said.lower(), said
     assert after["responseId"].startswith(agent_session + "/"), (before["responseId"], after["responseId"])
@@ -358,15 +374,16 @@ def features(start, root):
     extra = root / "extra"
     extra.mkdir()
     rpc = Rpc(start(["--agy-dir", str(extra)]))
-    rpc.request("set_model", provider=PROVIDER, modelId=os.environ.get("ACP_LIVE_MODEL") or "gemini-3.8-flash")
-    rpc.request("set_thinking_level", level="low")
-    marker, first = extra_directory(rpc, extra)
-    image(rpc)
-    terminal_output(rpc)
-    agent_session, name = title(rpc, first)
-    plan(rpc)
-    saved_sessions(rpc, marker, agent_session, name)
-    rpc.quit()
+    try:
+        pick_model(rpc)
+        marker, first = extra_directory(rpc, extra)
+        image(rpc)
+        terminal_output(rpc)
+        agent_session, name = title(rpc, first)
+        plan(rpc)
+        saved_sessions(rpc, marker, agent_session, name)
+    finally:
+        rpc.quit()
 
 
 def environment(root, tools):

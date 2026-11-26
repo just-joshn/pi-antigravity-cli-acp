@@ -17,7 +17,8 @@ mkdir -p "$scratch/bin" "$scratch/work"
 
 echo "== pack"
 npm pack --silent --pack-destination "$scratch" >/dev/null
-tarball="$(ls "$scratch"/pi-antigravity-acp-*.tgz)"
+tarball="$(ls "$scratch"/*.tgz 2>/dev/null | head -n 1)"
+[ -n "$tarball" ] || { echo "FAIL: npm pack wrote no tarball"; exit 1; }
 
 export HOME="$scratch"
 export PI_CODING_AGENT_DIR="$scratch/agent"
@@ -26,6 +27,12 @@ export FAKE_AGY_STORE="$scratch/agy-sessions.json"
 printf '#!/bin/sh\nexec "%s" "%s" "$@" "%s"\n' "$(command -v node)" "$repo/tests/support/fake-agy.ts" "$scratch" >"$scratch/bin/agy"
 chmod +x "$scratch/bin/agy"
 export PATH="$scratch/bin:$PATH"
+
+# Each scripted agent writes its log as its process exits, which can be just after Pi returns.
+wait_for_log() {
+  for _ in $(seq 50); do [ -s "$1" ] && return 0; sleep 0.1; done
+  fail "the agent wrote no log at $1"
+}
 
 fail() {
   echo "FAIL: $1"
@@ -53,6 +60,7 @@ reply="$(run 1 -p "hello")"
 echo "== restart Pi and continue the saved session"
 reply="$(run 2 -c -p "again")"
 [ "$reply" = "echo: again" ] || fail "expected 'echo: again', got '$reply'"
+wait_for_log "$scratch/log-2.json"
 node -e '
   const log = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
   if (log.sessions.length !== 0 || log.loads.length !== 1) {
@@ -67,8 +75,7 @@ node -e '
 ' "$scratch/log-2.json" || fail "the restart did not continue the saved agent session"
 
 echo "== shutdown"
-# The scripted agent writes its log as its process exits, so wait a moment for the process to go.
-[ -s "$scratch/log-1.json" ] && [ -s "$scratch/log-2.json" ] || fail "an agent did not exit"
+wait_for_log "$scratch/log-1.json"
 for _ in $(seq 50); do pgrep -f "$scratch" >/dev/null || break; sleep 0.1; done
 if pgrep -f "$scratch" >/dev/null; then fail "an agent process outlived Pi"; fi
 
