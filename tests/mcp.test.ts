@@ -1,17 +1,17 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { expect, onTestFinished, test } from "vitest";
+import { expect, test } from "vitest";
 
 import { readPiMcpServers } from "../src/mcp.ts";
+import { scratchDir } from "./support/scratch.ts";
 
 const write = (file: string, servers: unknown) =>
   writeFile(file, JSON.stringify({ mcpServers: servers }));
 
 async function scratch() {
-  const dir = await mkdtemp(join(tmpdir(), "pi-acp-mcp-"));
-  onTestFinished(() => rm(dir, { recursive: true, force: true }));
+  const dir = await scratchDir("mcp");
   const agentDir = join(dir, "agent");
   const cwd = join(dir, "work");
   await Promise.all([mkdir(agentDir), mkdir(join(cwd, ".pi"), { recursive: true })]);

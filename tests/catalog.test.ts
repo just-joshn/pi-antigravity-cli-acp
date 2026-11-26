@@ -1,5 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { expect, onTestFinished, test } from "vitest";
@@ -13,12 +12,7 @@ import {
   writeCatalog,
 } from "../src/catalog.ts";
 import { connect } from "./support/harness.ts";
-
-async function scratch() {
-  const dir = await mkdtemp(join(tmpdir(), "pi-acp-catalog-"));
-  onTestFinished(() => rm(dir, { recursive: true, force: true }));
-  return dir;
-}
+import { scratchDir } from "./support/scratch.ts";
 
 test("the catalog learns every model's thinking levels from one session", async () => {
   const listed = await connect({ script: () => [] });
@@ -99,7 +93,7 @@ test("Pi models mark thinking levels the agent lacks as unsupported", () => {
 });
 
 test("a saved catalog round-trips; a missing or malformed one is ignored", async () => {
-  const dir = await scratch();
+  const dir = await scratchDir("catalog");
   const file = join(dir, "nested", "catalog.json");
   expect(readCatalog(file)).toStrictEqual(emptyCatalog);
   const catalog = {
@@ -139,7 +133,7 @@ test("a saved catalog round-trips; a missing or malformed one is ignored", async
 });
 
 test("saved agent commands that are missing or malformed are dropped, not the catalog", async () => {
-  const file = join(await scratch(), "catalog.json");
+  const file = join(await scratchDir("catalog"), "catalog.json");
   const commands = async (value: unknown) => {
     await writeFile(file, JSON.stringify({ models: [], modes: [], commands: value }));
     return readCatalog(file).commands;
@@ -158,7 +152,7 @@ test("saved agent commands that are missing or malformed are dropped, not the ca
 });
 
 test("a saved catalog with no models or modes is valid, and its context window must be positive", async () => {
-  const file = join(await scratch(), "catalog.json");
+  const file = join(await scratchDir("catalog"), "catalog.json");
   const window = async (contextWindow: unknown) => {
     await writeFile(file, JSON.stringify({ models: [], modes: [], contextWindow }));
     return readCatalog(file).contextWindow;

@@ -1,5 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { RequestError } from "@agentclientprotocol/sdk/unstable";
@@ -8,6 +7,7 @@ import { expect, onTestFinished, test, vi } from "vitest";
 import { Terminals } from "../src/terminal.ts";
 import { said, start } from "./support/pi.ts";
 import { recorder } from "./support/record.ts";
+import { scratchDir } from "./support/scratch.ts";
 
 function terminals() {
   const updates = recorder<[string, string, string | undefined]>();
@@ -107,8 +107,7 @@ test("the agent cannot raise the output kept past 1 MiB", async () => {
 
 test("stopping a command stops what it started, and a child left behind does not hold up its exit", async () => {
   const { all } = terminals();
-  const dir = await mkdtemp(join(tmpdir(), "pi-acp-term-"));
-  onTestFinished(() => rm(dir, { recursive: true, force: true }));
+  const dir = await scratchDir("term");
   const pidFile = join(dir, "child");
   const parent = `const c = require("node:child_process").spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "inherit" }); require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(c.pid)); setInterval(() => {}, 1000);`;
   const { terminalId } = all.create({ sessionId: "s", ...node(parent) }, "/");

@@ -5,7 +5,7 @@ import { expect, test } from "vitest";
 
 import { isRecord } from "../src/guards.ts";
 import { NOT_RESENT } from "../src/stream.ts";
-import { said, start } from "./support/pi.ts";
+import { said, start, texts } from "./support/pi.ts";
 
 /** Runs one Pi session that talks to the agent, then quits Pi, as a user would. */
 async function earlierRun(prompts: string[]) {
@@ -16,9 +16,6 @@ async function earlierRun(prompts: string[]) {
   await first.stop();
   return { home: first.home, agentSession: anchor.slice(0, anchor.indexOf("/")) };
 }
-
-const texts = (prompt: { type: string; text?: string }[] | undefined) =>
-  (prompt ?? []).map((block) => (block.type === "text" ? block.text : `[${block.type}]`));
 
 test("reopening a Pi session continues its agent conversation instead of replaying it", async () => {
   const { home, agentSession } = await earlierRun(["hello", "how are you"]);

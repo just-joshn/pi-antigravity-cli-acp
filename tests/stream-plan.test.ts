@@ -1,16 +1,9 @@
 import { expect, test } from "vitest";
 
 import { parseAnchor } from "../src/conversation.ts";
+import { noUsage } from "../src/draft.ts";
 import { lastAnchor, planTurn, renderHistory } from "../src/stream.ts";
 
-const usage = {
-  input: 0,
-  output: 0,
-  cacheRead: 0,
-  cacheWrite: 0,
-  totalTokens: 0,
-  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-};
 const user = (content: string) => ({ role: "user" as const, content, timestamp: 1 });
 const result = (toolCallId: string) => ({
   role: "toolResult" as const,
@@ -26,7 +19,7 @@ const reply = (responseId: string | undefined, provider = "antigravity") => ({
   provider,
   model: "m",
   content: [{ type: "toolCall" as const, id: "call-1", name: "antigravity_tool", arguments: {} }],
-  usage,
+  usage: noUsage(),
   stopReason: "toolUse" as const,
   timestamp: 2,
   ...(responseId === undefined ? {} : { responseId }),

@@ -1,18 +1,12 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { Stream } from "@agentclientprotocol/sdk/unstable";
-import { expect, onTestFinished, test, vi } from "vitest";
+import { expect, test, vi } from "vitest";
 
 import { findRegistryAgent, launch, registryRoot, resolveAgent } from "../src/agent.ts";
 import { AcpError } from "../src/client.ts";
-
-async function scratch() {
-  const dir = await mkdtemp(join(tmpdir(), "pi-acp-agent-"));
-  onTestFinished(() => rm(dir, { recursive: true, force: true }));
-  return dir;
-}
+import { scratchDir } from "./support/scratch.ts";
 
 async function program(file: string) {
   await mkdir(join(file, ".."), { recursive: true });
@@ -22,7 +16,7 @@ async function program(file: string) {
 
 /** Two registry copies of the agent under a scratch HOME, as Zed installs them on macOS. */
 async function installCopies() {
-  const home = await scratch();
+  const home = await scratchDir("agent");
   const root = registryRoot({ HOME: home }, "darwin");
   const older = join(root, "antigravity-acp", "v_1.5.2_aaaa", "agy_acp_server.par");
   const newer = join(root, "antigravity-acp", "v_1.10.0_bbbb", "agy_acp_server.par");
@@ -52,7 +46,7 @@ const alive = (pid: number) => {
 };
 
 test("the registry directory follows each platform's data directory", async () => {
-  const home = await scratch();
+  const home = await scratchDir("agent");
   expect(registryRoot({ HOME: home }, "darwin")).toBe(
     join(home, "Library", "Application Support", "Zed", "external_agents", "registry"),
   );
@@ -62,7 +56,7 @@ test("the registry directory follows each platform's data directory", async () =
 });
 
 test("with no agent installed, each choice says what is missing", async () => {
-  const home = await scratch();
+  const home = await scratchDir("agent");
   const env = { HOME: home, PATH: join(home, "bin") };
   expect(() => resolveAgent("auto", env, "darwin", "arm64")).toThrow(AcpError);
   expect(() => resolveAgent("registry", env, "darwin", "arm64")).toThrow(/Zed/);
@@ -118,7 +112,7 @@ test("the registry directory falls back to USERPROFILE and Windows' default", ()
 });
 
 test("a missing or malformed registry listing falls back to the default server binary", async () => {
-  const root = await scratch();
+  const root = await scratchDir("agent");
   expect(findRegistryAgent(root, "darwin-aarch64"), "nothing installed").toBeUndefined();
   await mkdir(join(root, "antigravity-acp", "unversioned"), { recursive: true });
   expect(findRegistryAgent(root, "darwin-aarch64"), "no version directory").toBeUndefined();
@@ -160,7 +154,7 @@ test("a missing or malformed registry listing falls back to the default server b
 });
 
 test("stopping an agent that ignores SIGTERM kills it", async () => {
-  const dir = await scratch();
+  const dir = await scratchDir("agent");
   const pidFile = join(dir, "pid");
   const script = `trap "" TERM; echo $$ > "${pidFile}"; while :; do sleep 0.05; done`;
   const agent = launch({ kind: "cli", command: "sh", args: ["-c", script] }, dir);
@@ -174,7 +168,7 @@ test("stopping an agent that ignores SIGTERM kills it", async () => {
 });
 
 test("stopping an agent that already exited, or never started, does nothing", async () => {
-  const dir = await scratch();
+  const dir = await scratchDir("agent");
   const exited = launch({ kind: "cli", command: "true", args: [] }, dir);
   await ended(exited.stream);
   await new Promise((resolve) => setTimeout(resolve, 50));

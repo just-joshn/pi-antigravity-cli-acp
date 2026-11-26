@@ -1,7 +1,6 @@
 /** A real Pi session with this extension loaded, talking to the scripted `agy`. */
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 import type { AssistantMessage } from "@earendil-works/pi-ai";
@@ -20,6 +19,7 @@ import { emptyCatalog, piModels } from "../../src/catalog.ts";
 import antigravityAcp from "../../src/index.ts";
 import type { AgentLog } from "./fake-agent.ts";
 import { answering, recorder } from "./record.ts";
+import { scratchDir } from "./scratch.ts";
 
 const fakeAgy = join(import.meta.dirname, "fake-agy.ts");
 export type ProcessLog = AgentLog & { argv: string[]; cwd: string };
@@ -30,6 +30,10 @@ function isProcessLog(value: unknown): value is ProcessLog {
 
 export const said = (message: AssistantMessage | undefined) =>
   (message?.content ?? []).map((block) => (block.type === "text" ? block.text : "")).join("");
+
+/** A prompt as the agent received it: its text, with other blocks shown by type. */
+export const texts = (prompt: { type: string; text?: string }[] | undefined) =>
+  (prompt ?? []).map((block) => (block.type === "text" ? block.text : `[${block.type}]`));
 
 const refuse = () => {
   throw new Error("the other provider is not called in these tests");
@@ -100,8 +104,7 @@ export async function installAgy(home: string) {
 
 /** A scratch HOME whose PATH holds only the scripted `agy`, away from any editor-installed agent. */
 async function scratchHome(options: StartOptions) {
-  const dir = options.home ?? (await realpath(await mkdtemp(join(tmpdir(), "pi-acp-ext-"))));
-  if (!options.home) onTestFinished(() => rm(dir, { recursive: true, force: true }));
+  const dir = options.home ?? (await scratchDir("ext"));
   const [work, bin, agentDir] = [join(dir, "work"), join(dir, "bin"), join(dir, "pi")];
   const logFile = join(dir, `agent-log-${randomUUID()}.json`);
   await Promise.all([mkdir(work, { recursive: true }), mkdir(bin, { recursive: true })]);

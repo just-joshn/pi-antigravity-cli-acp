@@ -11,6 +11,7 @@ import { expect, onTestFinished, test } from "vitest";
 
 import { type Catalog, piModels, PROVIDER } from "../src/catalog.ts";
 import { Conversation } from "../src/conversation.ts";
+import { noUsage } from "../src/draft.ts";
 import { createStream, haltTurn, TURN_LOST } from "../src/stream.ts";
 import { runMirror, TOOL_NAME } from "../src/tool.ts";
 import { defaultModels, type FakeAgentOptions } from "./support/fake-agent.ts";
@@ -347,14 +348,7 @@ test("history the agent has not seen is supplied as context; a rewound transcrip
       provider: "other",
       model: "x",
       content: [{ type: "text", text: "earlier answer" }],
-      usage: {
-        input: 0,
-        output: 0,
-        cacheRead: 0,
-        cacheWrite: 0,
-        totalTokens: 0,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-      },
+      usage: noUsage(),
       stopReason: "stop",
       timestamp: 2,
     },

@@ -1,5 +1,4 @@
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { expect, onTestFinished, test } from "vitest";
@@ -8,6 +7,7 @@ import type { TurnEvent } from "../src/session.ts";
 import { connect, deferred, identity } from "./support/harness.ts";
 import { allow, deny, type Step } from "./support/playback.ts";
 import { answering, recorder } from "./support/record.ts";
+import { scratchDir } from "./support/scratch.ts";
 
 const readCall = {
   toolCallId: "t1",
@@ -250,8 +250,7 @@ test("an agent error ends the turn with its message", async () => {
 });
 
 test("the agent reads and writes text files through the client", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pi-acp-fs-"));
-  onTestFinished(() => rm(dir, { recursive: true, force: true }));
+  const dir = await scratchDir("fs");
   await writeFile(join(dir, "notes.txt"), "alpha\nbravo\n");
   const created = join(dir, "new", "made.txt");
   const { client, close } = await connect({
@@ -271,8 +270,7 @@ test("the agent reads and writes text files through the client", async () => {
 });
 
 test("Pi writes files for the agent only inside the session's workspace", async () => {
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-acp-fs-")));
-  onTestFinished(() => rm(dir, { recursive: true, force: true }));
+  const dir = await scratchDir("fs");
   const work = join(dir, "work");
   await mkdir(work);
   const outside = join(dir, "outside.txt");
@@ -296,8 +294,7 @@ test("Pi writes files for the agent only inside the session's workspace", async 
 });
 
 test("Pi also writes for the agent inside the extra directories its session was given", async () => {
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-acp-fs-")));
-  onTestFinished(() => rm(dir, { recursive: true, force: true }));
+  const dir = await scratchDir("fs");
   const [work, extra] = [join(dir, "work"), join(dir, "extra")];
   await Promise.all([mkdir(work), mkdir(extra)]);
   const { client, close } = await connect({

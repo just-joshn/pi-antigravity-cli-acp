@@ -4,11 +4,8 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { expect, test, vi } from "vitest";
 
 import { labels } from "../src/sessions.ts";
-import { fakeUi, said, start } from "./support/pi.ts";
+import { fakeUi, said, start, texts } from "./support/pi.ts";
 import { recorder } from "./support/record.ts";
-
-const texts = (prompt: { type: string; text?: string }[] | undefined) =>
-  (prompt ?? []).map((block) => (block.type === "text" ? block.text : `[${block.type}]`));
 
 test("/agy sessions opens a saved agent conversation as a new Pi session that continues it", async () => {
   const first = await start();

@@ -1,26 +1,11 @@
-import {
-  mkdir,
-  mkdtemp,
-  readFile,
-  realpath,
-  rm,
-  symlink,
-  truncate,
-  writeFile,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, symlink, truncate, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { RequestError } from "@agentclientprotocol/sdk/unstable";
-import { expect, onTestFinished, test } from "vitest";
+import { expect, test } from "vitest";
 
 import { readTextFile, writeTextFile } from "../src/fs.ts";
-
-async function scratch() {
-  const dir = await realpath(await mkdtemp(join(tmpdir(), "pi-acp-fs-unit-")));
-  onTestFinished(() => rm(dir, { recursive: true, force: true }));
-  return dir;
-}
+import { scratchDir } from "./support/scratch.ts";
 
 const code = (promise: Promise<unknown>) =>
   promise.then(
@@ -38,7 +23,7 @@ const writeIn = (workspace: string | undefined, path: string) =>
   );
 
 test("reading returns the whole file, or limit lines from a 1-based line", async () => {
-  const dir = await scratch();
+  const dir = await scratchDir("fs");
   const path = join(dir, "lines.txt");
   await writeFile(path, "one\ntwo\nthree\nfour");
   const lines = (line?: number | null, limit?: number | null) =>
@@ -57,7 +42,7 @@ test("reading returns the whole file, or limit lines from a 1-based line", async
 });
 
 test("reading an empty file, or zero lines, gives empty text", async () => {
-  const dir = await scratch();
+  const dir = await scratchDir("fs");
   const path = join(dir, "empty.txt");
   await writeFile(path, "");
   expect((await readTextFile({ sessionId: "s", path })).content).toBe("");
@@ -67,14 +52,14 @@ test("reading an empty file, or zero lines, gives empty text", async () => {
 });
 
 test("reading refuses relative paths and reports missing or unreadable files", async () => {
-  const dir = await scratch();
+  const dir = await scratchDir("fs");
   expect(await read("relative.txt")).toBe(RequestError.invalidParams().code);
   expect(await read(join(dir, "absent.txt"))).toBe(RequestError.resourceNotFound().code);
   expect(await read(dir), "a directory is not a text file").toBe(RequestError.internalError().code);
 });
 
 test("writing stays inside the workspace, even through a symlink", async () => {
-  const dir = await scratch();
+  const dir = await scratchDir("fs");
   const work = join(dir, "work");
   await mkdir(work);
   await symlink(dir, join(work, "escape"));
@@ -94,7 +79,7 @@ test("writing stays inside the workspace, even through a symlink", async () => {
 });
 
 test("a file that cannot be read is named in the error with the reason", async () => {
-  const dir = await scratch();
+  const dir = await scratchDir("fs");
   const failure = await readTextFile({ sessionId: "s", path: dir }).catch(
     (error: unknown) => error,
   );
@@ -103,7 +88,7 @@ test("a file that cannot be read is named in the error with the reason", async (
 });
 
 test("reading refuses devices and files over 16 MB instead of loading them", async () => {
-  const dir = await scratch();
+  const dir = await scratchDir("fs");
   const big = join(dir, "big.txt");
   await writeFile(big, "");
   await truncate(big, 16 * 1024 * 1024 + 1);

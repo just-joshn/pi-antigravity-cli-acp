@@ -1,6 +1,7 @@
 import { type AssistantMessage, isRetryableAssistantError } from "@earendil-works/pi-ai";
 import { expect, test } from "vitest";
 
+import { noUsage } from "../src/draft.ts";
 import { AcpSession, type AgentPort, type SessionHooks } from "../src/session.ts";
 import { haltTurn, NOT_RESENT } from "../src/stream.ts";
 import { quietHooks, resolvable } from "./support/harness.ts";
@@ -90,14 +91,7 @@ test("the message shown instead of a repeat is one Pi does not retry on its own"
     api: "antigravity-acp",
     provider: "antigravity",
     model: "default",
-    usage: {
-      input: 0,
-      output: 0,
-      cacheRead: 0,
-      cacheWrite: 0,
-      totalTokens: 0,
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-    },
+    usage: noUsage(),
     stopReason: "error",
     timestamp: 1,
   };
