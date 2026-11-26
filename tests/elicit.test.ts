@@ -18,13 +18,15 @@ function scripted(answers: readonly (string | undefined)[]) {
   return { dialogs, shown: shown.all };
 }
 
-const form = (properties: Record<string, unknown>, required: string[] = []) =>
-  ({
-    sessionId: "s",
-    mode: "form",
-    message: "A few details, please",
-    requestedSchema: { type: "object", properties, required },
-  }) as CreateElicitationRequest;
+const form = (
+  properties: Record<string, unknown>,
+  required: string[] = [],
+): CreateElicitationRequest => ({
+  sessionId: "s",
+  mode: "form",
+  message: "A few details, please",
+  requestedSchema: { type: "object", properties, required },
+});
 
 const signal = new AbortController().signal;
 
@@ -101,13 +103,13 @@ test("declining, dismissing, or a field Pi cannot ask about ends the form", asyn
 });
 
 test("a link to visit is shown with its URL; continuing accepts", async () => {
-  const request = {
+  const request: CreateElicitationRequest = {
     sessionId: "s",
     mode: "url",
     message: "Approve in your browser",
     elicitationId: "e1",
     url: "https://example.com/approve",
-  } as CreateElicitationRequest;
+  };
   const accepted = scripted(["Continue"]);
   expect(await answerElicitation(request, accepted.dialogs, signal)).toStrictEqual({
     action: "accept",
@@ -181,12 +183,12 @@ test("without a UI the question is cancelled; one for an unknown session too", a
 });
 
 test("only url mode is a link, and a field named __proto__ is kept as an answer", async () => {
-  const odd = {
+  const odd: CreateElicitationRequest = {
     requestId: 1,
     mode: "custom",
     message: "?",
     url: "https://x.example",
-  } as CreateElicitationRequest;
+  };
   expect(await answerElicitation(odd, scripted(["Continue"]).dialogs, signal)).toStrictEqual({
     action: "decline",
   });

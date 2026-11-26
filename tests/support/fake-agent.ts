@@ -153,9 +153,6 @@ const TURN_USAGE = {
   cachedWriteTokens: 0,
 };
 
-const textOf = (blocks: ContentBlock[]) =>
-  blocks.map((block) => (block.type === "text" ? block.text : "")).join("");
-
 /** Replays a saved conversation the way `agy` does on session/load: each prompt, then a reply. */
 async function replay(client: AgentContext, sessionId: string, prompts: readonly ContentBlock[][]) {
   for (const prompt of prompts) {
@@ -362,7 +359,9 @@ class FakeAgent {
     const sessions = Object.entries(this.#history).map(([sessionId, prompts]) => ({
       sessionId,
       cwd,
-      title: textOf(prompts[0] ?? []) || null,
+      title:
+        (prompts[0] ?? []).map((block) => (block.type === "text" ? block.text : "")).join("") ||
+        null,
       updatedAt: "2026-11-25T10:00:00Z",
     }));
     const ghosts = (this.#options.ghosts ?? []).map((sessionId) => ({

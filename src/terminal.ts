@@ -82,8 +82,10 @@ export class Terminals {
     const cwd = request.cwd ?? sessionCwd;
     if (!isAbsolute(cwd))
       throw RequestError.invalidParams(undefined, "the working directory must be absolute");
-    const added = (request.env ?? []).map(({ name, value }): [string, string] => [name, value]);
-    const env = { ...process.env, ...Object.fromEntries(added) };
+    const env = {
+      ...process.env,
+      ...Object.fromEntries((request.env ?? []).map(({ name, value }) => [name, value])),
+    };
     const child = spawn(request.command, request.args ?? [], {
       cwd,
       env,
