@@ -61,7 +61,7 @@ class Rpc:
         self.pending.put(None)
 
     def answer(self, choice):
-        """Queues the answer to the next select dialog."""
+        """Queues the answer to the next select or text dialog."""
         self.answers = (*self.answers, choice)
 
     def forget_dialogs(self):
@@ -414,7 +414,6 @@ def question(rpc):
 
 
 def features(start, root):
-    """Extra directories, images, client terminals, titles, plans, thoughts and /agy sessions."""
     extra = root / "extra"
     extra.mkdir()
     rpc = Rpc(start(["--agy-dir", str(extra)]))

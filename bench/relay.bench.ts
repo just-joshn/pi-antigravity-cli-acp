@@ -45,7 +45,6 @@ const prompt = normalizeContext({
   messages: [{ role: "user", content: "go", timestamp: 1 }],
 });
 
-/** The bare SDK: one prompt whose updates are only counted. */
 async function sdkTurn(steps: Step[]) {
   const { agentSide, clientSide } = pair();
   const fake = serveAgent(agentSide, { script: () => steps });
@@ -70,7 +69,6 @@ async function sdkTurn(steps: Step[]) {
   }
 }
 
-/** The extension: the same prompt through Pi's provider stream, every event consumed. */
 async function extensionTurn(options: FakeAgentOptions): Promise<string> {
   const { client: acp, close } = await connect(options);
   let conversation: Conversation | undefined;

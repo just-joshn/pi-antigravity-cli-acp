@@ -179,7 +179,6 @@ function rangeHint(schema: Record<string, unknown>): string {
   return listed ? `comma-separated: ${listed.map((c) => c.label).join(", ")}` : "";
 }
 
-/** A bound the form sets, when it sets one as a number. */
 const boundOf = (value: unknown) => (typeof value === "number" ? value : undefined);
 
 /** The answer zod reads from the text, or the first problem it found, worded for the user. */

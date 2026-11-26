@@ -28,7 +28,6 @@ printf '#!/bin/sh\nexec "%s" "%s" "$@" "%s"\n' "$(command -v node)" "$repo/tests
 chmod +x "$scratch/bin/agy"
 export PATH="$scratch/bin:$PATH"
 
-# Each scripted agent writes its log as its process exits, which can be just after Pi returns.
 wait_for_log() {
   for _ in $(seq 50); do [ -s "$1" ] && return 0; sleep 0.1; done
   fail "the agent wrote no log at $1"

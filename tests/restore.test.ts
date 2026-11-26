@@ -8,7 +8,6 @@ import { isRecord } from "../src/guards.ts";
 import { NOT_RESENT } from "../src/stream.ts";
 import { agentStore, said, start, texts } from "./support/pi.ts";
 
-/** The agent session an assistant message's anchor names. */
 function sessionOf(anchor: string) {
   const at = parseAnchor(anchor);
   expect.assert(at, `not an anchor: ${anchor}`);

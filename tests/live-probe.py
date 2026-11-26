@@ -91,7 +91,7 @@ class Agent:
         """The answer to a request; a probe failure is sent back as an error and shown, not lost."""
         try:
             return self._answer(method, params)
-        except Exception as error:  # the probe reports every failure instead of stopping its reader
+        except Exception as error:
             self._note(f"{method} failed in the probe: {error!r}")
             return {"error": {"code": -32603, "message": f"probe failure: {error}"}}
 

@@ -1,4 +1,3 @@
-/** One item's place among the items of a list that share its key. */
 interface Occurrence<T> {
   readonly item: T;
   /** Which of the items with this key it is, counting from 1. */
