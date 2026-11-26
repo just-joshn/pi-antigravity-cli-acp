@@ -267,7 +267,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 
 - **Applies:** yes for agents that use them; `agy acp` reads and writes files itself, the registry agent uses the client.
 - **ACP:** `fs/read_text_file`, `fs/write_text_file`.
-- **Implementation:** reads by absolute path, refusing devices, pipes and files over 16 MiB; writes only inside the session's directory and its `--agy-dir` directories, checked after resolving links and again for the real parent after creating it, without following a link at the file.
+- **Implementation:** reads by absolute path, refusing devices, pipes and files over 16 MiB; writes only inside the session's directory and its `--agy-dir` directories, checked after resolving links and again for the real parent after creating it, without following a link at the file. A path that cannot be resolved, such as one through a link loop, is refused with the reason.
 - **Verification:** `tests/fs.test.ts`, `tests/client.test.ts`.
 - **Status:** implemented_unverified: `python3 tests/live-acp.py registry` was not run on this branch.
 
@@ -287,7 +287,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 
 - **Reference:** Zed advertises `terminal` and runs commands the agent asks for.
 - **Applies:** if the agent uses it; unknown for `agy` until `tests/live-probe.py` runs. **ACP:** `terminal/create`, `output`, `wait_for_exit`, `kill`, `release`.
-- **Implementation:** `src/terminal.ts`. Commands run without a shell in the session's directory or another absolute one, with the agent's environment additions; output is kept up to the agent's byte limit, at most 1 MiB, cut from the start. Kill signals the command's process group (SIGTERM, then SIGKILL after a second), so what it started stops too; an exit is reported within a second even if a process it left behind keeps the output open. A session reaches only its own terminals; closing a session or the connection releases them.
+- **Implementation:** `src/terminal.ts`. Commands run without a shell in the session's directory or another absolute one, with the agent's environment additions; output is kept up to the agent's byte limit, at most 1 MiB, cut from the start. Kill signals the command's process group (SIGTERM, then SIGKILL after a second), so what it started stops too; an exit is reported within a second even if a process it left behind keeps the output open. A session reaches only its own terminals; closing a session or the connection releases them, including when the agent process dies.
 - **Verification:** `tests/terminal.test.ts`.
 - **Status:** implemented_unverified.
 
