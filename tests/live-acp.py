@@ -80,16 +80,20 @@ class Rpc:
         reply = {"value": choice} if choice else {"cancelled": True}
         self.send({"type": "extension_ui_response", "id": event["id"], **reply})
 
-    def _decline(self, event):
+    def _input(self, event):
+        """Answers a text dialog from the queue; an empty string submits it blank, nothing queued cancels."""
         self.asked = (*self.asked, (event.get("title", ""), []))
-        self.send({"type": "extension_ui_response", "id": event["id"], "cancelled": True})
+        choice, *rest = self.answers or (None,)
+        self.answers = tuple(rest)
+        reply = {"cancelled": True} if choice is None else {"value": choice}
+        self.send({"type": "extension_ui_response", "id": event["id"], **reply})
 
     def _ui(self, event):
         method = event.get("method")
         if method == "select":
             self._select(event)
         elif method in ("input", "confirm", "editor"):
-            self._decline(event)
+            self._input(event)
         elif method == "setStatus":
             self.statuses = (*self.statuses, event.get("statusText") or event.get("text") or "")
         elif method == "notify":
@@ -260,8 +264,22 @@ def abort(rpc):
     ok("abort stopped a streaming reply and the next prompt was answered by the same agent session")
 
 
+def agent_command(rpc, text):
+    """Runs `/agy <agent command>`; False, with a note, when this agent does not list the command."""
+    rpc.command(text, "agent-command")
+    if rpc.notes and rpc.notes[-1][1].startswith("Usage: /agy"):
+        note(f"this agent lists no such command, so {text.split()[1]!r} showed the usage")
+        return False
+    rpc.until(lambda e: e.get("type") == "agent_end")
+    return True
+
+
 def compact(rpc):
-    _, messages, last, said = rpc.turn("/agy compact")
+    if not agent_command(rpc, "/agy compact"):
+        return
+    messages = rpc.request("get_messages")["messages"]
+    last = messages[-1]
+    said = "".join(c["text"] for c in last["content"] if c["type"] == "text")
     asked_for = [m for m in messages if m["role"] == "user"][-1]["content"]
     assert asked_for in ("/compact", [{"type": "text", "text": "/compact"}]), asked_for
     assert last["stopReason"] == "stop", last.get("errorMessage")
@@ -294,6 +312,9 @@ def restore(start):
     again = Rpc(start(["--continue"]))
     try:
         _, _, after, said = again.turn("What was the code word? Reply with just the word.")
+    except RuntimeError as error:
+        model = (again.request("get_state") or {}).get("model")
+        raise RuntimeError(f"{error}\nPi's model after --continue: {model}") from error
     finally:
         again.quit()
     agent_session = before["responseId"].split("/")[0]
@@ -345,28 +366,51 @@ def terminal_output(rpc):
 
 def title(rpc, first):
     rpc.command("/agy status", "status")
-    titled = re.search(r"Agent session: (\S+) \((.+)\)", rpc.notes[-1][1])
-    assert titled, rpc.notes[-1][1]
-    agent_session, name = titled.groups()
+    shown = re.search(r"Agent session: (\S+)(?: \((.+)\))?$", rpc.notes[-1][1], re.MULTILINE)
+    assert shown, rpc.notes[-1][1]
+    agent_session, name = shown.groups()
     assert first["responseId"].startswith(agent_session + "/"), (first["responseId"], agent_session)
-    ok(f"/agy status names the agent's title for the session: {name!r}")
+    if name:
+        ok(f"/agy status names the agent's title for the session: {name!r}")
+    else:
+        note("this agent did not title the session")
     return agent_session, name
 
 
 def plan(rpc):
-    rpc.turn("/agy plan Create a file named plan.txt containing the word PLANNED.")
+    if not agent_command(rpc, "/agy plan Create a file named plan.txt containing the word PLANNED."):
+        return
     plans = [lines for key, lines in rpc.widgets if key == "antigravity-plan" and lines]
     note(f"plan widgets shown: {len(plans)}" + (f", first: {plans[0]}" if plans else ""))
 
 
 def saved_sessions(rpc, marker, agent_session, name):
-    rpc.answer(lambda options: next(o for o in options if o.startswith(name)))
+    # Without a title, the session just used is the newest the agent lists.
+    rpc.answer(lambda options: next(o for o in options if o.startswith(name)) if name else options[0])
     rpc.command("/agy sessions", "sessions")
+    if rpc.notes and "no saved sessions" in rpc.notes[-1][1]:
+        note("this agent lists no saved sessions")
+        return
     _, messages, last, said = rpc.turn("What was the contents of marker.txt you read earlier? Reply with just it.")
     assert marker in said, said
     assert last["responseId"].startswith(agent_session + "/"), (last["responseId"], agent_session)
-    assert messages[0]["role"] == "user", messages[0]
-    ok(f"/agy sessions opened {name!r} as a new Pi session that continues agent session {agent_session}")
+    conversation = [m for m in messages if m["role"] != "system"]
+    assert conversation[0]["role"] == "user", conversation[0]["role"]
+    ok(f"/agy sessions opened {name or 'the newest session'!r} as a new Pi session that continues agent session {agent_session}")
+
+
+def question(rpc):
+    """A structured question from the agent, answered with Pi's dialogs."""
+    rpc.forget_dialogs()
+    rpc.answer("Answer")
+    rpc.answer(lambda options: next(o for o in options if "blue" in o.lower()))
+    rpc.answer("")  # agy adds an optional free-form "Other" field, left blank
+    _, _, _, said = rpc.turn("Before doing anything, ask me which color I prefer, red or blue, using a structured question if you can. Then say the color.")
+    if not any("Answer" in options for _, options in rpc.asked):
+        note(f"the agent asked in plain text, not with a structured question: {said.strip()[:80]!r}")
+        return
+    assert "blue" in said.lower(), said
+    ok(f"the agent's structured question was answered in Pi's dialogs {[t for t, _ in rpc.asked]} -> {said.strip()[:60]!r}")
 
 
 def features(start, root):
@@ -382,6 +426,7 @@ def features(start, root):
         agent_session, name = title(rpc, first)
         plan(rpc)
         saved_sessions(rpc, marker, agent_session, name)
+        question(rpc)
     finally:
         rpc.quit()
 

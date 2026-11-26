@@ -42,7 +42,7 @@ Say hello. `antigravity/default` uses whichever model the agent is set to. After
 | The agent's commands | `/agy <command> [input]`, for example `/agy goal ship the fix` or `/agy compact`. Tab completes.                       |
 | Saved sessions       | `/agy sessions` opens one of the agent's saved conversations for this directory as a new Pi session that continues it. |
 | Questions            | When the agent asks a structured question, Pi asks it field by field with its own dialogs. Esc cancels.                |
-| Plan                 | While the agent works through a plan, its steps or its markdown plan show above the editor.                            |
+| Plan                 | While the agent works through a plan, its steps or its markdown plan show above the editor. `agy` 1.5.17 sends none.   |
 | Context              | Pi's footer shows the agent's context use. `/agy status` gives the exact numbers.                                      |
 | Stop                 | Esc cancels the agent's turn.                                                                                          |
 
@@ -86,7 +86,7 @@ Everything else, such as models, quota, MCP servers and rules, is configured in 
 
 ## Compatibility
 
-Live-tested on macOS with Pi 1.6.1 and `agy` 1.5.17, using ACP protocol version 1 through `@agentclientprotocol/sdk` 2.12.0. The registry agent (`--agy-agent registry`) is covered by the automated tests but has not been run live against this version. The agent is started as a subprocess without a shell, and paths are handled with Node's platform functions; Linux and Windows have not been tested.
+Live-tested on macOS with Pi 1.6.1 and `agy` 1.5.17, using ACP protocol version 1 through `@agentclientprotocol/sdk` 2.12.0. The registry agent (`--agy-agent registry`, version 1.5.2) was also run live; it titles no sessions and has no `/compact`. The agent is started as a subprocess without a shell, and paths are handled with Node's platform functions; Linux and Windows have not been tested.
 
 ## Troubleshooting
 
@@ -105,7 +105,7 @@ Live-tested on macOS with Pi 1.6.1 and `agy` 1.5.17, using ACP protocol version 
 - **The agent runs the tools, not Pi.** Pi's own tools, skills, context files and tool hooks do not apply to these models. The agent has its own equivalents.
 - **No Pi-side summaries.** The agent manages its context, so Pi's compaction and branch summaries are skipped or refused for these models. Use `/agy compact` for the agent's own.
 - When the agent writes files through Pi, as the registry agent does, Pi writes only inside the session's working directory and the directories given with `--agy-dir`.
-- Not implemented: the agent's subagents, which ACP reports as child sessions. [PARITY.md](PARITY.md) lists every capability with its status and evidence.
+- Subagents: `agy` 1.5.17 reports a subagent's work as ordinary tool calls, which show as tool rows; ACP's separate subagent reporting is not implemented, as no agent sends it yet. [PARITY.md](PARITY.md) lists every capability with its status and evidence.
 - `/agy sessions` carries over a saved conversation's text, not the agent's tool calls in it.
 - Quota, model access and account policy are the agent's and Google's.
 
@@ -121,7 +121,7 @@ bun run pack             # npm pack: pi-antigravity-acp-<version>.tgz
 
 The tests run without a Google account: a scripted ACP agent stands in for `agy`, both in memory and as a process on `PATH` under a real Pi session.
 
-Live checks use your signed-in agent and normal quota. They drive real Pi in RPC mode through a greeting, model and thinking-level selection, a question about which harness it runs in, a file read, an allowed edit, a denied command, a follow-up, a mode change, the context meter, an abort, `/agy compact`, reopening a saved session after restarting Pi, then `--agy-dir`, an image, a command's output in its tool row, the session title, a plan and `/agy sessions`:
+Live checks use your signed-in agent and normal quota. They drive real Pi in RPC mode through a greeting, model and thinking-level selection, a question about which harness it runs in, a file read, an allowed edit, a denied command, a follow-up, a mode change, the context meter, an abort, `/agy compact`, reopening a saved session after restarting Pi, then `--agy-dir`, an image, a command's output in its tool row, the session title, a plan, `/agy sessions` and a structured question from the agent:
 
 ```sh
 python3 tests/live-acp.py            # agy acp; its sessions go to ~/.gemini/antigravity-scratch

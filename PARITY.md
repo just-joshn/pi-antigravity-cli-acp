@@ -19,16 +19,16 @@ Zed (8aeb64f) advertises to agents: `fs` read and write, `terminal`, `auth.termi
 
 ### Statuses
 
-`verified` needs an automated test **and** a run against the real `agy`. A capability tested only with the scripted agent is `implemented_unverified`. Live testing stopped partway through this work because the account's quota ran out ("Individual quota reached … Resets in 123h"), which left several items unverified.
+`verified` needs an automated test **and** a run against the real `agy`. A capability tested only with the scripted agent is `implemented_unverified`.
 
-The last live run (`python3 tests/live-acp.py`, all 12 steps passed) was at commit `fedbeb9`. Everything after it, the review fixes and the capabilities added since, is covered by the automated tests only. `tests/live-probe.py` and the `features()` steps of `tests/live-acp.py` are ready for the next live run.
+The last live runs were on 2026-11-25: `python3 tests/live-probe.py`, `python3 tests/live-acp.py` (19 steps passed) and `python3 tests/live-acp.py registry` (all steps passed, with notes that the registry agent titles no sessions and lists no `/compact`). In one earlier full run, the first prompt after restarting Pi was refused with "No API key found for the selected model"; it did not recur in nine more restarts, and the live script now reports Pi's restored model if it does.
 
 | Status                 | Count |
 | ---------------------- | ----- |
-| verified               | 14    |
-| implemented_unverified | 24    |
-| not_started            | 1     |
-| not_applicable         | 1     |
+| verified               | 22    |
+| implemented_unverified | 16    |
+| not_started            | 0     |
+| not_applicable         | 2     |
 | upstream_blocked       | 0     |
 
 ## Summary
@@ -36,14 +36,14 @@ The last live run (`python3 tests/live-acp.py`, all 12 steps passed) was at comm
 | ID      | Capability                               | Status                 |
 | ------- | ---------------------------------------- | ---------------------- |
 | PROTO-1 | Initialization and version negotiation   | verified               |
-| PROTO-2 | Client capability advertisement          | implemented_unverified |
+| PROTO-2 | Client capability advertisement          | verified               |
 | PROTO-3 | JSON-RPC framing and request correlation | verified               |
 | PROTO-4 | Malformed messages and metadata          | implemented_unverified |
 | PROTO-5 | Protocol errors and recovery             | implemented_unverified |
 | SESS-1  | Create a session                         | verified               |
 | SESS-2  | Reopen a saved session (`session/load`)  | verified               |
 | SESS-3  | `session/resume`                         | not_applicable         |
-| SESS-4  | List saved sessions                      | implemented_unverified |
+| SESS-4  | List saved sessions                      | verified               |
 | SESS-5  | Close a session                          | implemented_unverified |
 | SESS-6  | Prompt and streamed updates              | verified               |
 | SESS-7  | Cancellation                             | verified               |
@@ -55,21 +55,21 @@ The last live run (`python3 tests/live-acp.py`, all 12 steps passed) was at comm
 | AG-2    | The agent's slash commands               | verified               |
 | AG-3    | Reasoning (thoughts)                     | implemented_unverified |
 | AG-4    | Execution plans                          | implemented_unverified |
-| AG-5    | Conversation titles                      | implemented_unverified |
-| AG-6    | Interactive questions (elicitation)      | implemented_unverified |
+| AG-5    | Conversation titles                      | verified               |
+| AG-6    | Interactive questions (elicitation)      | verified               |
 | TOOL-1  | Tool calls, progress, results and errors | verified               |
-| TOOL-2  | File reads and writes through the client | implemented_unverified |
+| TOOL-2  | File reads and writes through the client | verified               |
 | TOOL-3  | Diffs and edit previews                  | implemented_unverified |
-| TOOL-4  | Terminal commands and output             | implemented_unverified |
+| TOOL-4  | Terminal commands and output             | verified               |
 | TOOL-5  | Client-side terminals                    | implemented_unverified |
 | TOOL-6  | Permission requests                      | verified               |
-| CTX-1   | Images                                   | implemented_unverified |
+| CTX-1   | Images                                   | verified               |
 | CTX-2   | Embedded resources                       | implemented_unverified |
 | CTX-3   | Workspace directory                      | verified               |
-| CTX-4   | Additional workspace directories         | implemented_unverified |
+| CTX-4   | Additional workspace directories         | verified               |
 | CTX-5   | MCP servers                              | implemented_unverified |
 | CTX-6   | Skills and rules                         | implemented_unverified |
-| CTX-7   | Subagents                                | not_started            |
+| CTX-7   | Subagents                                | not_applicable         |
 | CTX-8   | Usage and session metadata               | verified               |
 | LIFE-1  | Process lifecycle, reload and shutdown   | verified               |
 | LIFE-2  | No repeated turns after a failure        | implemented_unverified |
@@ -96,7 +96,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 - **Implementation:** advertises `fs.readTextFile`, `fs.writeTextFile`, `terminal`, `elicitation` (form and URL) and `plan`. The SDK adds `auth.terminal: false`. Not `subagents` (CTX-7).
 - **Acceptance:** every advertised capability is implemented.
 - **Verification:** `tests/client.test.ts` ("the client introduces itself as Pi and offers files, terminals, questions and nothing else").
-- **Status:** implemented_unverified: the live runs used the earlier set (files only); the new set has not met the real agent yet. **Limits:** see CTX-7.
+- **Status:** verified. **Evidence:** both agents accepted this set: the live run on 2026-11-25 (`agy` 1.5.17, `python3 tests/live-acp.py`, 19 steps passed) answered a structured question, and the registry run on 2026-11-25 (agent 1.5.2, `python3 tests/live-acp.py registry`, all steps passed) read and edited files through Pi. **Limits:** see CTX-7.
 
 ### PROTO-3 JSON-RPC framing and request correlation
 
@@ -155,8 +155,8 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 - **Applies:** yes; `agy` offers `session/list` and returns sessions with `cwd`, `title` and `updatedAt`. **Pi:** a command, a selector, `ctx.newSession`.
 - **Implementation:** `/agy sessions` lists this directory's sessions (up to five pages) by title and date. Opening one reads its text from the `session/load` replay, closes it, and starts a new Pi session holding the conversation; each reply carries the agent session's position, so the next message reopens it through SESS-2.
 - **Acceptance:** the new Pi session shows the conversation and its next message continues the same agent session without resending anything.
-- **Verification:** `tests/sessions.test.ts`; the `/agy sessions` step of `features()` in `tests/live-acp.py`, not yet run.
-- **Status:** implemented_unverified. **Limits:** only text is carried over; the agent's tool calls in the replay are not shown in Pi.
+- **Verification:** `tests/sessions.test.ts`; the `/agy sessions` step of `features()` in `tests/live-acp.py`.
+- **Status:** verified. **Evidence:** in the live run on 2026-11-25 (`agy` 1.5.17, `python3 tests/live-acp.py`, 19 steps passed) and the registry run on 2026-11-25 (agent 1.5.2, `python3 tests/live-acp.py registry`, all steps passed), the opened session answered with a marker from the earlier conversation, on the same agent session. **Limits:** only text is carried over; the agent's tool calls in the replay are not shown in Pi.
 
 ### SESS-5 Close a session
 
@@ -230,7 +230,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 ### AG-3 Reasoning (thoughts)
 
 - **Implementation:** `agent_thought_chunk` becomes Pi thinking blocks. **Verification:** `tests/client.test.ts`.
-- **Status:** implemented_unverified: live thoughts were not asserted.
+- **Status:** implemented_unverified: at thinking level low, neither agent sent thoughts in the live runs.
 
 ### AG-4 Execution plans
 
@@ -238,20 +238,20 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 - **Applies:** if the agent sends them. **ACP:** `session/update` `plan`, `plan_update`, `plan_removed`. **Pi:** `ui.setWidget`.
 - **Implementation:** `src/plan.ts`. A list of steps shows above the editor while any step is unfinished; a markdown plan shows its first 20 lines until the agent removes it.
 - **Verification:** `tests/plan.test.ts`; the plan step of `features()` in `tests/live-acp.py` reports what appears.
-- **Status:** implemented_unverified: whether `agy` 1.5.17 sends plans is unknown; `tests/live-probe.py` will show it.
+- **Status:** implemented_unverified: neither `agy` 1.5.17 nor the registry agent sent a plan, even in `/plan` mode (`tests/live-probe.py` and both live runs).
 
 ### AG-5 Conversation titles
 
 - **Implementation:** `session_info_update` titles show in `/agy status`. **Verification:** `tests/index.test.ts`.
-- **Status:** implemented_unverified: the live title was seen in probes, not asserted through the extension.
+- **Status:** verified. **Evidence:** in the live run on 2026-11-25 (`agy` 1.5.17, `python3 tests/live-acp.py`, 19 steps passed), `/agy status` showed the agent's title for the session. **Limits:** the registry agent sends no titles.
 
 ### AG-6 Interactive questions (elicitation)
 
 - **Reference:** Zed handles form and URL elicitation.
-- **Applies:** if the agent asks; unknown for `agy` until `tests/live-probe.py` runs. **ACP:** `elicitation/create`, `elicitation/complete`. **Pi:** select and input dialogs.
+- **Applies:** yes; `agy` 1.5.17 asks with a form of `oneOf` choices plus an optional free-form field (`tests/live-probe.py`). **ACP:** `elicitation/create`, `elicitation/complete`. **Pi:** select and input dialogs.
 - **Implementation:** `src/elicit.ts`. A form offers Answer or Decline, then asks each field with Pi's dialogs (choices for enums and yes/no, text for strings and numbers within their limits, comma-separated multi-select), asking again after a wrong answer, at most three times in all; Esc cancels. A URL question shows the link with Continue or Decline. Questions share the permission dialogs' queue and close with their turn; without a UI they are cancelled.
-- **Verification:** `tests/elicit.test.ts`.
-- **Status:** implemented_unverified. **Limits:** Pi does not open the link itself.
+- **Verification:** `tests/elicit.test.ts`; the question step of `features()` in `tests/live-acp.py`.
+- **Status:** verified. **Evidence:** in the live run on 2026-11-25 (`agy` 1.5.17, `python3 tests/live-acp.py`, 19 steps passed), the agent's question was answered in Pi's dialogs (Answer, Blue, the optional field left blank) and the agent replied "Blue". **Limits:** Pi does not open the link itself.
 
 ### TOOL-1 Tool calls, progress, results and errors
 
@@ -267,7 +267,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 - **ACP:** `fs/read_text_file`, `fs/write_text_file`.
 - **Implementation:** reads by absolute path, refusing devices, pipes and files over 16 MiB; writes only inside the session's directory and its `--agy-dir` directories, checked after resolving links and again for the real parent after creating it, without following a link at the file. A path that cannot be resolved, such as one through a link loop, is refused with the reason.
 - **Verification:** `tests/fs.test.ts`, `tests/client.test.ts`.
-- **Status:** implemented_unverified: `python3 tests/live-acp.py registry` was not run on this branch.
+- **Status:** verified. **Evidence:** in the registry run on 2026-11-25 (agent 1.5.2, `python3 tests/live-acp.py registry`, all steps passed), the agent read `marker.txt` (`client_view_file`) and, after Allow, edited `notes.txt` (`client_edit_file`) through Pi.
 
 ### TOOL-3 Diffs and edit previews
 
@@ -278,16 +278,16 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 ### TOOL-4 Terminal commands and output
 
 - **Implementation:** command calls render as `$ command` rows with their output, from the agent's own output or from a client terminal the call embeds (TOOL-5).
-- **Verification:** `tests/render.test.ts`, `tests/terminal.test.ts`; the terminal step of `features()` in `tests/live-acp.py`, not yet run.
-- **Status:** implemented_unverified: output of a command that ran was not asserted live.
+- **Verification:** `tests/render.test.ts`, `tests/terminal.test.ts`; the terminal step of `features()` in `tests/live-acp.py`.
+- **Status:** verified. **Evidence:** in the live run on 2026-11-25 (`agy` 1.5.17, `python3 tests/live-acp.py`, 19 steps passed) and the registry run on 2026-11-25 (agent 1.5.2, `python3 tests/live-acp.py registry`, all steps passed), the output of `echo TERMINAL-…` showed in its Pi tool row.
 
 ### TOOL-5 Client-side terminals
 
 - **Reference:** Zed advertises `terminal` and runs commands the agent asks for.
-- **Applies:** if the agent uses it; unknown for `agy` until `tests/live-probe.py` runs. **ACP:** `terminal/create`, `output`, `wait_for_exit`, `kill`, `release`.
+- **Applies:** if the agent uses it; `agy` 1.5.17 runs commands itself and never asked for a client terminal (`tests/live-probe.py`). **ACP:** `terminal/create`, `output`, `wait_for_exit`, `kill`, `release`.
 - **Implementation:** `src/terminal.ts`. Commands run without a shell in the session's directory or another absolute one, with the agent's environment additions; output is kept up to the agent's byte limit, at most 1 MiB, cut from the start. Kill signals the command's process group (SIGTERM, then SIGKILL after a second), so what it started stops too; an exit is reported within a second even if a process it left behind keeps the output open. A session reaches only its own terminals; closing a session or the connection releases them, including when the agent process dies.
 - **Verification:** `tests/terminal.test.ts`.
-- **Status:** implemented_unverified.
+- **Status:** implemented_unverified: no live agent has used it.
 
 ### TOOL-6 Permission requests
 
@@ -300,7 +300,8 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 ### CTX-1 Images
 
 - **Implementation:** Pi image attachments become ACP image blocks when the agent accepts images; otherwise a clear error.
-- **Verification:** `tests/stream.test.ts`. **Status:** implemented_unverified: no live image prompt.
+- **Verification:** `tests/stream.test.ts`; the image step of `features()` in `tests/live-acp.py`.
+- **Status:** verified. **Evidence:** in the live run on 2026-11-25 (`agy` 1.5.17, `python3 tests/live-acp.py`, 19 steps passed) and the registry run on 2026-11-25 (agent 1.5.2, `python3 tests/live-acp.py registry`, all steps passed), both agents named the color of a red image attachment.
 
 ### CTX-2 Embedded resources
 
@@ -317,8 +318,8 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 - **Reference:** Zed passes extra worktrees when `additionalDirectories` is offered.
 - **Applies:** yes; `agy` offers it. **Pi:** one working directory, so a flag.
 - **Implementation:** `--agy-dir` lists directories separated like `PATH`, resolved from the workspace; missing ones are reported. They go to `session/new` and `session/load` only for agents that offer the capability.
-- **Verification:** `tests/workspace.test.ts`, `tests/client-handshake.test.ts`; the `--agy-dir` step of `features()` in `tests/live-acp.py`, not yet run.
-- **Status:** implemented_unverified.
+- **Verification:** `tests/workspace.test.ts`, `tests/client-handshake.test.ts`; the `--agy-dir` step of `features()` in `tests/live-acp.py`.
+- **Status:** verified. **Evidence:** in the live run on 2026-11-25 (`agy` 1.5.17, `python3 tests/live-acp.py`, 19 steps passed) and the registry run on 2026-11-25 (agent 1.5.2, `python3 tests/live-acp.py registry`, all steps passed), both agents read a marker file in a directory outside the workspace given with `--agy-dir`.
 
 ### CTX-5 MCP servers
 
@@ -336,9 +337,9 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 ### CTX-7 Subagents
 
 - **Reference:** Zed advertises `subagents` and shows child sessions.
-- **Applies:** unknown for `agy`. **ACP:** `subagent_update`, and the child's own updates and requests on the same connection.
-- **Implementation:** none. Advertising `subagents` without routing a child's text, tool calls and permission requests would cancel the child's requests and hide its work, which `agy` may now report inline. `tests/live-probe.py` advertises it to see what `agy` does.
-- **Status:** not_started.
+- **Applies:** no, for `agy` 1.5.17. Offered `subagents` by `tests/live-probe.py` and asked to use one, it sent no `subagent_update`; the subagent's tool calls arrived as ordinary tool calls in the same session, with ids of the form `<subagent>:call_…`, and its permission requests as ordinary requests. Those already show as Pi tool rows and dialogs. **ACP:** `subagent_update`.
+- **Implementation:** nothing beyond ordinary tool calls; `subagents` is not advertised.
+- **Status:** not_applicable, until an agent sends `subagent_update`.
 
 ### CTX-8 Usage and session metadata
 
