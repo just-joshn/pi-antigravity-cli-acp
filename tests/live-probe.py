@@ -154,7 +154,7 @@ class Agent:
         status = {"exitStatus": {"exitCode": proc.returncode, "signal": None}} if proc.poll() is not None else {}
         output = self.outputs.get(params["terminalId"], "").encode()
         limit = self.limits.get(params["terminalId"])
-        kept = output[-limit:] if limit is not None and len(output) > limit else output
+        kept = output[len(output) - limit:] if limit is not None and len(output) > limit else output
         return {"output": kept.decode(errors="ignore"), "truncated": len(kept) < len(output), **status}
 
     def call(self, request_id, method, params, wait=300):

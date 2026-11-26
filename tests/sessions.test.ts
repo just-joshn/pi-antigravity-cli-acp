@@ -59,6 +59,10 @@ test(
     expect(opened.all()[0]?.getSessionName()).toBe("hello");
 
     const resumed = await start({ home: first.home });
+    expect(
+      resumed.session.sessionManager.getSessionFile(),
+      "Pi continues the session /agy sessions opened",
+    ).toBe(opened.all()[0]?.getSessionFile());
     await resumed.session.prompt("again");
     expect(said(resumed.assistants().at(-1))).toBe("echo: again");
     const log = await resumed.stop();
