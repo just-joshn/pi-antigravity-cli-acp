@@ -94,7 +94,12 @@ test("auto prefers agy on PATH, and a registry copy must be executable", async (
   });
   expect(resolveAgent("registry", env, "darwin", "arm64").kind).toBe("registry");
   await chmod(newer, 0o644);
-  expect(findRegistryAgent(root, "darwin-aarch64"), "not executable").toBe(undefined);
+  expect(
+    findRegistryAgent(root, "darwin-aarch64")?.command,
+    "a newest copy that cannot run leaves the older one",
+  ).toMatch(/v_1\.5\.2_aaaa/);
+  await chmod(join(root, "antigravity-acp", "v_1.5.2_aaaa", "agy_acp_server.par"), 0o644);
+  expect(findRegistryAgent(root, "darwin-aarch64"), "no copy can run").toBe(undefined);
 });
 
 test("the registry directory falls back to USERPROFILE and Windows' default", () => {
@@ -171,4 +176,14 @@ test("stopping an agent that already exited, or never started, does nothing", as
   const missing = launch({ kind: "cli", command: join(dir, "absent"), args: [] }, dir);
   expect(await ended(missing.stream), "a failed spawn ends the output").toBeUndefined();
   expect(() => missing.stop()).not.toThrow();
+});
+
+test("on Windows, agy.exe on PATH is the CLI", async () => {
+  const home = await scratchDir("agent");
+  await program(join(home, "bin", "agy.exe"));
+  const env = { HOME: home, PATH: join(home, "bin") };
+  expect(resolveAgent("cli", env, "win32", "x64").kind).toBe("cli");
+  expect(() => resolveAgent("cli", env, "darwin", "arm64"), "only Windows adds .exe").toThrow(
+    AcpError,
+  );
 });

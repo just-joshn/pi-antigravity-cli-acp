@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { link, mkdir, readFile, symlink, truncate, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -123,4 +124,12 @@ test("a write through a hard link is refused, as it could change a file outside 
   await link(join(dir, "outside.txt"), join(work, "linked.txt"));
   expect(await writeIn(work, join(work, "linked.txt"))).toBe(RequestError.invalidParams().code);
   expect(await readFile(join(dir, "outside.txt"), "utf8")).toBe("keep");
+});
+
+test("a named pipe is refused for writing at once, not waited on", async () => {
+  const work = await scratchDir("fs");
+  const pipe = join(work, "pipe");
+  execFileSync("mkfifo", [pipe]);
+  expect(await writeIn(work, pipe)).toBe(RequestError.invalidParams().code);
+  expect(await read(pipe), "and for reading").toBe(RequestError.invalidParams().code);
 });

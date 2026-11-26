@@ -309,3 +309,18 @@ test("a multiple choice option with a comma in it can be picked", async () => {
     content: { pairs: ["red, blue", "green"] },
   });
 });
+
+test("a typed name matching one choice's label and another's value picks the labelled choice", async () => {
+  const items = {
+    oneOf: [
+      { const: "b", title: "A" },
+      { const: "c", title: "b" },
+    ],
+  };
+  const letters = { type: "array", title: "Letters", items };
+  const { dialogs } = scripted(["Answer", "b"]);
+  expect(await answerElicitation(form({ letters }, ["letters"]), dialogs, signal)).toStrictEqual({
+    action: "accept",
+    content: { letters: ["c"] },
+  });
+});

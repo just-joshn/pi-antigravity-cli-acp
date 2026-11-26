@@ -265,7 +265,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 
 - **Applies:** yes for agents that use them; `agy acp` reads and writes files itself, the registry agent uses the client.
 - **ACP:** `fs/read_text_file`, `fs/write_text_file`.
-- **Implementation:** reads by absolute path, refusing devices, pipes and files over 16 MiB; writes only inside the session's directory and its `--agy-dir` directories, checked after resolving links and again for the real parent after creating it, without following a link at the file. A path that cannot be resolved, such as one through a link loop, is refused with the reason.
+- **Implementation:** reads by absolute path, refusing devices, pipes and files over 16 MiB; writes only inside the session's directory and its `--agy-dir` directories, checked after resolving links and again for the real parent after creating it, without following a link at the file. A path that cannot be resolved, such as one through a link loop, a file with more than one hard link, and anything that is not a regular file, such as a pipe, are refused.
 - **Verification:** `tests/fs.test.ts`, `tests/client.test.ts`.
 - **Status:** verified. **Evidence:** in the registry run on 2026-11-25 (agent 1.5.2, `python3 tests/live-acp.py registry`, all steps passed), the agent read `marker.txt` (`client_view_file`) and, after Allow, edited `notes.txt` (`client_edit_file`) through Pi.
 

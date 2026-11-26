@@ -108,22 +108,26 @@ export function findRegistryAgent(root: string, platform: string): AgentLaunch |
     // No directory to read: no copy of the agent is installed there.
     return undefined;
   }
-  const [first, ...rest] = installed.flatMap((directory): Installed[] => {
-    const version = versionOf(directory);
-    return version ? [{ directory, version }] : [];
-  });
-  if (first === undefined) return undefined;
-  const newest = rest.reduce(newer, first).directory;
   const listed = registryCommand(root, platform);
   const fallback = platform.startsWith("windows") ? "agy_acp_server.exe" : "agy_acp_server.par";
-  const command = join(root, REGISTRY_ID, newest, listed?.cmd ?? fallback);
-  return executable(command) ? { kind: "registry", command, args: listed?.args ?? [] } : undefined;
+  const commandIn = (directory: string) =>
+    join(root, REGISTRY_ID, directory, listed?.cmd ?? fallback);
+  // A copy that cannot run, such as one still installing, leaves the next newest.
+  const [first, ...rest] = installed.flatMap((directory): Installed[] => {
+    const version = versionOf(directory);
+    return version && executable(commandIn(directory)) ? [{ directory, version }] : [];
+  });
+  if (first === undefined) return undefined;
+  const command = commandIn(rest.reduce(newer, first).directory);
+  return { kind: "registry", command, args: listed?.args ?? [] };
 }
 
-function onPath(name: string, env: Env): boolean {
+/** Whether `name` runs from a directory on PATH; on Windows, as `name.exe` too. */
+function onPath(name: string, env: Env, platform: string): boolean {
+  const names = platform === "win32" ? [name, `${name}.exe`] : [name];
   return (env["PATH"] ?? "")
     .split(delimiter)
-    .some((dir) => dir !== "" && executable(join(dir, name)));
+    .some((dir) => dir !== "" && names.some((file) => executable(join(dir, file))));
 }
 
 /** Picks the agent to run. `auto` prefers the installed CLI over an editor's registry copy. */
@@ -134,7 +138,7 @@ export function resolveAgent(
   arch: string = process.arch,
 ): AgentLaunch {
   const cli = (): AgentLaunch | undefined =>
-    onPath("agy", env) ? { kind: "cli", command: "agy", args: ["acp"] } : undefined;
+    onPath("agy", env, platform) ? { kind: "cli", command: "agy", args: ["acp"] } : undefined;
   const registry = () =>
     findRegistryAgent(registryRoot(env, platform), platformKey(platform, arch));
   let agent: AgentLaunch | undefined;

@@ -298,9 +298,15 @@ class FakeAgent {
   newSession(params: NewSessionRequest, client: AgentContext) {
     if (!this.#signedIn) throw RequestError.authRequired();
     this.#note({ sessions: [...this.#log.sessions, params] });
-    const sessionId = `${this.#options.idPrefix ?? ""}s${this.#log.sessions.length}`;
+    const sessionId = this.#freshId(this.#log.sessions.length);
     this.#history = { ...this.#history, [sessionId]: [] };
     return this.#open(sessionId, client);
+  }
+
+  /** The first session id from `n` on that no saved conversation uses. */
+  #freshId(n: number): string {
+    const id = `${this.#options.idPrefix ?? ""}s${n}`;
+    return Object.hasOwn(this.#history, id) ? this.#freshId(n + 1) : id;
   }
 
   async load(request: LoadSessionRequest, client: AgentContext) {

@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { mkdir, open, readFile, realpath, stat } from "node:fs/promises";
+import { mkdir, open, realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 
 import {
@@ -22,14 +22,34 @@ function requireAbsolute(path: string) {
   if (!isAbsolute(path)) throw RequestError.invalidParams(undefined, "path must be absolute");
 }
 
-/** Refuses devices, pipes and huge files, which would never finish loading or exhaust memory. */
-async function requireReadable(path: string) {
-  // A path that cannot be examined is reported by the read itself.
-  const info = await stat(path).catch(() => undefined);
-  if (info && !info.isFile() && !info.isDirectory())
-    throw RequestError.invalidParams(undefined, `${path} is not a regular file`);
-  if (info && info.size > READ_LIMIT_MIB * MIB)
-    throw RequestError.invalidParams(undefined, `${path} is larger than ${READ_LIMIT_MIB} MiB`);
+function notRegular(path: string) {
+  return RequestError.invalidParams(undefined, `${path} is not a regular file`);
+}
+
+/**
+ * The text of the file at `path`. Devices, pipes and huge files are refused, as they would never
+ * finish loading or would exhaust memory. The checks look at the file opened, so it cannot be
+ * swapped between check and read; opening does not wait for a pipe's writer.
+ */
+async function readChecked(path: string): Promise<string> {
+  const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK).catch(
+    (error: unknown) => {
+      const code = codeOf(error);
+      if (code === "ENOENT") throw RequestError.resourceNotFound(path);
+      throw RequestError.internalError(undefined, `${path} could not be read (${code})`);
+    },
+  );
+  try {
+    const info = await file.stat();
+    if (!info.isFile() && !info.isDirectory()) throw notRegular(path);
+    if (info.size > READ_LIMIT_MIB * MIB)
+      throw RequestError.invalidParams(undefined, `${path} is larger than ${READ_LIMIT_MIB} MiB`);
+    return await file.readFile("utf8").catch((error: unknown) => {
+      throw RequestError.internalError(undefined, `${path} could not be read (${codeOf(error)})`);
+    });
+  } finally {
+    await file.close();
+  }
 }
 
 /** Serves ACP `fs/read_text_file`: the whole file, or `limit` lines from 1-based `line`. */
@@ -39,12 +59,7 @@ export async function readTextFile({
   limit,
 }: ReadTextFileRequest): Promise<ReadTextFileResponse> {
   requireAbsolute(path);
-  await requireReadable(path);
-  const text = await readFile(path, "utf8").catch((error: unknown) => {
-    const code = codeOf(error);
-    if (code === "ENOENT") throw RequestError.resourceNotFound(path);
-    throw RequestError.internalError(undefined, `${path} could not be read (${code})`);
-  });
+  const text = await readChecked(path);
   const first = line ?? undefined;
   const count = limit ?? undefined;
   if (first === undefined && count === undefined) return { content: text };
@@ -88,15 +103,19 @@ export async function writeTextFile(
   requireInside(roots, target);
   // Windows has no O_NOFOLLOW; there, creating a symbolic link needs privileges the agent lacks.
   const noFollow = process.platform === "win32" ? 0 : constants.O_NOFOLLOW;
-  const flags = constants.O_WRONLY | constants.O_CREAT | noFollow;
+  // Opening does not wait for a pipe's reader; a pipe with none fails with ENXIO.
+  const flags = constants.O_WRONLY | constants.O_CREAT | constants.O_NONBLOCK | noFollow;
   const file = await open(target, flags).catch((error: unknown) => {
     const code = codeOf(error);
     if (code === "ELOOP") throw outsideWorkspace();
+    if (code === "ENXIO") throw notRegular(path);
     throw RequestError.internalError(undefined, `${path} could not be written (${code})`);
   });
   try {
+    const info = await file.stat();
+    if (!info.isFile()) throw notRegular(path);
     // A hard link can name a file outside the workspace; it is not emptied or written.
-    if ((await file.stat()).nlink > 1) throw outsideWorkspace();
+    if (info.nlink > 1) throw outsideWorkspace();
     await file.truncate(0);
     await file.writeFile(content, "utf8");
   } finally {

@@ -245,14 +245,16 @@ function readChoices(text: string, listed: Listed): (string | undefined)[] {
   const rest = text.trim();
   if (rest === "") return [];
   if (rest.startsWith(",")) return readChoices(rest.slice(1), listed);
-  const named = listed.flatMap(({ value, label }) => [
-    { name: label, value },
-    { name: value, value },
-  ]);
+  // A label the user sees wins over another choice's value when both are spelled the same.
+  const named = [
+    ...listed.map(({ value, label }) => ({ name: label, value })),
+    ...listed.map(({ value }) => ({ name: value, value })),
+  ];
   const after = (name: string) => rest.slice(name.length).trimStart();
   const [best] = named
     .filter(({ name }) => rest.startsWith(name) && /^(,|$)/.test(after(name)))
     .toSorted((a, b) => b.name.length - a.name.length);
+  // toSorted is stable, so among names of the same length the labels, listed first, stay first.
   if (best) return [best.value, ...readChoices(after(best.name), listed)];
   const comma = rest.indexOf(",");
   return [undefined, ...(comma < 0 ? [] : readChoices(rest.slice(comma), listed))];

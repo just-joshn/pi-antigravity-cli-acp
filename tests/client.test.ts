@@ -306,3 +306,12 @@ test("a signed-out agent asks for sign-in before it reopens a saved session too"
   onTestFinished(close);
   await expect(client.loadSession("s", { cwd: "/work" })).rejects.toThrow(/sign in/);
 });
+
+test("a new session never takes the id of a saved one", async () => {
+  const saved = { s1: [[{ type: "text" as const, text: "kept" }]] };
+  const { client, close } = await connect({ script: () => [], history: saved });
+  onTestFinished(close);
+  const session = await client.newSession({ cwd: "/work" });
+  expect(session.id).not.toBe("s1");
+  expect((await client.readTranscript("s1", { cwd: "/work" }))?.[0]?.user).toBe("kept");
+});
