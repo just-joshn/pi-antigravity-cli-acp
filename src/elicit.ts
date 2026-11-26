@@ -103,11 +103,6 @@ function describe(key: string, property: Record<string, unknown>): string {
   return `${title}${detail}`;
 }
 
-function titleOf(option: Record<string, unknown>): string {
-  const { title, const: value } = option;
-  return typeof title === "string" ? title : String(value);
-}
-
 function choices(schema: Record<string, unknown>): { value: string; label: string }[] | undefined {
   const source = isRecord(schema["items"]) ? schema["items"] : schema;
   const titled = source["oneOf"] ?? source["anyOf"];
@@ -115,7 +110,12 @@ function choices(schema: Record<string, unknown>): { value: string; label: strin
   const found = Array.isArray(titled)
     ? titled.flatMap((option: unknown) =>
         isRecord(option) && typeof option["const"] === "string"
-          ? [{ value: option["const"], label: titleOf(option) }]
+          ? [
+              {
+                value: option["const"],
+                label: typeof option["title"] === "string" ? option["title"] : option["const"],
+              },
+            ]
           : [],
       )
     : enumerated?.flatMap((value: unknown) =>

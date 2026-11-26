@@ -1,7 +1,7 @@
 import type { ContentBlock } from "@agentclientprotocol/sdk/unstable";
 
 import { put } from "./immutable.ts";
-import type { AcpSession, ToolView, Turn } from "./session.ts";
+import type { AcpSession, ToolView } from "./session.ts";
 
 /** Characters of the agent session id kept in a mirrored tool call id. */
 const ID_PREFIX_LIMIT = 40;
@@ -41,11 +41,11 @@ export class Conversation {
     return this.#anchor;
   }
 
-  startTurn(prompt: ContentBlock[]): Turn {
+  startTurn(prompt: ContentBlock[]) {
     this.#segment = 0;
     // The agent's tool calls belong to their turn; earlier ones can no longer be followed.
     this.#toolIds = new Map();
-    return this.session.startTurn(prompt);
+    this.session.startTurn(prompt);
   }
 
   /** The session's position for the next assistant message, which becomes the anchor. */
