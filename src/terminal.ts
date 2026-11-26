@@ -113,6 +113,8 @@ export class Terminals {
   }
 
   output(sessionId: string, terminalId: string): TerminalOutputResponse {
+    // What the agent reads is reported now, so a tool call it finishes next already shows it.
+    if (this.#get(sessionId, terminalId).reporting) this.#reportOutput(terminalId);
     const kept = trimmed(this.#get(sessionId, terminalId));
     this.#all = put(this.#all, terminalId, kept);
     const { output, truncated, exit } = kept;

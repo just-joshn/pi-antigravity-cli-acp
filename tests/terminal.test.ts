@@ -207,3 +207,22 @@ test("output that arrives just before release is still reported", async () => {
     ["s", terminalId, undefined],
   ]);
 });
+
+test("output the agent reads is reported at once, so a tool finished just after shows it", async () => {
+  vi.useFakeTimers({ toFake: ["setImmediate"] });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+  const { all, updates } = terminals();
+  const { terminalId } = all.create(
+    { sessionId: "s", ...node("process.stdout.write('done'); setInterval(() => {}, 1000)") },
+    "/",
+  );
+  const arrived = async (): Promise<void> => {
+    if (all.output("s", terminalId).output === "done") return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    return arrived();
+  };
+  await arrived();
+  expect(updates()).toStrictEqual([["s", terminalId, "done"]]);
+});

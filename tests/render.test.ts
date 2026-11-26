@@ -45,3 +45,10 @@ test("a tool kind that names an object property is shown as it is", () => {
   expect(callLine({ kind: "constructor", title: "x" }, plain)).toBe("constructor x");
   expect(callLine({ kind: "toString", title: "x" }, plain)).toBe("toString x");
 });
+
+test("an edit in two places counts only the lines that changed", () => {
+  expect(changedLines("a\nb\nc\n", "A\nb\nC\n")).toStrictEqual({
+    removed: ["a", "c"],
+    added: ["A", "C"],
+  });
+});

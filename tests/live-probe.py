@@ -8,6 +8,7 @@ normal quota; sessions go to ~/.gemini/antigravity-scratch, away from your agy h
     python3 tests/live-probe.py                  # gemini-3.8-flash at thinking level low
     ACP_LIVE_MODEL=gemini-4-hydrogen python3 tests/live-probe.py
 """
+import codecs
 import json
 import os
 import subprocess
@@ -117,9 +118,12 @@ class Agent:
 
     def _collect(self, terminal_id, proc):
         """Keeps a terminal's output as it arrives, so the command never blocks on a full pipe."""
-        for chunk in iter(lambda: proc.stdout.read1(4096), b""):
+        decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        for chunk in [*iter(lambda: proc.stdout.read1(4096), b""), None]:
+            # One decoder for the stream keeps a character split across two reads whole.
+            text = decoder.decode(b"", final=True) if chunk is None else decoder.decode(chunk)
             with self.lock:
-                self.outputs = {**self.outputs, terminal_id: self.outputs.get(terminal_id, "") + chunk.decode(errors="replace")}
+                self.outputs = {**self.outputs, terminal_id: self.outputs.get(terminal_id, "") + text}
 
     def _terminal(self, method, params):
         """A client terminal: the command starts at once; its output so far and its exit are read when asked."""

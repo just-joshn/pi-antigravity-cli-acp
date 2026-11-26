@@ -1,3 +1,5 @@
+import { diff as lineDiff } from "node:util";
+
 import type { Theme } from "@earendil-works/pi-coding-agent";
 
 import type { ToolDetails } from "./tool.ts";
@@ -11,22 +13,15 @@ const LABELS: Record<string, string> = {
   other: "tool",
 };
 
-/** Lines that differ between two texts once their common start and end are set aside. */
+/** The lines one text removes and the other adds, from a line-by-line diff of the two. */
 export function changedLines(oldText: string, newText: string) {
   const before = oldText === "" ? [] : oldText.replace(/\n$/, "").split("\n");
   const after = newText === "" ? [] : newText.replace(/\n$/, "").split("\n");
-  let start = 0;
-  while (start < before.length && start < after.length && before[start] === after[start]) start++;
-  let end = 0;
-  while (
-    end < before.length - start &&
-    end < after.length - start &&
-    before[before.length - 1 - end] === after[after.length - 1 - end]
-  )
-    end++;
+  // util.diff marks a line only in the first text 1 and a line only in the second -1.
+  const steps = lineDiff(before, after);
   return {
-    removed: before.slice(start, before.length - end),
-    added: after.slice(start, after.length - end),
+    removed: steps.flatMap(([op, line]) => (op === 1 ? [line] : [])),
+    added: steps.flatMap(([op, line]) => (op === -1 ? [line] : [])),
   };
 }
 
