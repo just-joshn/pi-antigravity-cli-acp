@@ -61,7 +61,6 @@ test("permission choices with the same name stay distinguishable", () => {
     option("Yes", "reject_once", "b"),
     option("Yes", "reject_once", "c"),
   ]);
-  expect(new Set(twins).size).toBe(3);
   expect(twins).toStrictEqual(["Yes [allow once]", "Yes [reject once]", "Yes [reject once] #3"]);
   expect(choiceLabels([])).toStrictEqual([]);
   expect(

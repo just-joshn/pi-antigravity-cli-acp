@@ -190,6 +190,7 @@ export function haltTurn(session: AcpSession, graceMs = CANCEL_GRACE_MS): Promis
   if (!turn) return Promise.resolve(true);
   return turn.haltOnce(async () => {
     const giveUp = new AbortController();
+    // A cancel or a read that fails leaves the halt unconfirmed, so the caller abandons the agent.
     const ended = (async () => {
       await session.cancelTurn();
       for (;;) {
