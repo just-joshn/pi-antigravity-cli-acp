@@ -8,7 +8,7 @@ Pi is a program. You type to an AI in it, and the AI writes back.
 
 Antigravity is an AI helper made by Google. It can read your files, change them and run commands.
 
-This package connects the two. You chat in Pi. Antigravity does the thinking and the work. Pi shows you what Antigravity does, and asks you first before Antigravity does something risky.
+This package connects the two. You chat in Pi. Antigravity does the thinking and the work. Pi shows you what Antigravity does and presents permission requests when Antigravity sends them.
 
 The two programs talk using a shared language called [ACP](https://agentclientprotocol.com/). The Zed code editor uses the same language to talk to Antigravity. So Antigravity in Pi works the way it does in Zed.
 
@@ -25,15 +25,22 @@ Do you want to know how it works inside? Read [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ## What you need
 
-- Pi, version 1.6 or newer.
-- Node.js, version 22.19 or newer.
+- Pi 1.6.1 is the tested host version.
+- Node.js 22.23.5 or later in the 22 series, 24.22.3 or later in the 24 series, or 26.13.1 or later in the 26 series.
+- macOS or Linux. Windows support is unverified.
 - Antigravity. You can get it one of two ways.
   - The Antigravity command-line program, called `agy`.
   - The Antigravity helper that Zed installs for you.
 
 ## Set it up
 
-The package is not on npm yet. You install it from a copy of this repository.
+Install the published package with Pi:
+
+```sh
+pi install npm:pi-antigravity-acp
+```
+
+To install from source instead:
 
 1. Get a copy of the code.
 
@@ -45,7 +52,7 @@ The package is not on npm yet. You install it from a copy of this repository.
 2. Get the parts the code needs.
 
    ```sh
-   bun install
+   npm ci --ignore-scripts
    ```
 
 3. Add the package to Pi.
@@ -212,7 +219,8 @@ If you signed in to an HTTP server with `/mcp`, Antigravity gets that server wit
 - Tested by hand on macOS with Pi 1.6.1 and `agy` 1.5.17.
 - The one Zed installed, version 1.5.2, was also tested by hand.
 - It uses ACP version 1 through `@agentclientprotocol/sdk` 2.12.0.
-- The automatic tests also pass on Linux. Nobody has tried it on Linux or Windows with the real Antigravity.
+- The CI matrix targets Linux with Node 22.23.5, 24.22.3, and 26.13.1, plus macOS and Windows with Node 26.13.1. The tests use a local fake agent, and the package smoke check loads the tarball with Pi 1.6.1.
+- The real Antigravity has not been tested on Linux or Windows.
 
 ## If something goes wrong
 
@@ -230,7 +238,7 @@ If you signed in to an HTTP server with `/mcp`, Antigravity gets that server wit
 
 - **Pi's tools do not run.** Antigravity uses its own tools. Pi's tools, skills, context files and tool hooks do nothing for these models.
 - **Pi does not shrink the chat.** Antigravity keeps its own memory. Use `/agy compact` to shrink it.
-- **Files stay inside your folders.** When Antigravity writes files through Pi, Pi writes only in your project folder and the folders you gave with `--agy-dir`.
+- **This is not a sandbox.** ACP file writes through Pi check the project folder and the folders you gave with `--agy-dir`. This does not restrict file reads, commands, or the agent process itself. The process inherits Pi's environment. Run Pi and Antigravity in an OS-level isolation boundary if you need to protect other files or credentials.
 - **Helpers of the helper show up as normal steps.** `agy` 1.5.17 shows the work of its smaller helpers, called subagents, as ordinary tool rows.
 - **Old chats come back as text.** `/agy sessions` brings back the words of an old chat, not its tool steps.
 - **Google decides the rest.** Quota, which models you can use and your account rules come from Antigravity and Google.
@@ -242,12 +250,14 @@ If you signed in to an HTTP server with `/mcp`, Antigravity gets that server wit
 These commands check your work.
 
 ```sh
-bun install --frozen-lockfile
-bun run check            # format, lint, type check, and tests that must cover 80% of each file
-bun run bench            # how much time this package adds compared with plain ACP
-bun run verify:package   # pack it, install it in Pi, chat, restart, continue, and close
-bun run pack             # make pi-antigravity-acp-<version>.tgz
+npm ci --ignore-scripts
+npm run verify      # format, lint, types, tests with coverage, audit, and package checks
+npm run test:watch  # rerun affected tests as files change
+npm run bench       # compare the extension with the bare ACP SDK
+npm pack --ignore-scripts
 ```
+
+Run `npm run dev` to load the extension in Pi. If you use tmux, set `extended-keys` to `on` and `extended-keys-format` to `csi-u` in your tmux configuration so Pi can read modified keys.
 
 The tests do not need a Google account. A pretend Antigravity answers them instead.
 
@@ -261,27 +271,8 @@ python3 tests/live-probe.py          # finds out which ACP features agy uses
 
 ## How checks and new versions work
 
-GitHub runs three jobs for this repository by itself.
+[CI](.github/workflows/ci.yml) runs on pull requests and pushes to `main`. It checks format, lint, types, tests, coverage, dependencies, package installation, and repository history for secrets. CI does not run the live Antigravity checks or publish to npm.
 
-| File                  | When it runs                   | What it does                                                                                                   |
-| --------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| `ci.yml`              | On every pull request          | Checks format, lint and types. Runs the tests and `verify:package` on Node 22.19.0, 24 and 26.                 |
-| `release.yml`         | On every push to `main`        | Runs the same checks. Then, if npm does not have this version yet, it publishes it and makes a GitHub release. |
-| `verify-lockfile.yml` | On pull requests and on `main` | Checks that `actions.lock` still matches the workflows.                                                        |
+Before 1.0, a patch release keeps the public interface compatible. A minor release may break it. Record breaking changes and migration steps in [CHANGELOG.md](CHANGELOG.md).
 
-The live checks need a signed-in Antigravity, so GitHub only checks that they are valid Python.
-
-To make a new version, follow these steps.
-
-1. Change `version` in `package.json` in a pull request.
-2. Merge the pull request.
-
-Do not make the tag or the release by hand. The release job never changes a tag that already exists. It stops if the tag exists but npm does not have the version.
-
-If the release job fails after npm took the version, press **Re-run all jobs**. The job then skips npm and makes the missing tag and release.
-
-npm trusts this repository's `release.yml` and its `npm` environment, so no secret is needed. Only `main` can publish.
-
-`actions.lock` pins each GitHub action to one exact commit. When you add or change a `uses:` line, run `gh actions-lock` and commit the result. Dependabot suggests new action versions once a week.
-
-GitHub formats with Bun 1.4.5. If you format with a newer Bun, change `BUN_VERSION` in `ci.yml` too.
+Use the npm version pinned in `package.json` and the Node.js version in `.nvmrc` to reproduce the primary CI job. Pin third-party GitHub Actions to full commit SHAs.

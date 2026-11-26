@@ -30,7 +30,7 @@ The extension registers an `antigravity` provider, because Pi's model picker, th
 | `fs.ts`                  | The agent's file requests: reads by absolute path, writes only inside the session's directory and its `--agy-dir` directories.                      |
 | `flags.ts`               | The extension's flags, read through one zod schema.                                                                                                 |
 | `workspace.ts`, `mcp.ts` | `--agy-dir` and `--agy-mcp`: the extra directories and Pi's MCP servers each session gets.                                                          |
-| `inbox.ts`               | Updates for sessions not open yet: the replay of a reopened session, counted and optionally kept as text, and early settings and usage.             |
+| `inbox.ts`               | Owns the early update queues and counts replays for sessions that are not open yet. A caller takes a queue once when its session opens.              |
 | `sessions.ts`            | `/agy sessions`: a saved agent conversation as a new Pi session.                                                                                    |
 | `sign-in.ts`             | Offers the agent's sign-in methods and has it authenticate.                                                                                         |
 | `elicit.ts`              | The agent's structured questions, asked with Pi's dialogs.                                                                                          |
@@ -40,7 +40,7 @@ The extension registers an `antigravity` provider, because Pi's model picker, th
 | `pick.ts`                | Shows a select dialog and returns the item behind the chosen label.                                                                                 |
 | `occurrences.ts`         | Each item's place among items that share a key, so permission options that share a name can show their kind.                                        |
 | `labels.ts`              | Numbers labels that repeat, so the choices in a dialog stay distinct and picking one finds it.                                                      |
-| `immutable.ts`           | Copy-on-write maps and `Registry`, which hold sessions and tool calls without editing shared state.                                                 |
+| `immutable.ts`           | Copy-on-write map helpers for state such as tool calls. `AcpClient` owns the mutable session map.                                                   |
 
 ## A prompt, end to end
 
@@ -82,7 +82,7 @@ Esc aborts Pi's request. The extension sends `session/cancel`, aborts any open p
 
 ## Performance
 
-`bun run bench` runs the same exchange with the bare ACP SDK, which only counts the updates, and through the extension into Pi's provider events, with a scripted agent in the same process instead of a model. Before timing, it checks that both did the whole exchange. Two runs of `bun run bench` at commit `e8c54c9` on an otherwise idle Apple M2 Max with Node 24.22, mean time per exchange:
+`npm run bench` runs the same exchange with the bare ACP SDK, which only counts the updates, and through the extension into Pi's provider events, with a scripted agent in the same process instead of a model. Before timing, it checks that both did the whole exchange. Two historical runs at commit `e8c54c9` on an otherwise idle Apple M2 Max with Node 24.22, mean time per exchange:
 
 | Workload                                        | Bare SDK           | Extension to Pi events |
 | ----------------------------------------------- | ------------------ | ---------------------- |

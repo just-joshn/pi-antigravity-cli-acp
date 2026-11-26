@@ -1,6 +1,19 @@
 # Changelog
 
-## 0.1.0 (Unreleased)
+## 0.2.0 (Unreleased)
+
+### Breaking changes
+
+- Use Node.js 22.23.5 or later in the 22 series, 24.22.3 or later in the 24 series, or 26.13.1 or later in the 26 series. Upgrade Node before installing this version if you used an older version.
+- Source checkouts now use npm instead of Bun. Run `npm ci --ignore-scripts` to install the locked dependencies, then `npm run verify` to run the checks.
+
+### Changed
+
+- Use Biome, TypeScript, and Vitest for local and CI checks. The package smoke test installs the tarball in a clean directory and loads the extension with Pi 1.6.1.
+- CI checks pull requests and `main` but no longer publishes automatically to npm.
+- Reuse session lookup tables and early-update queues without changing their limits, eviction order, or replay results.
+
+## 0.1.0 (2026-11-26)
 
 NEW FEATURES:
 
@@ -15,16 +28,14 @@ NEW FEATURES:
 - `/agy sessions` opens one of the agent's saved conversations for this directory as a new Pi session that continues it.
 - When the agent reports that you are signed out, Pi offers the agent's own sign-in methods and asks the agent to sign in with the one you pick. The extension never reads a token.
 - The flags `--agy-agent` (`auto`, `cli` or `registry`), `--agy-mode`, `--agy-dir` and `--agy-mcp`. `--agy-mcp` is opt-in and passes Pi's MCP servers to the agent, skipping with a notice any server it cannot pass.
-- For an agent that reads and writes files through Pi, Pi serves them only inside the session's working directory and the `--agy-dir` directories. It resolves symlinks before that check, refuses to write through a symlink or to a file with more than one hard link, and refuses pipes and other special files. Agent terminals run through Pi and stop with the agent.
-- Public npm distribution as `pi-antigravity-acp`.
+- Pi restricts ACP file writes to the session's working directory and the `--agy-dir` directories. ACP reads can use any absolute path. Pi rejects special files and refuses writes through a symlink or to a file with more than one hard link. Agent terminals run through Pi and stop with the agent.
+- npm package named `pi-antigravity-acp`.
 
 ADDED:
 
 - [PARITY.md](PARITY.md) compares each Antigravity ACP capability with Zed's client: 22 verified by a test and a live run, 16 implemented and tested but not yet seen live, and 2 not applicable. [ARCHITECTURE.md](ARCHITECTURE.md) explains the design.
-- 221 Vitest tests against a scripted ACP agent, in memory and as a process under real Pi, with a coverage gate that requires 80% statement, branch, function and line coverage in each file in `src/`.
-- `bun run verify:package`, which packs the package, installs it with `pi install`, prompts, restarts and continues the session, and checks that no agent process is left running.
-- `bun run bench`, which measures the extension's own overhead against the bare ACP SDK.
+- Vitest tests against a scripted ACP agent, in memory and as a process under Pi. Coverage checks statements, branches, functions, and lines for each file in `src/`.
+- A package smoke test that packs the extension, installs it through Pi, and exercises a conversation and session continuation with a scripted agent.
+- A benchmark that compares the extension with the bare ACP SDK.
 - Live checks in `tests/live-acp.py` and `tests/live-probe.py`, which drive real Pi against a signed-in `agy` or the registry agent. They passed on macOS with Pi 1.6.1, `agy` 1.5.17 and the registry agent 1.5.2.
-- GitHub Actions checks every pull request: formatting, oxlint, tsrs, a compile check of the live scripts, and the tests with the coverage gate and `verify:package` on Node 22.19.0, 24 and 26.
-- A push to `main` publishes a new `version` to npm and creates its tag and GitHub release.
-- An action lockfile, a lockfile check and a Dependabot configuration for the workflows.
+- GitHub Actions checks formatting, lint, types, tests, coverage, package installation, and repository history for secrets. At the time of this release, a separate workflow published new versions to npm.
