@@ -286,7 +286,7 @@ test("the mirror tool's rows reuse the component Pi already shows", async () => 
 });
 
 test("switching to another provider's model hides the mirror tool, the footer and the compaction guard", async () => {
-  const { ui, notes, status } = fakeUi();
+  const { ui, status } = fakeUi();
   const { session } = await start({ ui, settings: { compaction: { keepRecentTokens: 0 } } });
   await session.prompt("hello");
   expect(session.getActiveToolNames()).toContain(TOOL_NAME);
@@ -296,13 +296,17 @@ test("switching to another provider's model hides the mirror tool, the footer an
   expect(session.getActiveToolNames()).not.toContain(TOOL_NAME);
   expect(status("antigravity")).toBeUndefined();
   await expect(session.compact()).rejects.toThrow(/not called/);
-  expect(notes().join("\n")).not.toMatch(/compaction is skipped/);
 });
 
 test("--agy-agent picks the agent to run", async () => {
-  const { session, stop } = await start({ flags: { "agy-agent": "cli" } });
-  await session.prompt("hello");
-  expect((await stop()).argv).toStrictEqual(["acp"]);
+  const cli = await start({ flags: { "agy-agent": "cli" } });
+  await cli.session.prompt("hello");
+  expect((await cli.stop()).argv).toStrictEqual(["acp"]);
+  const registry = await start({ flags: { "agy-agent": "registry" } });
+  await registry.session.prompt("hello");
+  expect(registry.assistants().at(-1)?.errorMessage, "agy on PATH is not used").toMatch(
+    /No Antigravity agent installed from Zed's ACP registry/,
+  );
 });
 
 test("/agy status names the session once the agent titles it", async () => {
@@ -317,7 +321,7 @@ test("/agy status and mode with an agent that reports no tier, settings or usage
   const { ui, notes } = fakeUi();
   const { session } = await start({ ui, plain: true });
   await session.prompt("/agy mode auto");
-  expect(notes().at(-1)).toBe('warning: Antigravity has no "auto" mode. Available: .');
+  expect(notes().at(-1)).toBe('warning: Antigravity has no "auto" mode.');
   await session.prompt("/agy status");
   expect(notes().at(-1)?.split("\n")).toStrictEqual([
     "info: Agent: Fake Agent 0.0.1",

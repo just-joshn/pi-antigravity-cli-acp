@@ -26,7 +26,8 @@ export const selected = (ctx: ExtensionContext | undefined) => ctx?.model?.provi
 /** The notice for a permission mode the agent does not offer. */
 export function noSuchMode(wanted: string, session: AcpSession): string {
   const offered = session.choices("mode").map((mode) => mode.value);
-  return `Antigravity has no "${wanted}" mode. Available: ${offered.join(", ")}.`;
+  const available = offered.length ? ` Available: ${offered.join(", ")}.` : "";
+  return `Antigravity has no "${wanted}" mode.${available}`;
 }
 
 /** The extension's link to the Antigravity agent: its process, session and what it offers. */
@@ -195,8 +196,9 @@ export class Antigravity {
   #syncTool() {
     const active = this.#pi.getActiveTools();
     const declared = active.includes(TOOL_NAME);
-    if (selected(this.#pane) && !declared) this.#pi.setActiveTools([...active, TOOL_NAME]);
-    else if (!selected(this.#pane) && declared)
+    const wanted = selected(this.#pane);
+    if (wanted && !declared) this.#pi.setActiveTools([...active, TOOL_NAME]);
+    else if (!wanted && declared)
       this.#pi.setActiveTools(active.filter((name) => name !== TOOL_NAME));
   }
 
