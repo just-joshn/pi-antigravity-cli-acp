@@ -58,7 +58,6 @@ test("with no agent installed, each choice says what is missing", async () => {
 test("without agy on PATH, the newest registry copy runs as its listing says", async () => {
   const { root, newer, env } = await installCopies();
   expect(resolveAgent("auto", env, "darwin", "arm64")).toStrictEqual({
-    kind: "registry",
     command: newer,
     args: [],
   });
@@ -77,7 +76,6 @@ test("without agy on PATH, the newest registry copy runs as its listing says", a
     }),
   );
   expect(findRegistryAgent(root, "linux-x86_64")).toStrictEqual({
-    kind: "registry",
     command: newer,
     args: ["--uid="],
   });
@@ -88,11 +86,10 @@ test("auto prefers agy on PATH, and a registry copy must be executable", async (
   const { home, root, newer, env } = await installCopies();
   await program(join(home, "bin", "agy"));
   expect(resolveAgent("auto", env, "darwin", "arm64")).toStrictEqual({
-    kind: "cli",
     command: "agy",
     args: ["acp"],
   });
-  expect(resolveAgent("registry", env, "darwin", "arm64").kind).toBe("registry");
+  expect(resolveAgent("registry", env, "darwin", "arm64").command).toBe(newer);
   await chmod(newer, 0o644);
   expect(
     findRegistryAgent(root, "darwin-aarch64")?.command,
@@ -154,7 +151,7 @@ test("stopping an agent that ignores SIGTERM kills it", async () => {
   const dir = await scratchDir("agent");
   const pidFile = join(dir, "pid");
   const script = `trap "" TERM; echo $$ > "${pidFile}"; while :; do sleep 0.05; done`;
-  const agent = launch({ kind: "cli", command: "sh", args: ["-c", script] }, dir);
+  const agent = launch({ command: "sh", args: ["-c", script] }, dir);
   const pid = await vi.waitFor(async () => {
     const recorded = await readFile(pidFile, "utf8").catch(() => "");
     expect(recorded).toMatch(/\d/);
@@ -168,12 +165,12 @@ test("stopping an agent that ignores SIGTERM kills it", async () => {
 
 test("stopping an agent that already exited, or never started, does nothing", async () => {
   const dir = await scratchDir("agent");
-  const exited = launch({ kind: "cli", command: "true", args: [] }, dir);
+  const exited = launch({ command: "true", args: [] }, dir);
   await ended(exited.stream);
   await new Promise((resolve) => setTimeout(resolve, 50));
   expect(() => exited.stop()).not.toThrow();
 
-  const missing = launch({ kind: "cli", command: join(dir, "absent"), args: [] }, dir);
+  const missing = launch({ command: join(dir, "absent"), args: [] }, dir);
   expect(await ended(missing.stream), "a failed spawn ends the output").toBeUndefined();
   expect(() => missing.stop()).not.toThrow();
 });
@@ -182,7 +179,7 @@ test("on Windows, agy.exe on PATH is the CLI", async () => {
   const home = await scratchDir("agent");
   await program(join(home, "bin", "agy.exe"));
   const env = { HOME: home, PATH: join(home, "bin") };
-  expect(resolveAgent("cli", env, "win32", "x64").kind).toBe("cli");
+  expect(resolveAgent("cli", env, "win32", "x64").command).toBe("agy");
   expect(() => resolveAgent("cli", env, "darwin", "arm64"), "only Windows adds .exe").toThrow(
     AcpError,
   );

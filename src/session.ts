@@ -328,7 +328,7 @@ export class AcpSession {
 
   /** Marks a turn as fully consumed so the next prompt can start. */
   endTurn(turn: Turn | undefined) {
-    if (turn && this.#turn === turn) this.#turn = undefined;
+    if (this.#turn === turn) this.#turn = undefined;
   }
 
   /** Resolves with the tool's final state, or undefined when the agent never made that call. */

@@ -11,8 +11,6 @@ import { AcpError } from "./client.ts";
 type AgentChoice = "auto" | "cli" | "registry";
 
 interface AgentLaunch {
-  /** `cli`: the Antigravity CLI's `agy acp`. `registry`: the ACP registry agent an editor installed. */
-  kind: "cli" | "registry";
   command: string;
   args: string[];
 }
@@ -119,7 +117,7 @@ export function findRegistryAgent(root: string, platform: string): AgentLaunch |
   });
   if (first === undefined) return undefined;
   const command = commandIn(rest.reduce(newer, first).directory);
-  return { kind: "registry", command, args: listed?.args ?? [] };
+  return { command, args: listed?.args ?? [] };
 }
 
 /** Whether `name` runs from a directory on PATH; on Windows, as `name.exe` too. */
@@ -138,7 +136,7 @@ export function resolveAgent(
   arch: string = process.arch,
 ): AgentLaunch {
   const cli = (): AgentLaunch | undefined =>
-    onPath("agy", env, platform) ? { kind: "cli", command: "agy", args: ["acp"] } : undefined;
+    onPath("agy", env, platform) ? { command: "agy", args: ["acp"] } : undefined;
   const registry = () =>
     findRegistryAgent(registryRoot(env, platform), platformKey(platform, arch));
   let agent: AgentLaunch | undefined;

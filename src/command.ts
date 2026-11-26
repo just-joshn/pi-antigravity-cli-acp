@@ -38,7 +38,7 @@ async function chooseMode(link: Antigravity, requested: string | undefined, ctx:
   ctx.ui.notify(`Antigravity permission mode: ${id}`, "info");
 }
 
-async function showAgent(link: Antigravity, ctx: ExtensionContext) {
+async function showAgent(link: Antigravity, _value: string | undefined, ctx: ExtensionContext) {
   const { live } = link;
   if (!live) {
     ctx.ui.notify(
@@ -99,7 +99,7 @@ type Subcommand = (
 
 /** /agy's own subcommands; an agent command with one of these names is typed directly instead. */
 const OWN: Record<string, Subcommand> = {
-  status: (link, _value, ctx) => showAgent(link, ctx),
+  status: showAgent,
   mode: chooseMode,
   login: logIn,
   logout: logOut,

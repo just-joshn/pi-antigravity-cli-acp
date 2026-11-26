@@ -21,7 +21,7 @@ import { connect, pair } from "../tests/support/harness.ts";
 import type { Step } from "../tests/support/playback.ts";
 
 const CHUNKS = 1000;
-const chunks: Step[] = Array.from({ length: CHUNKS }, (_, i) => ({ say: `word${i} ` }));
+const chunks = Array.from({ length: CHUNKS }, (_, i) => ({ say: `word${i} ` }));
 const bigOutput = "x".repeat(200_000);
 const toolTurn: Step[] = [
   { tool: { toolCallId: "t", kind: "read", title: "big.txt", status: "in_progress" } },
@@ -95,9 +95,7 @@ async function extensionTurn(options: FakeAgentOptions): Promise<string> {
 test(`${CHUNKS} streamed text chunks`, async ({ bench }) => {
   // Both arms must do the whole exchange, or a dropped update would read as a speed-up.
   expect(await sdkTurn(chunks)).toBeGreaterThanOrEqual(CHUNKS);
-  expect(await extensionTurn({ script: () => chunks })).toBe(
-    chunks.map((c) => ("say" in c ? c.say : "")).join(""),
-  );
+  expect(await extensionTurn({ script: () => chunks })).toBe(chunks.map((c) => c.say).join(""));
   await bench.compare(
     bench("ACP SDK alone", async () => {
       await sdkTurn(chunks);
