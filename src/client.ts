@@ -46,14 +46,14 @@ export interface ClientIdentity {
 
 const AUTH_REQUIRED = -32000;
 const RESOURCE_NOT_FOUND = -32002;
+const LIST_PAGES = 5;
+
 /** A conversation the agent keeps, as session/list reports it. */
 export interface SavedSession {
   id: string;
   title: string | undefined;
   updatedAt: string | undefined;
 }
-
-const LIST_PAGES = 5;
 
 function savedSession(info: SessionInfo): SavedSession {
   return {
@@ -301,10 +301,11 @@ export class AcpClient {
   }
 
   async newSession(where: Workspace): Promise<AcpSession> {
+    const placed = this.#place(where);
     const created = await this.#connection.agent
-      .request(methods.agent.session.new, this.#place(where))
+      .request(methods.agent.session.new, placed)
       .catch(explain("start a session"));
-    return this.#adopt(created.sessionId, created, this.#place(where), 0);
+    return this.#adopt(created.sessionId, created, placed, 0);
   }
 
   /**
@@ -346,9 +347,10 @@ export class AcpClient {
 
   async #load(sessionId: string, where: Workspace, keepText: boolean) {
     if (!this.offers.load) return undefined;
+    const placed = this.#place(where);
     this.#inbox.startReplay(sessionId, keepText);
     const loaded = await this.#connection.agent
-      .request(methods.agent.session.load, { sessionId, ...this.#place(where) })
+      .request(methods.agent.session.load, { sessionId, ...placed })
       .catch((error: unknown) => {
         this.#inbox.endReplay(sessionId);
         this.#inbox.take(sessionId);
@@ -357,7 +359,7 @@ export class AcpClient {
       });
     if (!loaded) return undefined;
     const replay = this.#inbox.endReplay(sessionId);
-    const session = this.#adopt(sessionId, loaded, this.#place(where), replay?.turns ?? 0);
+    const session = this.#adopt(sessionId, loaded, placed, replay?.turns ?? 0);
     return { session, exchanges: replay?.exchanges ?? [] };
   }
 

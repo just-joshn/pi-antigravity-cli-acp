@@ -4,8 +4,9 @@ import type {
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 
-import type { Antigravity } from "./antigravity.ts";
+import { type Antigravity, noSuchMode } from "./antigravity.ts";
 import { AcpError, reasonOf } from "./client.ts";
+import { pick } from "./pick.ts";
 import { openSaved } from "./sessions.ts";
 import { signIn } from "./sign-in.ts";
 
@@ -20,16 +21,13 @@ async function chooseMode(link: Antigravity, requested: string | undefined, ctx:
   if (id === undefined) {
     const labels = modes.map((mode) => `${mode.value} — ${mode.description ?? mode.name}`);
     const picked = ctx.hasUI
-      ? await ctx.ui.select("Antigravity permission mode", labels)
+      ? await pick(ctx.ui, "Antigravity permission mode", modes, labels)
       : undefined;
-    id = picked === undefined ? undefined : modes[labels.indexOf(picked)]?.value;
+    id = picked?.value;
     if (id === undefined) return;
   }
   if ((await session.select("mode", id)) === "unavailable") {
-    ctx.ui.notify(
-      `Antigravity has no "${id}" mode. Available: ${modes.map((mode) => mode.value).join(", ")}.`,
-      "warning",
-    );
+    ctx.ui.notify(noSuchMode(id, session), "warning");
     return;
   }
   link.modeChosen(id);
@@ -138,11 +136,11 @@ function completions(link: Antigravity, prefix: string) {
   return matches.length ? matches : null;
 }
 
-/** `/agy status`, `/agy mode [id]` and the agent's own commands as `/agy <command> [input]`. */
+/** `/agy` with its own subcommands, and the agent's commands as `/agy <command> [input]`. */
 export function registerAgyCommand(pi: ExtensionAPI, link: Antigravity) {
   pi.registerCommand("agy", {
     description:
-      "Antigravity agent: /agy status, /agy mode [id], or /agy <agent command> [input] to run one of its commands",
+      "Antigravity agent: /agy status, mode [id], sessions, login, logout, or /agy <agent command> [input]",
     getArgumentCompletions: (prefix) => completions(link, prefix),
     async handler(args, ctx) {
       link.commandStarted(ctx);

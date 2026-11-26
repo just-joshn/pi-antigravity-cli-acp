@@ -30,14 +30,14 @@ export interface AgentCommand {
   hint: string | undefined;
 }
 
+const COMMAND_LIMIT = 200;
+const TEXT_LIMIT = 500;
+const TITLE_LIMIT = 200;
+
 function agentCommand(command: AvailableCommand): AgentCommand {
   const hint = command.input?.hint.slice(0, TEXT_LIMIT);
   return { name: command.name, description: command.description.slice(0, TEXT_LIMIT), hint };
 }
-
-const COMMAND_LIMIT = 200;
-const TEXT_LIMIT = 500;
-const TITLE_LIMIT = 200;
 
 export interface Choice {
   value: string;
@@ -353,13 +353,12 @@ export class AcpSession {
   }
 
   receive(update: SessionUpdate) {
-    const kind = update.sessionUpdate;
     if (
       update.sessionUpdate === "agent_message_chunk" ||
       update.sessionUpdate === "agent_thought_chunk"
     ) {
       if (update.content.type !== "text") return;
-      const type = kind === "agent_message_chunk" ? "text" : "thought";
+      const type = update.sessionUpdate === "agent_message_chunk" ? "text" : "thought";
       this.#turn?.push({ type, text: update.content.text });
     } else if (
       update.sessionUpdate === "tool_call" ||
@@ -374,10 +373,9 @@ export class AcpSession {
       this.#hooks.changed();
     } else if (update.sessionUpdate === "current_mode_update") {
       // The agent changed its own mode; the mode setting must say so, or selecting it again is skipped.
+      const mode = this.#option("mode");
       this.#options = this.#options.map((option) =>
-        option.type === "select" && (option.category ?? option.id) === "mode"
-          ? { ...option, currentValue: update.currentModeId }
-          : option,
+        option === mode ? { ...mode, currentValue: update.currentModeId } : option,
       );
       this.#hooks.changed();
     } else if (isPlanUpdate(update)) {
@@ -426,22 +424,22 @@ export class AcpSession {
   #mergeTool(patch: ToolCallUpdate): ToolView {
     const previous = this.#tools.get(patch.toolCallId);
     const status = patch.status ?? previous?.status ?? "pending";
+    const content = patch.content ?? previous?.content ?? [];
     const tool: ToolView = {
       id: patch.toolCallId,
       kind: patch.kind ?? previous?.kind ?? "other",
       title: patch.title ?? previous?.title ?? "",
       paths: patch.locations?.map((l) => l.path) ?? previous?.paths ?? [],
       status,
-      content: patch.content ?? previous?.content ?? [],
+      content,
       rawOutput: patch.rawOutput ?? previous?.rawOutput,
-      terminalOutput: "",
+      terminalOutput: this.#terminalOutputOf(content),
       decision: previous?.decision,
       settled: status === "completed" || status === "failed",
     };
-    const shown = { ...tool, terminalOutput: this.#terminalOutputOf(tool.content) };
-    this.#publish(shown);
-    if (!previous) this.#turn?.push({ type: "tool", tool: shown });
-    return shown;
+    this.#publish(tool);
+    if (!previous) this.#turn?.push({ type: "tool", tool });
+    return tool;
   }
 
   #terminalOutputOf(content: readonly ToolCallContent[]): string {

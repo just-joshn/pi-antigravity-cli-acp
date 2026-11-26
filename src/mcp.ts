@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import type { McpServer } from "@agentclientprotocol/sdk/unstable";
 
-import { isRecord } from "./guards.ts";
+import { isRecord, isStringArray } from "./guards.ts";
 
 /**
  * Pi's configured MCP servers as ACP servers, read from the files and in the format documented in
@@ -67,13 +67,9 @@ function convert(
     return { type: "http", name, url: entry["url"], headers: values };
   }
   const { command, args = [] } = entry;
-  if (typeof command !== "string" || !strings(args)) return "not a server entry";
+  if (typeof command !== "string" || !isStringArray(args)) return "not a server entry";
   if (entry["cwd"] !== undefined) return "ACP cannot pass a working directory";
   return { name, command: home(command), args: args.map(home), env: values };
-}
-
-function strings(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
 function home(value: string): string {

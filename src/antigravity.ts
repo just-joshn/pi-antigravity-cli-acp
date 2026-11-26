@@ -5,8 +5,9 @@ import { type Catalog, learn, piModels, PROVIDER, readCatalog, writeCatalog } fr
 import { AcpClient, SignInRequired, type Workspace } from "./client.ts";
 import { Conversation, parseAnchor } from "./conversation.ts";
 import { answerElicitation } from "./elicit.ts";
+import { pick } from "./pick.ts";
 import { planLines } from "./plan.ts";
-import type { SessionHooks } from "./session.ts";
+import type { AcpSession, SessionHooks } from "./session.ts";
 import { signIn } from "./sign-in.ts";
 import { createStream, haltTurn } from "./stream.ts";
 import { choiceLabels, TOOL_NAME, toolArguments } from "./tool.ts";
@@ -21,6 +22,12 @@ function isChoice(value: unknown): value is AgentChoice {
 }
 
 export const selected = (ctx: ExtensionContext | undefined) => ctx?.model?.provider === PROVIDER;
+
+/** The notice for a permission mode the agent does not offer. */
+export function noSuchMode(wanted: string, session: AcpSession): string {
+  const offered = session.choices("mode").map((mode) => mode.value);
+  return `Antigravity has no "${wanted}" mode. Available: ${offered.join(", ")}.`;
+}
 
 /** The extension's link to the Antigravity agent: its process, session and what it offers. */
 export class Antigravity {
@@ -222,11 +229,9 @@ export class Antigravity {
       this.#dialog(async () => {
         const pane = this.#pane;
         if (signal.aborted || !pane?.hasUI) return undefined;
-        const labels = choiceLabels(options);
         const { kind, title } = toolArguments(tool);
         const question = `Antigravity asks permission · ${kind}: ${title}`;
-        const picked = await pane.ui.select(question, labels, { signal });
-        return picked === undefined ? undefined : options[labels.indexOf(picked)];
+        return pick(pane.ui, question, options, choiceLabels(options), signal);
       }),
     elicit: (request, signal) =>
       this.#dialog(async () => {
@@ -333,11 +338,7 @@ export class Antigravity {
     const { session } = conversation;
     const wanted = this.#wantedMode;
     if (wanted !== undefined && (await session.select("mode", wanted)) === "unavailable") {
-      const offered = session.choices("mode").map((mode) => mode.value);
-      this.#pane?.ui.notify(
-        `Antigravity has no "${wanted}" mode. Available: ${offered.join(", ")}.`,
-        "warning",
-      );
+      this.#pane?.ui.notify(noSuchMode(wanted, session), "warning");
       this.#wantedMode = undefined;
     }
     this.#live = conversation;

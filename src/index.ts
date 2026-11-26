@@ -21,6 +21,11 @@ function registerFlags(pi: ExtensionAPI) {
   });
 }
 
+/** The row's previous component when Pi passes one back, so it is updated rather than rebuilt. */
+function reused(lastComponent: unknown): Text {
+  return lastComponent instanceof Text ? lastComponent : new Text("", 0, 0);
+}
+
 /** The Pi tool whose calls show the agent's own tool calls. */
 function registerMirrorTool(pi: ExtensionAPI, link: Antigravity) {
   const parameters = Type.Object({ kind: Type.String(), title: Type.String() });
@@ -39,14 +44,12 @@ function registerMirrorTool(pi: ExtensionAPI, link: Antigravity) {
         onUpdate,
       ),
     renderCall(args, theme, context) {
-      const text =
-        context.lastComponent instanceof Text ? context.lastComponent : new Text("", 0, 0);
+      const text = reused(context.lastComponent);
       text.setText(callLine(args, theme));
       return text;
     },
     renderResult(result, view, theme, context) {
-      const text =
-        context.lastComponent instanceof Text ? context.lastComponent : new Text("", 0, 0);
+      const text = reused(context.lastComponent);
       text.setText(resultLines(result.details, view, theme).join("\n"));
       return text;
     },

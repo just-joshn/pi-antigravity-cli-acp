@@ -1,5 +1,6 @@
 import { basename } from "node:path";
 
+import { isRecord } from "./guards.ts";
 import type { ToolView } from "./session.ts";
 
 export const TOOL_NAME = "antigravity_tool";
@@ -38,9 +39,8 @@ function outputOf(tool: ToolView): string {
   if (tool.terminalOutput) parts.push(tool.terminalOutput);
   const raw = tool.rawOutput;
   if (parts.length === 0 && typeof raw === "string") parts.push(raw);
-  else if (parts.length === 0 && typeof raw === "object" && raw !== null) {
-    const fields: Record<string, unknown> = { ...raw };
-    const found = OUTPUT_KEYS.map((key) => fields[key]).find((value) => typeof value === "string");
+  else if (parts.length === 0 && isRecord(raw)) {
+    const found = OUTPUT_KEYS.map((key) => raw[key]).find((value) => typeof value === "string");
     if (typeof found === "string") parts.push(found);
   }
   const text = parts.join("\n").replaceAll("\r\n", "\n");

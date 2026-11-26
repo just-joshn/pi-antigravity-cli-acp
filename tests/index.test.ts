@@ -212,6 +212,28 @@ test("rewinding Pi's conversation starts a new agent session with the visible hi
   expect(log.closes.length, "the replaced session is freed").toBe(1);
 });
 
+test("Pi's automatic compaction is declined without a notice", async () => {
+  const { ui, notes } = fakeUi();
+  const settings = { compaction: { enabled: true, reserveTokens: 999_000, keepRecentTokens: 0 } };
+  const { session, assistants } = await start({ ui, settings });
+  await session.prompt("hello");
+  await session.prompt("again");
+  expect(assistants().map(said)).toStrictEqual(["echo: hello", "echo: again"]);
+  expect(session.messages.some((message) => message.role === "compactionSummary")).toBe(false);
+  expect(notes().join("\n")).not.toMatch(/compaction is skipped/);
+});
+
+test("the mirror tool reports that no agent call matches when no agent session is open", async () => {
+  const { session } = await start();
+  const tool = session.getToolDefinition(TOOL_NAME);
+  expect.assert(tool);
+  const ctx = session.extensionRunner.createToolContext("t1", undefined);
+  const result = await tool.execute("t1", { kind: "read", title: "a" }, undefined, undefined, ctx);
+  const [first] = result.content;
+  expect.assert(first?.type === "text");
+  expect(first.text).toMatch(/^No Antigravity tool call matches/);
+});
+
 test("Pi's manual compaction is declined with a notice", async () => {
   const { ui, notes } = fakeUi();
   const { session } = await start({ ui, settings: { compaction: { keepRecentTokens: 0 } } });

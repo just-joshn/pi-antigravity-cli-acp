@@ -6,6 +6,7 @@ import { AGENT_DEFAULT, API, PROVIDER } from "./catalog.ts";
 import type { SavedSession } from "./client.ts";
 import { noUsage } from "./draft.ts";
 import type { Exchange } from "./inbox.ts";
+import { pick } from "./pick.ts";
 
 /** One label per session, numbered when titles and times repeat. */
 export function labels(saved: readonly SavedSession[]): string[] {
@@ -48,9 +49,7 @@ export async function openSaved(link: Antigravity, ctx: ExtensionCommandContext)
     ctx.ui.notify("Antigravity has no saved sessions for this directory.", "info");
     return;
   }
-  const offered = labels(saved);
-  const picked = await ctx.ui.select("Open an Antigravity session", offered);
-  const chosen = picked === undefined ? undefined : saved[offered.indexOf(picked)];
+  const chosen = await pick(ctx.ui, "Open an Antigravity session", saved, labels(saved));
   if (!chosen) return;
   if (chosen.id === link.live?.session.id) {
     ctx.ui.notify("That Antigravity session is the one in use here.", "info");

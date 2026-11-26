@@ -12,6 +12,11 @@ import {
 /** Largest file the agent may read through Pi. */
 const READ_LIMIT = 16 * 1024 * 1024;
 
+/** The system error code of a failed file operation, such as `ENOENT`. */
+function codeOf(error: unknown): string {
+  return error instanceof Error && "code" in error ? String(error.code) : "unknown";
+}
+
 function requireAbsolute(path: string) {
   if (!isAbsolute(path)) throw RequestError.invalidParams(undefined, "path must be absolute");
 }
@@ -35,7 +40,7 @@ export async function readTextFile({
   requireAbsolute(path);
   await requireReadable(path);
   const text = await readFile(path, "utf8").catch((error: unknown) => {
-    const code = error instanceof Error && "code" in error ? String(error.code) : "unknown";
+    const code = codeOf(error);
     if (code === "ENOENT") throw RequestError.resourceNotFound(path);
     throw RequestError.internalError(undefined, `${path} could not be read (${code})`);
   });
@@ -85,7 +90,7 @@ export async function writeTextFile(
   const noFollow = process.platform === "win32" ? 0 : constants.O_NOFOLLOW;
   const flags = constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | noFollow;
   const file = await open(target, flags).catch((error: unknown) => {
-    const code = error instanceof Error && "code" in error ? String(error.code) : "unknown";
+    const code = codeOf(error);
     if (code === "ELOOP") throw outsideWorkspace();
     throw RequestError.internalError(undefined, `${path} could not be written (${code})`);
   });

@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 
 import type { Api, Model } from "@earendil-works/pi-ai";
 
-import { isRecord } from "./guards.ts";
+import { isRecord, isStringArray } from "./guards.ts";
 import type { AcpSession, AgentCommand, Choice } from "./session.ts";
 
 export const PROVIDER = "antigravity";
@@ -102,11 +102,7 @@ export function piModels(catalog: Catalog): Model<typeof API>[] {
 /** The agent's name for a Pi thinking level, when the model supports that level. */
 export function effortFor(model: Model<string>, level: string | undefined): string | undefined {
   const levels: Record<string, string | null | undefined> = model.thinkingLevelMap ?? {};
-  return (level === undefined ? undefined : levels[level]) ?? undefined;
-}
-
-function strings(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
+  return levels[level ?? ""] ?? undefined;
 }
 
 /** Commands saved by an older version may be missing; a malformed entry is dropped. */
@@ -127,7 +123,7 @@ function parseCatalog(value: unknown): Catalog | undefined {
   for (const model of value["models"]) {
     if (!isRecord(model) || typeof model["id"] !== "string" || typeof model["name"] !== "string")
       return undefined;
-    if (!strings(model["efforts"])) return undefined;
+    if (!isStringArray(model["efforts"])) return undefined;
     models.push({ id: model["id"], name: model["name"], efforts: model["efforts"] });
   }
   const modes: Choice[] = [];

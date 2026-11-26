@@ -25,14 +25,14 @@ const CANCEL_GRACE_MS = 5000;
 const TOOL_BATCH_MS = 25;
 const HISTORY_LIMIT = 24_000;
 
-/**
- * Shown instead of sending a message again whose earlier attempt failed after reaching the agent.
- * Pi retries some errors on its own; this text must not look like one of them.
- */
 /** Shown when Pi continues a turn the agent no longer runs; it must not look retryable either. */
 export const TURN_LOST =
   "Antigravity's turn was over before Pi finished showing its tool calls, so this reply is empty. Send a message to go on.";
 
+/**
+ * Shown instead of sending a message again whose earlier attempt failed after reaching the agent.
+ * Pi retries some errors on its own; this text must not look like one of them.
+ */
 export const NOT_RESENT =
   "Antigravity stopped before it finished this message, so what it did is unknown. It was not sent again; check the workspace, then send it again if needed.";
 
