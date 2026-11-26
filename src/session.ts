@@ -163,7 +163,7 @@ export class Turn {
   takeTool(): ToolView | undefined {
     const head = this.#peek();
     if (head?.type !== "tool") return undefined;
-    this.#shift();
+    this.#front = this.#front?.tail;
     return head.tool;
   }
 }
