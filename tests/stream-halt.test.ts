@@ -5,6 +5,7 @@ import { noUsage } from "../src/draft.ts";
 import { AcpSession, type AgentPort } from "../src/session.ts";
 import { haltTurn, NOT_RESENT } from "../src/stream.ts";
 import { initialSession, quietHooks } from "./support/harness.ts";
+import { allow } from "./support/playback.ts";
 
 /** An agent that never answers a prompt and whose connection is gone. */
 const gone: AgentPort = {
@@ -61,11 +62,10 @@ test("an open permission dialog is withdrawn when its turn ends", async () => {
     },
   );
   const turn = asking.startTurn([]);
-  const allowOnce = { kind: "allow_once" as const, optionId: "allow", name: "Allow" };
   const decision = asking.permission({
     sessionId: "a",
     toolCall: { toolCallId: "t" },
-    options: [allowOnce],
+    options: [allow],
   });
   reply.resolve({ stopReason: "end_turn" });
   expect((await turn.next()).type).toBe("tool");
