@@ -61,8 +61,10 @@ async function sdkTurn(steps: Step[]) {
       mcpServers: [],
     });
     const blocks: ContentBlock[] = [{ type: "text", text: "go" }];
+    // Only the prompt's updates count; the session sends usage and commands when it starts.
+    const before = updates;
     await connection.agent.request(methods.agent.session.prompt, { sessionId, prompt: blocks });
-    return updates;
+    return updates - before;
   } finally {
     connection.close();
     fake.close();

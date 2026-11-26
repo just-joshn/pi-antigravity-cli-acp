@@ -131,18 +131,22 @@ class Agent:
         if method == "terminal/create":
             command = [params["command"], *params.get("args", [])]
             proc = subprocess.Popen(command, cwd=params.get("cwd") or self.cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            terminal_id = f"t{len(self.terminals) + 1}"
-            self.terminals = {**self.terminals, terminal_id: proc}
-            threading.Thread(target=self._collect, args=(terminal_id, proc), daemon=True).start()
+            with self.lock:  # requests arrive on their own threads
+                terminal_id = f"t{len(self.terminals) + 1}"
+                collector = threading.Thread(target=self._collect, args=(terminal_id, proc), daemon=True)
+                self.terminals = {**self.terminals, terminal_id: (proc, collector)}
+            collector.start()
             return {"terminalId": terminal_id}
-        proc = self.terminals[params["terminalId"]]
+        proc, collector = self.terminals[params["terminalId"]]
         if method in ("terminal/kill", "terminal/release"):
             if proc.poll() is None:
                 proc.kill()
             return {}
         if method == "terminal/wait_for_exit":
             # Waiting blocks only this request's thread.
-            return {"exitCode": proc.wait(), "signal": None}
+            code = proc.wait()
+            collector.join()  # the exit is answered once all output is in
+            return {"exitCode": code, "signal": None}
         status = {"exitStatus": {"exitCode": proc.returncode, "signal": None}} if proc.poll() is not None else {}
         return {"output": self.outputs.get(params["terminalId"], ""), "truncated": False, **status}
 
