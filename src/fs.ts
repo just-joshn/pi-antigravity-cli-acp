@@ -111,7 +111,8 @@ export async function writeTextFile(
   const target = join(await realpath(dirname(path)), basename(path));
   requireInside(roots, target);
   // A link at the file itself is refused here, and O_NOFOLLOW closes the moment between this check
-  // and the open. Windows has no O_NOFOLLOW, so there only this check applies.
+  // and the open. Windows has no O_NOFOLLOW, so there only this check applies. A target that cannot
+  // be examined is left to the open, which reports why.
   if ((await lstat(target).catch(() => undefined))?.isSymbolicLink()) throw outsideWorkspace();
   const noFollow = process.platform === "win32" ? 0 : constants.O_NOFOLLOW;
   // Opening does not wait for a pipe's reader; a pipe with none fails with ENXIO.

@@ -167,8 +167,8 @@ def main():
             agent.forget()
             reply = agent.call(number, "session/prompt", {"sessionId": session, "prompt": [{"type": "text", "text": text}]})
             print(f"\n== {name}: {reply.get('result', reply.get('error'))}")
-            print("   client requests:", dict(agent.requests) or "none")
-            print("   update kinds:   ", dict(agent.updates))
+            print("   client requests:", agent.requests or "none")
+            print("   update kinds:   ", agent.updates)
             for sample in agent.samples[:6]:
                 print("   ", sample)
         agent.proc.kill()
