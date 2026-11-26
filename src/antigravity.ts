@@ -29,6 +29,8 @@ export class Antigravity {
   #pi: ExtensionAPI;
   #catalogFile: string;
   #catalog: Catalog;
+  /** The catalog as last saved, kept to tell whether a session changed it without saving again. */
+  #savedCatalog: string;
   #published = "";
   /** Latest context Pi handed to this extension; dialogs and the status line go through it. */
   #pane: ExtensionContext | undefined;
@@ -72,6 +74,7 @@ export class Antigravity {
     this.#pi = pi;
     this.#catalogFile = catalogFile;
     this.#catalog = readCatalog(catalogFile);
+    this.#savedCatalog = JSON.stringify(this.#catalog);
   }
 
   /** The agent session in use, once the first message has started one. */
@@ -198,8 +201,10 @@ export class Antigravity {
 
   #absorb(conversation: Conversation) {
     const next = learn(this.#catalog, conversation.session);
-    if (JSON.stringify(next) === JSON.stringify(this.#catalog)) return;
+    const serialized = JSON.stringify(next);
+    if (serialized === this.#savedCatalog) return;
     this.#catalog = next;
+    this.#savedCatalog = serialized;
     try {
       writeCatalog(this.#catalogFile, next);
     } catch {
