@@ -7,8 +7,8 @@ mkdir "$tmp/bin"
 export MOCK_DIR="$tmp" GH_REPO=owner/repo GH_TOKEN=test PATH="$tmp/bin:$PATH"
 sha=0123456789012345678901234567890123456789
 other=1111111111111111111111111111111111111111
-# shellcheck disable=SC2016
-RELEASE_PLAN=$(jq -cn --arg sha "$sha" --arg notes "$(printf 'note\n$(touch %s/injected)\nX' "$tmp")" '[{version:"0.2.1",commit:$sha,notes:($notes | rtrimstr("X")),latest:true}]')
+notes=$(printf 'note\n%s(touch %s/injected)\nX' '$' "$tmp")
+RELEASE_PLAN=$(jq -cn --arg sha "$sha" --arg notes "${notes%X}" '[{version:"0.2.1",commit:$sha,notes:$notes,latest:true}]')
 export RELEASE_PLAN
 
 cat > "$tmp/bin/git" <<'MOCK'
@@ -35,7 +35,7 @@ if [[ $1 == api && $2 == --paginate ]]; then
     echo '[[]]'
   fi
 elif [[ $1 == api && $2 == --method ]]; then
-  [[ ! -f $MOCK_DIR/tag ]] || exit 1
+  [[ ! -f $MOCK_DIR/tag && $3 == POST && $4 == repos/owner/repo/git/refs && $6 == ref=refs/tags/v0.2.1 ]] || exit 1
   printf '%s' "${8#sha=}" > "$MOCK_DIR/tag"
 elif [[ $1 == release && $2 == create ]]; then
   [[ -f $MOCK_DIR/tag && ! -f $MOCK_DIR/release ]] || exit 1
@@ -58,8 +58,7 @@ chmod +x "$tmp/bin/git" "$tmp/bin/gh"
 run() { bash "$root/scripts/create-github-releases.sh" > /dev/null 2>&1; }
 run
 [[ $(<"$tmp/tag") == "$sha" && -f $tmp/release && ! -e $tmp/injected ]]
-# shellcheck disable=SC2016
-printf 'note\n$(touch %s/injected)\n' "$tmp" > "$tmp/expected"
+printf '%s' "${notes%X}" > "$tmp/expected"
 cmp "$tmp/notes" "$tmp/expected"
 run
 rm "$tmp/release"

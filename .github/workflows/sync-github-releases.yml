@@ -1,6 +1,11 @@
 name: Sync GitHub releases
 
 on:
+  pull_request:
+    paths:
+      - .github/workflows/sync-github-releases.yml
+      - scripts/create-github-releases.sh
+      - tests/create-github-releases.test.sh
   schedule:
     - cron: '23 * * * *'
   workflow_dispatch:
@@ -13,7 +18,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: sync-github-releases
+  group: ${{ github.event_name == 'pull_request' && format('sync-test-{0}', github.ref) || 'sync-github-releases' }}
   cancel-in-progress: false
 
 defaults:
@@ -21,8 +26,20 @@ defaults:
     shell: bash
 
 jobs:
+  test-writer:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: bash tests/create-github-releases.test.sh
+
   verify:
-    if: github.repository == 'just-joshn/pi-antigravity-cli-acp' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.repository == 'just-joshn/pi-antigravity-cli-acp' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:

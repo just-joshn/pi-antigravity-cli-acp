@@ -279,9 +279,9 @@ To stage 0.2.1 for the first time, open **Actions → Stage npm package → Run 
 
 After npm publishes an approved package, the [Sync GitHub releases workflow](.github/workflows/sync-github-releases.yml) checks for missing releases once an hour. It verifies npm provenance, tags the exact source commit on `main`, and uses that commit's changelog for the GitHub release. It never republishes anything to npm or moves a tag. Keep [immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases) enabled.
 
-To sync without waiting, select **Actions → Sync GitHub releases → Run workflow** on `main`. Select **Preview** to verify without writing a tag or release. The sync starts at 0.2.1 and ignores versions that npm has not published.
+To sync without waiting, select **Actions → Sync GitHub releases → Run workflow** on `main`. Select **Preview** to verify without writing a tag or release. The sync starts at 0.2.1 and ignores versions that npm has not published. GitHub can delay scheduled runs or disable them after 60 days of repository inactivity.
 
-If the sync reports a conflicting tag or draft, inspect it on GitHub. Do not move a published tag. GitHub can also refuse the workflow token when the source commit contains older workflow files. In that case, a maintainer can create the tag and release at the verified commit shown in the run. Do not substitute the tip of `main`.
+The sync stops if npm cannot verify a candidate's provenance or a dependency signature. Inspect the npm error before retrying. If the sync reports a conflicting tag or draft, inspect it on GitHub. Do not move a published tag. GitHub can also refuse the workflow token when the source commit contains older workflow files. In that case, a maintainer can create the tag and release at the verified commit shown in the run. Do not substitute the tip of `main`.
 
 Before 1.0, a patch release keeps the public interface compatible. A minor release may break it. Record breaking changes and migration steps in [CHANGELOG.md](CHANGELOG.md).
 
