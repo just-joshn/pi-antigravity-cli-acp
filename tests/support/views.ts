@@ -1,7 +1,6 @@
 import type { ToolView } from "../../src/session.ts";
 import type { ToolDetails } from "../../src/tool.ts";
 
-/** A settled edit the agent made, with fields replaced by `patch`. */
 export function view(patch: Partial<ToolView>): ToolView {
 	return {
 		id: "t1",
@@ -18,7 +17,6 @@ export function view(patch: Partial<ToolView>): ToolView {
 	};
 }
 
-/** The mirror tool's details for a finished call, with fields replaced by `patch`. */
 export const details = (patch: Partial<ToolDetails>): ToolDetails => ({
 	kind: "edit",
 	title: "File a.txt",

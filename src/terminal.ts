@@ -26,7 +26,6 @@ interface Running {
 	readonly sessionId: string;
 	readonly child: ChildProcess;
 	readonly output: string;
-	/** UTF-8 size of `output`, which may exceed `limit` until it is next trimmed. */
 	readonly bytes: number;
 	readonly truncated: boolean;
 	readonly limit: number;
@@ -51,7 +50,6 @@ function trimmed(running: Running): Running {
 	return { ...running, output, bytes: Buffer.byteLength(output), truncated: true };
 }
 
-/** Signals the command and everything it started, where the platform allows. */
 function signal(child: ChildProcess, name: NodeJS.Signals) {
 	if (GROUPS && child.pid !== undefined) {
 		try {
@@ -124,7 +122,6 @@ export class Terminals {
 		return this.#get(sessionId, terminalId).exited;
 	}
 
-	/** Stops the command and what it started; whatever is still running a moment later is killed. */
 	kill(sessionId: string, terminalId: string): Record<string, never> {
 		const { child } = this.#get(sessionId, terminalId);
 		signal(child, "SIGTERM");
@@ -191,7 +188,6 @@ export class Terminals {
 		if (!running.reporting) setImmediate(() => this.#reportOutput(terminalId));
 	}
 
-	/** Tells the session a terminal's output, once for all the chunks since the last report. */
 	#reportOutput(terminalId: string) {
 		const running = this.#all.get(terminalId);
 		if (!running) return;

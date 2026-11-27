@@ -83,7 +83,6 @@ const stdioSchema = z.object({
 	cwd: z.unknown().optional(),
 });
 
-/** An ACP server for one entry, undefined when it is switched off, or why it cannot be passed. */
 function convert(name: string, raw: unknown, env: Env): McpServer | string | undefined {
 	if (!NAME.test(name)) return "the name has characters Pi does not allow";
 	const entry = entrySchema.safeParse(raw);
@@ -123,14 +122,12 @@ function home(value: string): string {
 
 const VARIABLE = /\$\{(\w+)\}/g;
 
-/** Why a value cannot be passed: it runs a command, which Pi alone can, or needs an unset variable. */
 function problemOf(raw: string, env: Env): string | undefined {
 	if (raw.startsWith("!")) return "a value runs a command";
 	const missing = [...raw.matchAll(VARIABLE)].find(([, variable = ""]) => env[variable] === undefined);
 	return missing ? `${missing[1]} is not set` : undefined;
 }
 
-/** `${VAR}` values from the environment, or why one cannot be passed. */
 function expandAll(pairs: Record<string, string>, env: Env) {
 	const listed = Object.entries(pairs);
 	const problem = listed.map(([, raw]) => problemOf(raw, env)).find((reason) => reason);

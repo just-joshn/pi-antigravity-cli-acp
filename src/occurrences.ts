@@ -7,8 +7,10 @@ interface Occurrence<T> {
 /** Each item of `items`, in order, with how many items share its key. */
 export function occurrences<T>(items: readonly T[], key: (item: T) => string): Occurrence<T>[] {
 	const indexed = items.map((item, index) => ({ item, index }));
-	return [...Map.groupBy(indexed, ({ item }) => key(item)).values()]
-		.flatMap((group) => group.map(({ item, index }) => ({ index, item, of: group.length })))
-		.toSorted((a, b) => a.index - b.index)
-		.map(({ item, of }) => ({ item, of }));
+	const groups = Map.groupBy(indexed, ({ item }) => key(item));
+	const result: Occurrence<T>[] = [];
+	for (const group of groups.values()) {
+		for (const { item, index } of group) result[index] = { item, of: group.length };
+	}
+	return result;
 }

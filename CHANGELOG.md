@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.1 (Unreleased)
+
+### Fixed
+
+- Stop the agent when startup is cancelled or exceeds its 30-second deadline.
+- Keep overlapping loads of the same saved conversation from consuming each other's replay.
+- Launch the exact executable found during discovery, including when `PATH` contains relative entries.
+
+### Changed
+
+- Test prompting, resuming without resending history, and agent shutdown with the tarball installed in a clean Pi environment.
+
 ## 0.2.0 (Unreleased)
 
 ### Breaking changes
@@ -10,7 +22,7 @@
 ### Changed
 
 - Use Biome, TypeScript, and Vitest for local and CI checks. The package smoke test installs the tarball in a clean directory and loads the extension with Pi 1.6.1.
-- CI checks pull requests and `main` but no longer publishes automatically to npm.
+- CI checks pull requests and `main` for secrets and no longer publishes automatically to npm.
 - Reuse session lookup tables and early-update queues without changing their limits, eviction order, or replay results.
 - On Windows, give the agent a chance to exit when its input closes before forcing termination. Refuse device paths in the Windows device namespace before opening them.
 
@@ -36,7 +48,7 @@ ADDED:
 
 - [PARITY.md](PARITY.md) compares each Antigravity ACP capability with Zed's client: 22 verified by a test and a live run, 16 implemented and tested but not yet seen live, and 2 not applicable. [ARCHITECTURE.md](ARCHITECTURE.md) explains the design.
 - Vitest tests against a scripted ACP agent, in memory and as a process under Pi. Coverage checks statements, branches, functions, and lines for each file in `src/`.
-- A package smoke test that packs the extension, installs it through Pi, and exercises a conversation and session continuation with a scripted agent.
+- `bun run verify:package` packed and installed the extension through Pi, then tested conversation continuation and agent shutdown with a scripted agent.
 - A benchmark that compares the extension with the bare ACP SDK.
 - Live checks in `tests/live-acp.py` and `tests/live-probe.py`, which drive real Pi against a signed-in `agy` or the registry agent. They passed on macOS with Pi 1.6.1, `agy` 1.5.17 and the registry agent 1.5.2.
-- GitHub Actions checks formatting, lint, types, tests, coverage, package installation, and repository history for secrets. At the time of this release, a separate workflow published new versions to npm.
+- GitHub Actions checked formatting, lint, types, tests with coverage, and package installation. A separate workflow published new versions to npm and created the matching Git tag and GitHub release.

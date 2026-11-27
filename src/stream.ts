@@ -21,12 +21,10 @@ import { Draft } from "./draft.ts";
 import type { AcpSession, ToolView, Turn, TurnEvent } from "./session.ts";
 import { TOOL_NAME } from "./tool.ts";
 
-/** Longest wait for the agent to confirm that a cancelled turn has ended. */
 const CANCEL_GRACE_MS = 5000;
 /** Tool calls the agent starts together arrive as separate updates; wait this long to group them. */
 const TOOL_BATCH_MS = 25;
 const HISTORY_LIMIT = 24_000;
-/** Characters of each tool result kept in history sent as context. */
 const TOOL_RESULT_LIMIT = 600;
 
 /** Shown when Pi continues a turn the agent no longer runs; it must not look retryable either. */
@@ -41,29 +39,21 @@ export const NOT_RESENT =
 	"Antigravity stopped before it finished this message, so what it did is unknown. It was not sent again; check the workspace, then send it again if needed.";
 
 interface StreamHost {
-	/** Whether Pi is running a turn of the session this extension serves. */
 	conversing(piSessionId: string | undefined): boolean;
 	/**
 	 * The agent session in use, opening one if needed. `anchor` is where Pi's transcript last left an
 	 * agent session; the host reopens that session when it is still at that position.
 	 */
 	open(signal: AbortSignal | undefined, anchor: string | undefined): Promise<Conversation>;
-	/** Replaces the agent session, reopening the one at `anchor` when it can. */
 	restart(signal: AbortSignal | undefined, anchor: string | undefined): Promise<Conversation>;
-	/** Gives up on an agent that would not stop, so it cannot keep working unseen. */
 	abandon(): void;
-	/** How long to wait for the agent to confirm a cancelled turn. */
 	cancelGraceMs?: number;
-	/** Reports tool activity when Pi cannot show it as a tool call. */
 	noteTool(tool: ToolView): void;
 }
 
 interface TurnPlan {
-	/** The transcript no longer continues what the agent session has seen. */
 	diverged: boolean;
-	/** Conversation the agent session has not seen, oldest first. */
 	missed: Message[];
-	/** User messages to send now. */
 	prompt: UserMessage[];
 }
 
@@ -86,14 +76,12 @@ export function planTurn(messages: Message[], anchor: string | undefined): TurnP
 	return { diverged, missed, prompt };
 }
 
-/** The user messages at the end of the transcript, which no reply has answered yet. */
 function pendingPrompt(messages: Message[]): UserMessage[] {
 	let cut = messages.length;
 	while (cut > 0 && messages[cut - 1]?.role === "user") cut--;
 	return messages.slice(cut).filter((m) => m.role === "user");
 }
 
-/** The last assistant message this provider wrote, and the agent session position it carries. */
 export function lastAnchor(messages: Message[]): { index: number; anchor: string | undefined } {
 	for (let index = messages.length - 1; index >= 0; index--) {
 		const message = messages[index];
@@ -108,7 +96,6 @@ function plainText(content: string | readonly (TextContent | ImageContent)[]): s
 	return content.map((block) => (block.type === "text" ? block.text : "[image]")).join("\n");
 }
 
-/** Renders earlier conversation as text for an agent session that was not part of it. */
 export function renderHistory(messages: Message[]): string {
 	const lines = messages.flatMap((message) => {
 		if (message.role === "user") return [`User: ${plainText(message.content)}`];
@@ -209,11 +196,9 @@ type EndEvent = Extract<TurnEvent, { type: "end" | "failed" }>;
 const OUTSIDE_CONVERSATION =
 	"Antigravity keeps its own context, so it only answers messages in the conversation. Summaries and other background requests are not available with this model.";
 
-/** One Pi request: plans the agent turn, then relays its events into one assistant message. */
 class Reply {
 	readonly draft: Draft;
 	#host: StreamHost;
-	/** User messages whose turn failed after reaching the agent, by `messageKey`. */
 	#unfinished: Set<string>;
 	#sent: UserMessage[] = [];
 	#model: Model<string>;
@@ -243,7 +228,6 @@ class Reply {
 		return this.draft.events;
 	}
 
-	/** Stamps the message with the session's position so the next request can tell what the agent has seen. */
 	#stamp(active: Conversation) {
 		const { usage } = this.draft.message;
 		const totalTokens = active.session.usage?.used ?? 0;

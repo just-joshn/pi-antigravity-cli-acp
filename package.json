@@ -1,6 +1,6 @@
 {
 	"name": "pi-antigravity-acp",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"description": "Use Google Antigravity's agent (agy) in Pi over the Agent Client Protocol",
 	"keywords": [
 		"pi-package"

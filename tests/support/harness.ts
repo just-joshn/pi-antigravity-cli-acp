@@ -3,7 +3,6 @@ import type { AnyMessage } from "@agentclientprotocol/sdk/unstable";
 import { AcpClient } from "../../src/client.ts";
 import type { SessionHooks, TurnEvent } from "../../src/session.ts";
 import { type FakeAgentOptions, serveAgent } from "./fake-agent.ts";
-import { recorder } from "./record.ts";
 
 export const identity = { name: "pi", title: "Pi", version: "9.9.9" };
 
@@ -14,7 +13,6 @@ export const quietHooks: SessionHooks = {
 	changed: () => {},
 };
 
-/** What a new AcpSession starts with in tests that build one by hand. */
 export const initialSession = {
 	options: [],
 	tier: undefined,
@@ -24,17 +22,15 @@ export const initialSession = {
 	turns: 0,
 };
 
-/** Every event of a prompt turn, read in order until it ends. */
-export async function collect(turn: { next(): Promise<TurnEvent> }) {
-	const events = recorder<TurnEvent>();
+export async function collect(turn: { next(): Promise<TurnEvent> }): Promise<readonly TurnEvent[]> {
+	const events: TurnEvent[] = [];
 	for (;;) {
 		const event = await turn.next();
-		events.record(event);
-		if (event.type === "end" || event.type === "failed") return events.all();
+		events.push(event);
+		if (event.type === "end" || event.type === "failed") return events;
 	}
 }
 
-/** The two ends of an in-memory ACP connection. */
 export function pair() {
 	const toAgent = new TransformStream<AnyMessage, AnyMessage>();
 	const toClient = new TransformStream<AnyMessage, AnyMessage>();
@@ -44,7 +40,6 @@ export function pair() {
 	};
 }
 
-/** Connects a real ACP client to a scripted in-memory agent. */
 export async function connect(options: FakeAgentOptions, hooks: Partial<SessionHooks> = {}) {
 	const { agentSide, clientSide } = pair();
 	const fake = serveAgent(agentSide, options);

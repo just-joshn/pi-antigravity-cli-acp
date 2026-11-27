@@ -27,8 +27,7 @@ function isDirectory(path: string) {
 	}
 }
 
-/** The workspace for a new or reopened agent session, and anything from the flags left out. */
-export function workspaceFor(pi: ExtensionAPI, cwd: string, projectTrusted: boolean) {
+export function workspaceFor(pi: Pick<ExtensionAPI, "getFlag">, cwd: string, projectTrusted: boolean) {
 	const flags = readFlags(pi);
 	const directories = flags.directories.map((entry) => resolve(cwd, entry));
 	const found = directories.filter(isDirectory);

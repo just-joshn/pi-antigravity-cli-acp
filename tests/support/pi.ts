@@ -1,4 +1,3 @@
-/** A real Pi session with this extension loaded, talking to the scripted `agy`. */
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
@@ -34,7 +33,6 @@ function isProcessLog(value: unknown): value is ProcessLog {
 export const said = (message: AssistantMessage | undefined) =>
 	(message?.content ?? []).map((block) => (block.type === "text" ? block.text : "")).join("");
 
-/** The scripted agents' saved conversations in a scratch HOME: prompts by agent session id. */
 export async function agentStore(home: string): Promise<Record<string, unknown[]>> {
 	const saved: unknown = JSON.parse(await readFile(join(home, "agy-sessions.json"), "utf8"));
 	if (!isRecord(saved)) throw new Error("the scripted agents' store is not an object");
@@ -53,7 +51,6 @@ const refuse = () => {
 	throw new Error("the other provider is not called in these tests");
 };
 
-/** Another provider, so a test can switch away from Antigravity. */
 function otherProvider(pi: ExtensionAPI) {
 	const [model] = piModels(emptyCatalog);
 	expect.assert(model);
@@ -69,7 +66,6 @@ function otherProvider(pi: ExtensionAPI) {
 	});
 }
 
-/** A UI that answers dialogs from a list and records what the extension showed. */
 export function fakeUi(answers: readonly (string | undefined)[] = []) {
 	const next = answering(answers);
 	const notes = recorder<string>();
@@ -85,7 +81,6 @@ export function fakeUi(answers: readonly (string | undefined)[] = []) {
 		setStatus: (key, text) => statuses.record([key, text]),
 		setWidget: (key: string, content: unknown) => widgets.record([key, content]),
 	};
-	/** The last status the extension set under `key`. */
 	const status = (key: string) => statuses.all().findLast(([shown]) => shown === key)?.[1];
 	return { ui, notes: notes.all, dialogs: dialogs.all, status, widgets: widgets.all };
 }
@@ -96,19 +91,13 @@ interface StartOptions {
 	ui?: Partial<ExtensionUIContext>;
 	flags?: Record<string, string | boolean>;
 	settings?: Parameters<typeof SettingsManager.inMemory>[0];
-	/** Start the scripted agent without a tier, settings or context usage. */
 	plain?: boolean;
-	/** Reuse the scratch HOME of an earlier start, with its saved Pi and agent sessions. */
 	home?: string;
 	/** Pi's newSession for commands; without it, the SDK's does nothing. */
 	newSession?: ExtensionCommandContextActions["newSession"];
-	/** Prepares the scratch HOME before Pi starts, for example with config files. */
 	setup?: (home: string) => Promise<void>;
-	/** A session the scripted agent lists but cannot load. */
 	ghost?: string;
-	/** Start the scripted agent signed out. */
 	signedOut?: boolean;
-	/** Start the scripted agent without session/load and session/close. */
 	restore?: boolean;
 }
 
@@ -128,7 +117,7 @@ async function scratchHome(options: StartOptions) {
 	if (options.agy ?? true) await installAgy(dir);
 	// Keep real discovery and subprocess I/O without asking the OS to execute a shell script.
 	const launcher = vi.spyOn(agent, "launch").mockImplementation((spec, cwd, env) => {
-		expect(spec.command).toBe("agy");
+		expect(spec.command).toBe(join(bin, process.platform === "win32" ? "agy.exe" : "agy"));
 		return launchAgent({ command: process.execPath, args: [fakeAgy, ...spec.args] }, cwd, env);
 	});
 	onTestFinished(() => launcher.mockRestore());
@@ -153,7 +142,6 @@ async function scratchHome(options: StartOptions) {
 
 const unsupported = () => Promise.reject(new Error("not used by these tests"));
 
-/** Command actions the SDK leaves out, with a test's own newSession. */
 function commandActions(newSession: ExtensionCommandContextActions["newSession"]): ExtensionCommandContextActions {
 	return {
 		waitForIdle: () => Promise.resolve(),
@@ -165,7 +153,6 @@ function commandActions(newSession: ExtensionCommandContextActions["newSession"]
 	};
 }
 
-/** A Pi session in `work` with this extension and another provider loaded. */
 async function piSession(home: { dir: string; work: string; agentDir: string }, options: StartOptions) {
 	const { work, agentDir } = home;
 	const settingsManager = SettingsManager.inMemory(options.settings);
@@ -211,7 +198,6 @@ async function agentsExited(logFile: string) {
 	);
 }
 
-/** Reads what the newest scripted agent recorded, once every agent process has exited. */
 async function agentLog(logFile: string): Promise<ProcessLog> {
 	await agentsExited(logFile);
 	// An agent writes its log as it exits, before it removes its running marker.
@@ -220,7 +206,6 @@ async function agentLog(logFile: string): Promise<ProcessLog> {
 	return recorded;
 }
 
-/** A real Pi session with the extension loaded and a scripted `agy` first on PATH. */
 export async function start(options: StartOptions = {}) {
 	const home = await scratchHome(options);
 	const { dir, work, agentDir, logFile } = home;
@@ -232,7 +217,6 @@ export async function start(options: StartOptions = {}) {
 		await session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
 		session.dispose();
 	};
-	/** Ends the session the way Pi does and returns what the scripted agent recorded. */
 	const stop = async (): Promise<ProcessLog> => {
 		await shutdown();
 		return agentLog(logFile);

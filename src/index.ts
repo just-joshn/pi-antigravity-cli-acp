@@ -26,7 +26,6 @@ function reused(lastComponent: unknown): Text {
 	return lastComponent instanceof Text ? lastComponent : new Text("", 0, 0);
 }
 
-/** The Pi tool whose calls show the agent's own tool calls. */
 function registerMirrorTool(pi: ExtensionAPI, link: Antigravity) {
 	const parameters = Type.Object({ kind: Type.String(), title: Type.String() });
 	pi.registerTool<typeof parameters, ToolDetails>({

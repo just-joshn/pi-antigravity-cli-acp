@@ -22,7 +22,6 @@ function linesOf(text: string): string[] {
 	return text.endsWith("\n") ? lines : [...lines, NO_NEWLINE];
 }
 
-/** The lines one text removes and the other adds, from a line-by-line diff of the two. */
 export function changedLines(oldText: string, newText: string) {
 	const before = linesOf(oldText);
 	const after = linesOf(newText);
@@ -35,13 +34,11 @@ export function changedLines(oldText: string, newText: string) {
 	};
 }
 
-/** Header of a mirrored tool call: what the agent is doing. */
 export function callLine(args: { kind: string; title: string }, theme: Paint): string {
 	const label = (Object.hasOwn(LABELS, args.kind) ? LABELS[args.kind] : undefined) ?? args.kind;
 	return `${theme.fg("toolTitle", theme.bold(label))} ${theme.fg("accent", args.title)}`;
 }
 
-/** Body of a mirrored tool call: its progress, diff or output. */
 export function resultLines(
 	details: ToolDetails,
 	view: { expanded: boolean; isPartial: boolean },

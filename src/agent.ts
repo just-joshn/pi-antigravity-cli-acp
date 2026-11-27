@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { accessSync, constants, readdirSync, readFileSync } from "node:fs";
-import { delimiter, join } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import { Readable, Writable } from "node:stream";
 
 import { ndJsonStream, type Stream } from "@agentclientprotocol/sdk/unstable";
@@ -18,7 +18,6 @@ interface AgentLaunch {
 type Env = Record<string, string | undefined>;
 
 const REGISTRY_ID = "antigravity-acp";
-/** How long a stopped agent has to exit before it is killed. */
 const STOP_GRACE_MS = 1000;
 
 function executable(file: string): boolean {
@@ -26,7 +25,6 @@ function executable(file: string): boolean {
 		accessSync(file, constants.X_OK);
 		return true;
 	} catch {
-		// Missing, not executable or not reachable: in every case it cannot be run.
 		return false;
 	}
 }
@@ -76,7 +74,6 @@ function registryCommand(root: string, platform: string): { cmd: string; args: s
 
 type Version = readonly [number, number, number];
 
-/** The version in an installed agent's directory name, such as `v_1.5.17`. */
 function versionOf(directory: string): Version | undefined {
 	const match = /^v_(\d+)\.(\d+)\.(\d+)/.exec(directory);
 	return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : undefined;
@@ -92,18 +89,16 @@ function newer(a: Installed, b: Installed): Installed {
 	return (x[0] - y[0] || x[1] - y[1] || x[2] - y[2]) > 0 ? a : b;
 }
 
-/** The newest registry-installed Antigravity agent under `root`, if any. */
 export function findRegistryAgent(root: string, platform: string): AgentLaunch | undefined {
 	let installed: string[];
 	try {
 		installed = readdirSync(join(root, REGISTRY_ID));
 	} catch {
-		// A directory that is missing or cannot be read holds no copy the extension can run.
 		return undefined;
 	}
 	const listed = registryCommand(root, platform);
 	const fallback = platform.startsWith("windows") ? "agy_acp_server.exe" : "agy_acp_server.par";
-	const commandIn = (directory: string) => join(root, REGISTRY_ID, directory, listed?.cmd ?? fallback);
+	const commandIn = (directory: string) => resolve(join(root, REGISTRY_ID, directory, listed?.cmd ?? fallback));
 	// A copy that cannot run, such as one still installing, leaves the next newest.
 	const [first, ...rest] = installed.flatMap((directory): Installed[] => {
 		const version = versionOf(directory);
@@ -114,11 +109,18 @@ export function findRegistryAgent(root: string, platform: string): AgentLaunch |
 	return { command, args: listed?.args ?? [] };
 }
 
-/** Whether `name` runs from a directory on PATH; on Windows, as `name.exe` too. */
-function onPath(name: string, env: Env, platform: string): boolean {
+/** Find the exact executable on PATH; on Windows, also try `name.exe`. */
+function onPath(name: string, env: Env, platform: string): string | undefined {
 	const names = platform === "win32" ? [name, `${name}.exe`] : [name];
 	const { PATH = "" } = env;
-	return PATH.split(delimiter).some((dir) => dir !== "" && names.some((file) => executable(join(dir, file))));
+	for (const dir of PATH.split(delimiter)) {
+		if (dir === "") continue;
+		for (const file of names) {
+			const candidate = resolve(dir, file);
+			if (executable(candidate)) return candidate;
+		}
+	}
+	return undefined;
 }
 
 /** Picks the agent to run. `auto` prefers the installed CLI over an editor's registry copy. */
@@ -128,8 +130,10 @@ export function resolveAgent(
 	platform: string = process.platform,
 	arch: string = process.arch,
 ): AgentLaunch {
-	const cli = (): AgentLaunch | undefined =>
-		onPath("agy", env, platform) ? { command: "agy", args: ["acp"] } : undefined;
+	const cli = (): AgentLaunch | undefined => {
+		const command = onPath("agy", env, platform);
+		return command ? { command, args: ["acp"] } : undefined;
+	};
 	const registry = () => findRegistryAgent(registryRoot(env, platform), platformKey(platform, arch));
 	let agent: AgentLaunch | undefined;
 	if (choice === "cli") agent = cli();
@@ -148,7 +152,6 @@ export interface RunningAgent {
 	stop(): void;
 }
 
-/** Starts the agent process and exposes its stdio as an ACP stream. */
 export function launch(agent: AgentLaunch, cwd: string, env: Env = process.env): RunningAgent {
 	const child = spawn(agent.command, agent.args, { cwd, env, stdio: ["pipe", "pipe", "ignore"] });
 	// A failed spawn also closes the pipes, which ends the ACP connection with an error.

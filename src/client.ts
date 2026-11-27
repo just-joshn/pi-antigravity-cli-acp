@@ -32,10 +32,8 @@ export interface SignInMethod {
 	description: string | undefined;
 }
 
-/** Characters of an error's message shown to the user. */
 const REASON_LIMIT = 300;
 
-/** The start of an error's message, to show the user why something failed. */
 export function reasonOf(error: unknown, fallback: string): string {
 	return error instanceof Error ? error.message.slice(0, REASON_LIMIT) : fallback;
 }
@@ -50,7 +48,6 @@ const AUTH_REQUIRED = -32000;
 const RESOURCE_NOT_FOUND = -32002;
 const LIST_PAGES = 5;
 
-/** A conversation the agent keeps, as session/list reports it. */
 export interface SavedSession {
 	id: string;
 	title: string | undefined;
@@ -107,7 +104,6 @@ function sessionCwd(sessions: ReadonlyMap<string, AcpSession>, sessionId: string
 
 type ClientBuilder = ReturnType<typeof client>;
 
-/** Answers the agent's terminal requests; each names its session and terminal. */
 function serveTerminals(
 	builder: ClientBuilder,
 	sessions: ReadonlyMap<string, AcpSession>,
@@ -127,7 +123,6 @@ function serveTerminals(
 		);
 }
 
-/** What a client shares with the requests it serves: its sessions and what they need. */
 interface Wiring {
 	sessions: Map<string, AcpSession>;
 	inbox: Inbox;
@@ -163,13 +158,12 @@ function serve(
 		.onNotification(methods.client.session.update, ({ params }) => {
 			const session = sessions.get(params.sessionId);
 			// Agents report usage before session/new returns; keep it until the session exists.
-			if (session) session.receive(params.update);
+			if (session && !inbox.isReplaying(params.sessionId)) session.receive(params.update);
 			else inbox.hold(params.sessionId, params.update);
 		})
 		.connect(stream);
 }
 
-/** Where a session works: its directory, extra directories and the MCP servers it may use. */
 export interface Workspace {
 	cwd: string;
 	directories?: readonly string[];
@@ -178,7 +172,6 @@ export interface Workspace {
 
 type Introduced = Pick<AcpClient, "agent" | "accepts" | "offers" | "signInMethods">;
 
-/** What the agent said about itself in `initialize`, in the terms this client uses. */
 function introduced(hello: InitializeResponse): Introduced {
 	const capabilities = hello.agentCapabilities;
 	const sessionCapabilities = capabilities?.sessionCapabilities;
@@ -206,12 +199,9 @@ function introduced(hello: InitializeResponse): Introduced {
 	};
 }
 
-/** One connection to an ACP agent process. */
 export class AcpClient {
 	readonly agent: { name: string; version: string };
-	/** Prompt content the agent accepts besides text. */
 	readonly accepts: { image: boolean; embeddedContext: boolean };
-	/** Session lifecycle requests the agent offers besides session/new. */
 	readonly offers: {
 		load: boolean;
 		close: boolean;
@@ -227,6 +217,7 @@ export class AcpClient {
 	#sessions: Map<string, AcpSession>;
 	#inbox: Inbox;
 	#hooks: SessionHooks;
+	#loadTails = new Map<string, Promise<void>>();
 
 	private constructor(connection: ClientConnection, wiring: Wiring, hello: Introduced) {
 		this.#connection = connection;
@@ -280,7 +271,6 @@ export class AcpClient {
 		return this.offers.mcpHttp || !("type" in server);
 	}
 
-	/** The session/new and session/load fields for `where`, limited to what the agent accepts. */
 	#place(where: Workspace): NewSessionRequest {
 		const mcpServers = (where.mcpServers ?? []).filter((server) => this.takes(server));
 		const directories = where.directories ?? [];
@@ -304,16 +294,18 @@ export class AcpClient {
 	 * Resolves with undefined when the agent cannot load sessions or no longer has this one.
 	 */
 	async loadSession(sessionId: string, where: Workspace): Promise<AcpSession | undefined> {
-		return (await this.#load(sessionId, where, false))?.session;
+		return this.#serializeLoad(sessionId, async () => (await this.#load(sessionId, where, false))?.session);
 	}
 
-	/** A saved conversation's text, read by loading it and closing it again. */
 	async readTranscript(sessionId: string, where: Workspace): Promise<readonly Exchange[] | undefined> {
-		const loaded = await this.#load(sessionId, where, true);
-		if (!loaded) return undefined;
-		// Closing frees the agent's memory; a session left open costs nothing visible.
-		await this.closeSession(sessionId).catch(() => undefined);
-		return loaded.exchanges;
+		return this.#serializeLoad(sessionId, async () => {
+			const alreadyOpen = this.#sessions.has(sessionId);
+			const loaded = await this.#load(sessionId, where, true);
+			if (!loaded) return undefined;
+			// Never close a session that was already in use before the preview.
+			if (!alreadyOpen) await this.closeSession(sessionId).catch(() => undefined);
+			return loaded.exchanges;
+		});
 	}
 
 	/** The agent's saved conversations for `cwd`, newest first as the agent lists them. */
@@ -331,6 +323,21 @@ export class AcpClient {
 		return next && pages > 1 ? [...found, ...(await this.#listPages(cwd, next, pages - 1))] : found;
 	}
 
+	async #serializeLoad<T>(sessionId: string, operation: () => Promise<T>): Promise<T> {
+		const previous = this.#loadTails.get(sessionId) ?? Promise.resolve();
+		const result = previous.then(operation);
+		const tail = result.then(
+			() => undefined,
+			() => undefined,
+		);
+		this.#loadTails.set(sessionId, tail);
+		try {
+			return await result;
+		} finally {
+			if (this.#loadTails.get(sessionId) === tail) this.#loadTails.delete(sessionId);
+		}
+	}
+
 	async #load(sessionId: string, where: Workspace, keepText: boolean) {
 		if (!this.offers.load) return undefined;
 		const placed = this.#place(where);
@@ -345,6 +352,11 @@ export class AcpClient {
 			});
 		if (!loaded) return undefined;
 		const replay = this.#inbox.endReplay(sessionId);
+		const existing = this.#sessions.get(sessionId);
+		if (keepText) {
+			for (const update of this.#inbox.take(sessionId)) existing?.receive(update);
+			return { session: existing, exchanges: replay?.exchanges ?? [] };
+		}
 		const session = this.#adopt(sessionId, loaded, placed, replay?.turns ?? 0);
 		return { session, exchanges: replay?.exchanges ?? [] };
 	}
@@ -357,7 +369,6 @@ export class AcpClient {
 		await this.#connection.agent.request(methods.agent.logout, {}).catch(explain("sign out"));
 	}
 
-	/** Lets the agent free a session this client no longer uses. */
 	async closeSession(sessionId: string): Promise<void> {
 		this.#terminals.releaseSession(sessionId);
 		this.#sessions.delete(sessionId);

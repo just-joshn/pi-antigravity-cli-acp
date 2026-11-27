@@ -10,7 +10,6 @@ const MARK: ReadonlyMap<string, string> = new Map([
 	["pending", "[ ]"],
 ]);
 
-/** The agent's current plan: a list of steps, or markdown it keeps until it removes the plan. */
 export type Plan =
 	| { id: string | undefined; steps: readonly PlanEntry[]; finished: boolean }
 	| { id: string; markdown: readonly string[]; total: number };
@@ -31,7 +30,6 @@ function steps(id: string | undefined, entries: readonly PlanEntry[]): Plan {
 	return { id, steps: shown, finished: entries.every((entry) => entry.status === "completed") };
 }
 
-/** The plan after an update: ACP's original `plan`, or the newer `plan_update` and `plan_removed`. */
 export function nextPlan(current: Plan | undefined, update: PlanUpdate): Plan | undefined {
 	if (update.sessionUpdate === "plan") return steps(undefined, update.entries);
 	if (update.sessionUpdate === "plan_removed") return current?.id === update.planId ? undefined : current;
@@ -46,7 +44,6 @@ export function nextPlan(current: Plan | undefined, update: PlanUpdate): Plan | 
 	return current;
 }
 
-/** The plan widget's lines, or undefined when there is nothing left to show. */
 export function planLines(plan: Plan | undefined): string[] | undefined {
 	if (!plan) return undefined;
 	if ("markdown" in plan) {

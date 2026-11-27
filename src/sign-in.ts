@@ -4,11 +4,11 @@ import type { AcpClient, SignInMethod } from "./client.ts";
 import { uniqueLabels } from "./labels.ts";
 import { pick } from "./pick.ts";
 
-/** Asks the user how to sign in and has the agent do it. Undefined when nobody chose a method. */
 export async function signIn(
 	client: Pick<AcpClient, "signInMethods" | "signIn">,
 	pane: { hasUI: boolean; ui: Pick<ExtensionUIContext, "select"> } | undefined,
 	title: string,
+	signal?: AbortSignal,
 ): Promise<SignInMethod | undefined> {
 	const methods = client.signInMethods;
 	if (!pane?.hasUI || methods.length === 0) return undefined;
@@ -16,7 +16,8 @@ export async function signIn(
 		method.description ? `${method.name} — ${method.description}` : method.name,
 	);
 	const shown = uniqueLabels(labels, (label, n) => `${label} (${n})`);
-	const method = await pick(pane.ui, title, methods, shown);
+	const method = await pick(pane.ui, title, methods, shown, signal);
+	signal?.throwIfAborted();
 	if (method) await client.signIn(method.id);
 	return method;
 }

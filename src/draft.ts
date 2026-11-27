@@ -8,7 +8,6 @@ import {
 import type { ToolView } from "./session.ts";
 import { TOOL_NAME, toolArguments } from "./tool.ts";
 
-/** Usage of a message the agent's tokens are not counted against. */
 export function noUsage(): Usage {
 	return {
 		input: 0,

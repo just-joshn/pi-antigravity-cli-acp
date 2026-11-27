@@ -40,7 +40,6 @@ function messages(sessionId: string, exchanges: readonly Exchange[]) {
 	});
 }
 
-/** `/agy sessions`: opens one of the agent's saved conversations as a new Pi session. */
 export async function openSaved(link: Antigravity, ctx: ExtensionCommandContext) {
 	const client = await link.connected();
 	const saved = await client.listSessions(ctx.cwd);

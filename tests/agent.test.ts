@@ -1,5 +1,5 @@
-import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { join, relative } from "node:path";
 
 import type { Stream } from "@agentclientprotocol/sdk/unstable";
 import { expect, onTestFinished, test, vi } from "vitest";
@@ -14,7 +14,6 @@ async function program(file: string) {
 	await chmod(file, 0o755);
 }
 
-/** Two registry copies of the agent under a scratch HOME, as Zed installs them on macOS. */
 async function installCopies() {
 	const home = await scratchDir("agent");
 	const root = registryRoot({ HOME: home }, "darwin");
@@ -25,7 +24,6 @@ async function installCopies() {
 	return { home, root, newer, env: { HOME: home, PATH: join(home, "bin") } };
 }
 
-/** Resolves when the agent's output ends: with the error that ended it, or undefined. */
 async function ended(stream: Stream): Promise<unknown> {
 	const reader = stream.readable.getReader();
 	try {
@@ -90,7 +88,7 @@ test("auto prefers agy on PATH, and a registry copy must be executable", async (
 	const { home, root, newer, env } = await installCopies();
 	await program(join(home, "bin", "agy"));
 	expect(resolveAgent("auto", env, "darwin", "arm64")).toStrictEqual({
-		command: "agy",
+		command: join(home, "bin", "agy"),
 		args: ["acp"],
 	});
 	expect(resolveAgent("registry", env, "darwin", "arm64").command).toBe(newer);
@@ -102,6 +100,29 @@ test("auto prefers agy on PATH, and a registry copy must be executable", async (
 	if (process.platform === "win32") await rm(older);
 	else await chmod(older, 0o644);
 	expect(findRegistryAgent(root, "darwin-aarch64"), "no copy can run").toBe(undefined);
+});
+
+test("a CLI discovered on a relative PATH runs in another directory", async () => {
+	const home = await mkdtemp(join(process.cwd(), ".agent-test-"));
+	onTestFinished(() => rm(home, { recursive: true, force: true, maxRetries: 3 }));
+	const bin = join(home, "bin");
+	const work = join(home, "work");
+	await mkdir(bin);
+	await mkdir(work);
+	await copyFile(process.execPath, join(bin, process.platform === "win32" ? "agy.exe" : "agy"));
+	const { SystemRoot } = process.env;
+	const env = { PATH: relative(process.cwd(), bin), SystemRoot };
+	const { command } = resolveAgent("cli", env);
+	const script = `console.log(JSON.stringify({ jsonrpc: "2.0", method: "fixture" }));`;
+	const running = launch({ command, args: ["-e", script] }, work, env);
+	onTestFinished(() => running.stop());
+	const reader = running.stream.readable.getReader();
+	try {
+		expect((await reader.read()).value).toMatchObject({ method: "fixture" });
+		expect((await reader.read()).done).toBe(true);
+	} finally {
+		reader.releaseLock();
+	}
 });
 
 test("the registry directory falls back to USERPROFILE and Windows' default", async () => {
@@ -203,6 +224,6 @@ test("on Windows, agy.exe on PATH is the CLI", async () => {
 	const home = await scratchDir("agent");
 	await program(join(home, "bin", "agy.exe"));
 	const env = { HOME: home, PATH: join(home, "bin") };
-	expect(resolveAgent("cli", env, "win32", "x64").command).toBe("agy");
+	expect(resolveAgent("cli", env, "win32", "x64").command).toBe(join(home, "bin", "agy.exe"));
 	expect(() => resolveAgent("cli", env, "darwin", "arm64"), "only Windows adds .exe").toThrow(AcpError);
 });

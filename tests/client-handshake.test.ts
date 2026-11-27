@@ -66,7 +66,6 @@ test("an agent that says little about itself still gets a working session", asyn
 		b
 			.onRequest(methods.agent.initialize, () => hello)
 			.onRequest(methods.agent.session.new, async ({ client: pi }) => {
-				// A permission request for a session that does not exist is cancelled.
 				const { outcome } = await pi.request(methods.client.session.requestPermission, {
 					sessionId: "unknown",
 					toolCall: { toolCallId: "t" },
@@ -180,6 +179,75 @@ test("a loaded session counts the prompt turns the agent replays, however many b
 	expect(await client.loadSession("missing", { cwd: "/work" })).toBeUndefined();
 	await client.closeSession("saved");
 	expect([log.loads, log.closes]).toStrictEqual([["saved", "missing"], ["saved"]]);
+});
+
+test("replays for one session are isolated while other sessions can load", async () => {
+	const firstEntered = Promise.withResolvers<void>();
+	const releaseFirst = Promise.withResolvers<void>();
+	const otherEntered = Promise.withResolvers<void>();
+	const calls: string[] = [];
+	const closes: string[] = [];
+	const client = await meet((b) =>
+		b
+			.onRequest(methods.agent.initialize, () => ({
+				...hello,
+				agentCapabilities: { loadSession: true, sessionCapabilities: { close: {} } },
+			}))
+			.onRequest(methods.agent.session.load, async ({ params, client: peer }) => {
+				calls.push(params.sessionId);
+				if (calls.length === 1) {
+					firstEntered.resolve();
+					await releaseFirst.promise;
+				}
+				if (params.sessionId === "other") otherEntered.resolve();
+				await peer.notify(methods.client.session.update, {
+					sessionId: params.sessionId,
+					update: { sessionUpdate: "user_message_chunk", content: { type: "text", text: "question" } },
+				});
+				await peer.notify(methods.client.session.update, {
+					sessionId: params.sessionId,
+					update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "answer" } },
+				});
+				return {};
+			})
+			.onRequest(methods.agent.session.close, ({ params }) => {
+				closes.push(params.sessionId);
+				return {};
+			}),
+	);
+	const where = { cwd: "/work" };
+	const preview = client.readTranscript("same", where);
+	await firstEntered.promise;
+	const loaded = client.loadSession("same", where);
+	const other = client.loadSession("other", where);
+	await otherEntered.promise;
+	const callsWhileBlocked = [...calls];
+	releaseFirst.resolve();
+	const [exchanges, session, otherSession] = await Promise.all([preview, loaded, other]);
+	expect(callsWhileBlocked).toStrictEqual(["same", "other"]);
+	expect(exchanges).toStrictEqual([{ user: "question", agent: "answer" }]);
+	expect(session?.turns).toBe(1);
+	expect(otherSession?.turns).toBe(1);
+	expect(closes).toStrictEqual(["same"]);
+	// A preview of an already open session must neither divert replay nor close it.
+	expect(await client.readTranscript("same", where)).toStrictEqual([{ user: "question", agent: "answer" }]);
+	expect(closes).toStrictEqual(["same"]);
+});
+
+test("a failed replay does not block the next request for the same session", async () => {
+	let count = 0;
+	const client = await meet((b) =>
+		b
+			.onRequest(methods.agent.initialize, () => ({ ...hello, agentCapabilities: { loadSession: true } }))
+			.onRequest(methods.agent.session.load, () => {
+				if (++count === 1) throw RequestError.internalError();
+				return {};
+			}),
+	);
+	const first = client.loadSession("same", { cwd: "/work" });
+	const second = client.loadSession("same", { cwd: "/work" });
+	await expect(first).rejects.toThrow(AcpError);
+	expect((await second)?.id).toBe("same");
 });
 
 test("closing a session cancels its permission requests without closing another session", async () => {

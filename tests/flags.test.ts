@@ -4,7 +4,6 @@ import { expect, test } from "vitest";
 
 import { readFlags } from "../src/flags.ts";
 
-/** The flags as Pi hands them over: a string, a boolean, or nothing for a flag not given. */
 const flagsOf = (values: Readonly<Record<string, string | boolean>>) => readFlags({ getFlag: (name) => values[name] });
 
 test("flags that were not given take their defaults", () => {
