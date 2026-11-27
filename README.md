@@ -1,36 +1,15 @@
 # pi-antigravity-acp
 
-Talk to Google's Antigravity helper from inside Pi.
+Use Google's Antigravity agent from Pi over the [Agent Client Protocol](https://agentclientprotocol.com/), the same protocol Zed uses. Pi sends your prompts, not its system instructions or tools. Antigravity runs the tools. Pi shows the agent's replies, tool activity, and permission requests.
 
-## What is this?
-
-Pi is a program. You type to an AI in it, and the AI writes back.
-
-Antigravity is an AI helper made by Google. It can read your files, change them and run commands.
-
-This package connects the two. You chat in Pi. Antigravity does the thinking and the work. Pi shows you what Antigravity does and presents permission requests when Antigravity sends them.
-
-The two programs talk using a shared language called [ACP](https://agentclientprotocol.com/). The Zed code editor uses the same language to talk to Antigravity. So Antigravity in Pi works the way it does in Zed.
-
-## How the pieces fit
-
-1. You type a message in Pi.
-2. Pi sends your message to Antigravity.
-3. Antigravity thinks, reads files and runs tools.
-4. Pi shows you each step and the answer.
-
-Pi sends only your message. It does not send its own instructions or its own tools. If you ask the helper what program it runs in, it says "Antigravity".
-
-Do you want to know how it works inside? Read [ARCHITECTURE.md](ARCHITECTURE.md). Do you want to see what works and how it was checked? Read [PARITY.md](PARITY.md).
+See the [architecture](ARCHITECTURE.md) and [ACP feature coverage](PARITY.md) for details.
 
 ## What you need
 
 - Pi 1.6.1 is the tested host version.
 - Node.js 22.23.5 or later in the 22 series, 24.22.3 or later in the 24 series, or 26.13.1 or later in the 26 series.
-- macOS or Linux. Windows support is unverified.
-- Antigravity. You can get it one of two ways.
-  - The Antigravity command-line program, called `agy`.
-  - The Antigravity helper that Zed installs for you.
+- Either the Antigravity CLI (`agy`) or the Antigravity agent installed through Zed.
+- See [Where it was tested](#where-it-was-tested) for platform coverage.
 
 ## Set it up
 
@@ -219,8 +198,8 @@ If you signed in to an HTTP server with `/mcp`, Antigravity gets that server wit
 - Tested by hand on macOS with Pi 1.6.1 and `agy` 1.5.17.
 - The one Zed installed, version 1.5.2, was also tested by hand.
 - It uses ACP version 1 through `@agentclientprotocol/sdk` 2.12.0.
-- The CI matrix targets Linux with Node 22.23.5, 24.22.3, and 26.13.1, plus macOS and Windows with Node 26.13.1. The tests use a local fake agent, and the package smoke check loads the tarball with Pi 1.6.1.
-- The real Antigravity has not been tested on Linux or Windows.
+- The local fake-agent suite and packed-extension load pass in CI on Linux (Node 22.23.5, 24.22.3, and 26.13.1), macOS (Node 26.13.1), and Windows (Node 26.13.1).
+- The real Antigravity agent has not been tested on Linux or Windows.
 
 ## If something goes wrong
 

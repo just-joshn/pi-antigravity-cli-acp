@@ -12,7 +12,6 @@ const port: AgentPort = {
 	setConfigOption: () => Promise.resolve([]),
 };
 
-/** A session whose user answers every permission question with `answer`. */
 function answeredWith(answer: PermissionOption | undefined | Error) {
 	const askPermission = () => (answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer));
 	return new AcpSession("s", initialSession, port, { ...quietHooks, askPermission });

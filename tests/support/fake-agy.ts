@@ -1,4 +1,3 @@
-/** A scripted ACP agent on stdio, started by tests in place of the real `agy acp`. */
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { Readable, Writable } from "node:stream";
 
@@ -22,7 +21,6 @@ function dieOnceWritten(file: string) {
 	poll.unref();
 }
 
-/** Exits the agent process shortly, as if it crashed. */
 function dieSoon(delayMs: number) {
 	setTimeout(() => process.exit(3), delayMs);
 }
@@ -131,7 +129,6 @@ function script(prompt: ContentBlock[]): Step[] {
 	return [{ think: "hm" }, { usage: [2048, 1_000_000] }, { say: `echo: ${text}` }];
 }
 
-/** Saved conversations, kept in a file across agent processes as `agy` keeps them. */
 const {
 	FAKE_AGY_STORE: store,
 	FAKE_AGY_PLAIN: plain,
@@ -151,7 +148,6 @@ function isBlock(item: unknown): boolean {
 const isPrompt = (item: unknown) => Array.isArray(item) && item.every(isBlock);
 const isPrompts = (item: unknown) => Array.isArray(item) && item.every(isPrompt);
 
-/** A saved store: prompts by session id, each prompt a list of content blocks. */
 function isHistory(value: unknown): value is Record<string, ContentBlock[][]> {
 	return isRecord(value) && Object.values(value).every(isPrompts);
 }

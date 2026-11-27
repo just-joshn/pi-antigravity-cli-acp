@@ -14,7 +14,6 @@ const MIB = 1024 * 1024;
 /** Largest file the agent may read through Pi, in MiB. */
 const READ_LIMIT_MIB = 16;
 
-/** The system error code of a failed file operation, such as `ENOENT`. */
 function codeOf(error: unknown): string {
 	return error instanceof Error && "code" in error ? String(error.code) : "unknown";
 }
@@ -61,7 +60,6 @@ async function readChecked(path: string): Promise<string> {
 	}
 }
 
-/** Serves ACP `fs/read_text_file`: the whole file, or `limit` lines from 1-based `line`. */
 export async function readTextFile({ path, line, limit }: ReadTextFileRequest): Promise<ReadTextFileResponse> {
 	requireAbsolute(path);
 	const text = await readChecked(path);
@@ -131,7 +129,6 @@ function outsideWorkspace() {
 	return RequestError.invalidParams(undefined, "this client writes files only inside the session's workspace");
 }
 
-/** `path` must be strictly inside one of `roots`. */
 function requireInside(roots: readonly string[], path: string) {
 	const within = (root: string) => {
 		const inside = relative(root, path);

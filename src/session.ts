@@ -22,11 +22,9 @@ import { isPlanUpdate, nextPlan, type Plan } from "./plan.ts";
 /** The agent settings a client can change, named by ACP's config-option categories. */
 type OptionCategory = "model" | "thought_level" | "mode";
 
-/** A command the agent runs when a prompt starts with `/name`. */
 export interface AgentCommand {
 	name: string;
 	description: string;
-	/** What to type after the command, when it takes input. */
 	hint: string | undefined;
 }
 
@@ -68,7 +66,6 @@ export type TurnEvent =
 	| { type: "end"; stopReason: PromptResponse["stopReason"]; usage: PromptResponse["usage"] }
 	| { type: "failed"; message: string };
 
-/** The requests a session sends to its agent. */
 export interface AgentPort {
 	prompt(sessionId: string, prompt: ContentBlock[]): Promise<PromptResponse>;
 	cancel(sessionId: string): Promise<void>;
@@ -84,11 +81,9 @@ export interface SessionHooks {
 	): Promise<PermissionOption | undefined>;
 	/** Answers a structured question from the agent; cancelled when nobody can answer. */
 	elicit(request: CreateElicitationRequest, signal: AbortSignal): Promise<CreateElicitationResponse>;
-	/** The session's settings, usage or title changed. */
 	changed(): void;
 }
 
-/** An immutable list, newest first. */
 type Stack<T> = { readonly head: T; readonly tail: Stack<T> } | undefined;
 
 function reversed<T>(stack: Stack<T>): Stack<T> {
@@ -169,7 +164,6 @@ function describeFailure(error: unknown): string {
 	return [text, typeof details === "string" ? details : ""].filter(Boolean).join(": ").slice(0, TEXT_LIMIT);
 }
 
-/** One agent conversation: its settings, context usage, tool calls and the turn in progress. */
 export class AcpSession {
 	readonly id: string;
 	readonly tier: string | undefined;
@@ -205,7 +199,6 @@ export class AcpSession {
 			variants: string[];
 			cwd: string;
 			directories: readonly string[];
-			/** Prompt turns the session already had, when it was reopened. */
 			turns: number;
 		},
 		port: AgentPort,
@@ -243,7 +236,6 @@ export class AcpSession {
 		return this.#title;
 	}
 
-	/** Prompt turns started so far. */
 	get turns() {
 		return this.#turns;
 	}
@@ -297,7 +289,6 @@ export class AcpSession {
 		return turn;
 	}
 
-	/** Closes open permission dialogs; the session is being dropped. */
 	dispose() {
 		this.#dialogs.abort();
 		this.#settleTools();
@@ -310,7 +301,6 @@ export class AcpSession {
 		await this.#port.cancel(this.id);
 	}
 
-	/** Marks a turn as fully consumed so the next prompt can start. */
 	endTurn(turn: Turn | undefined) {
 		if (this.#turn === turn) this.#turn = undefined;
 	}
@@ -401,7 +391,6 @@ export class AcpSession {
 	async elicit(request: CreateElicitationRequest): Promise<CreateElicitationResponse> {
 		const { signal } = this.#dialogs;
 		const cancel: CreateElicitationResponse = { action: "cancel" };
-		// A question nobody could answer is cancelled, as when the user dismisses it.
 		const reply = await this.#hooks.elicit(request, signal).catch(() => cancel);
 		return signal.aborted ? cancel : reply;
 	}

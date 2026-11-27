@@ -45,7 +45,6 @@ interface ChatOptions {
 type Client = Awaited<ReturnType<typeof connect>>["client"];
 type StreamRequest = Parameters<ReturnType<typeof createStream>>[2];
 
-/** What the extension does for the stream: one agent session at a time, recorded for the test. */
 function scriptedHost(client: Client, options: ChatOptions) {
 	let conversation: Conversation | undefined;
 	let abandoned = 0;
@@ -102,7 +101,6 @@ async function runTools(host: ReturnType<typeof scriptedHost>, message: Assistan
 	return toolResults;
 }
 
-/** Every event of a provider stream, each also handed to `onEvent` as it arrives. */
 async function drain(running: AsyncIterable<AssistantMessageEvent>, onEvent: (event: AssistantMessageEvent) => void) {
 	const events = recorder<AssistantMessageEvent>();
 	for await (const event of running) {
@@ -117,7 +115,6 @@ interface Loop {
 	mirror(message: AssistantMessage): Promise<unknown>;
 }
 
-/** Pi's replies to one user message: provider calls until one does not end with tool calls. */
 async function repliesTo(loop: Loop, model: Model<string>, request: StreamRequest): Promise<AssistantMessage[]> {
 	const { message } = await loop.step(model, request);
 	if (message.stopReason !== "toolUse") return [message];
@@ -165,7 +162,6 @@ function piLoop(host: ReturnType<typeof scriptedHost>, mirrorTool: boolean) {
 	return { messages: () => messages, add, rewind, step, mirror, turn };
 }
 
-/** A scripted agent behind the provider, driven by Pi's loop. */
 async function chat(agent: FakeAgentOptions, options: ChatOptions = {}) {
 	const next = answering(options.answers ?? []);
 	const { client, log, close } = await connect(agent, {

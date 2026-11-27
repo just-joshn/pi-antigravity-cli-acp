@@ -23,7 +23,6 @@ interface MirrorResult {
 	isError: boolean;
 }
 
-/** Arguments of the mirrored Pi tool call: what the agent is doing, in its own words. */
 export function toolArguments(tool: ToolView) {
 	const path = tool.paths[0];
 	const title = tool.title || tool.kind;
@@ -34,7 +33,6 @@ export function toolArguments(tool: ToolView) {
 /** Keys under which the Antigravity servers put a command's output in `rawOutput`. */
 const OUTPUT_KEYS = ["output", "combinedOutput", "formatted_output"];
 
-/** The output a command reported in `rawOutput`, under one of the keys the servers use. */
 function rawParts(raw: unknown): string[] {
 	if (typeof raw === "string") return [raw];
 	const found = isRecord(raw)
@@ -102,7 +100,6 @@ export function choiceLabels(options: readonly { name: string; kind: string }[])
 
 type Watch = (signal: AbortSignal | undefined, onChange: (tool: ToolView) => void) => Promise<ToolView | undefined>;
 
-/** Waits for the agent to finish a tool call and reports it the way a Pi tool reports its own work. */
 export async function runMirror(
 	watch: Watch,
 	signal: AbortSignal | undefined,

@@ -4,7 +4,6 @@ const EARLY_UPDATE_LIMIT = 64;
 /** Sessions whose early updates are kept at once; the oldest is dropped for a new one. */
 const EARLY_SESSION_LIMIT = 16;
 
-/** One prompt turn of a replayed conversation, as its text. */
 export interface Exchange {
 	readonly user: string;
 	readonly agent: string;
@@ -41,7 +40,6 @@ const AGENT_TURN = new Set([
 	"plan_removed",
 ]);
 
-/** The replay after one more update; each user message after an agent update starts a turn. */
 function replayed(replay: Replay, update: SessionUpdate): Replay {
 	const { exchanges } = replay;
 	if (update.sessionUpdate === "user_message_chunk") {
@@ -76,7 +74,6 @@ export class Inbox {
 		this.#replays.set(sessionId, replay);
 	}
 
-	/** Stops counting the replay of `sessionId` and returns what was counted. */
 	endReplay(sessionId: string): Replay | undefined {
 		const replay = this.#replays.get(sessionId);
 		this.#replays.delete(sessionId);

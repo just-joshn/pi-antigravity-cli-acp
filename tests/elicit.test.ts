@@ -6,7 +6,6 @@ import { collect, connect } from "./support/harness.ts";
 import { fakeUi, said, start } from "./support/pi.ts";
 import { answering, recorder } from "./support/record.ts";
 
-/** Dialogs that answer from a list and record what they showed. */
 function scripted(answers: readonly (string | undefined)[]) {
 	const shown = recorder<string>();
 	const answer = answering(answers);
