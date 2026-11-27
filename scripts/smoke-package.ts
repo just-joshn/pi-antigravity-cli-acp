@@ -20,9 +20,10 @@ assert.ok(npm, "Run this script through npm run test:package");
 const cwd = process.cwd();
 const args = process.argv.slice(2);
 assert.ok(args.length === 0 || args.length === 2, "Pass a tarball path and an exact Pi version, or no arguments");
-const piVersion = args[1] ?? manifest.devDependencies["@earendil-works/pi-coding-agent"];
+const piName = "@earendil-works/pi-coding-agent";
+const pinnedPi = manifest.devDependencies[piName];
+const piVersion = args[1] ?? pinnedPi;
 assert.match(piVersion, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/, "Pi version must be exact");
-const host = `@earendil-works/pi-coding-agent@${piVersion}`;
 const temp = mkdtempSync(join(tmpdir(), "pi-package-"));
 
 try {
@@ -45,13 +46,30 @@ try {
 			"Expected a .tgz file",
 		);
 	}
-	writeFileSync(join(temp, "package.json"), '{"private":true,"type":"module"}\n', { mode: 0o600 });
+	writeFileSync(
+		join(temp, "package.json"),
+		JSON.stringify({ private: true, type: "module", dependencies: { [piName]: piVersion } }),
+		{ mode: 0o600 },
+	);
+	// Reuse the locked host graph, not the project's installed files.
+	const useLock = piVersion === pinnedPi;
+	if (useLock) copyFileSync(resolve(cwd, "package-lock.json"), join(temp, "package-lock.json"));
 	execFileSync(
 		process.execPath,
-		[npm, "install", "--ignore-scripts", "--omit=dev", "--no-audit", "--no-fund", "--save-exact", host, tarball],
+		[
+			npm,
+			"install",
+			"--ignore-scripts",
+			"--omit=dev",
+			"--no-audit",
+			"--no-fund",
+			"--save-exact",
+			...(useLock ? ["--prefer-offline"] : []),
+			tarball,
+		],
 		{ cwd: temp, stdio: "inherit", timeout: 180_000 },
 	);
-	const piPackage = join(temp, "node_modules", "@earendil-works", "pi-coding-agent");
+	const piPackage = join(temp, "node_modules", piName);
 	assert.equal(JSON.parse(readFileSync(join(piPackage, "package.json"), "utf8")).version, piVersion);
 	const pi = join(piPackage, "dist", "bundle", "cli.js");
 	const work = join(temp, "work");
