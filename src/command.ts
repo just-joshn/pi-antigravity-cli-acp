@@ -10,7 +10,6 @@ import { signIn } from "./sign-in.ts";
 const USAGE =
 	"Usage: /agy status, /agy mode [id], /agy sessions, /agy login, /agy logout, or /agy <agent command> [input]";
 
-/** Sets the agent's permission mode, asking the user to pick one when `requested` is undefined. */
 async function chooseMode(link: Antigravity, requested: string | undefined, ctx: ExtensionContext) {
 	const { session } = await link.openFor(ctx);
 	const modes = session.choices("mode");
@@ -85,7 +84,6 @@ const OWN: Record<string, Subcommand> = {
 	sessions: (link, _value, ctx) => openSaved(link, ctx),
 };
 
-/** Sends `/name input` to the agent as an ordinary user message, as if typed at the prompt. */
 function runAgentCommand(pi: ExtensionAPI, link: Antigravity, name: string, typed: string, ctx: ExtensionContext) {
 	if (!link.selected) {
 		ctx.ui.notify(
@@ -113,7 +111,6 @@ function completions(link: Antigravity, prefix: string) {
 	return matches.length ? matches : null;
 }
 
-/** `/agy` with its own subcommands, and the agent's commands as `/agy <command> [input]`. */
 export function registerAgyCommand(pi: ExtensionAPI, link: Antigravity) {
 	pi.registerCommand("agy", {
 		description:

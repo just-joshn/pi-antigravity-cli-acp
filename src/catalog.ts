@@ -14,11 +14,9 @@ export const AGENT_DEFAULT = "default";
 interface CatalogModel {
 	id: string;
 	name: string;
-	/** Thinking levels the agent offers for this model, in the agent's own words. */
 	efforts: string[];
 }
 
-/** What an agent offers, as last reported by one of its sessions. */
 export interface Catalog {
 	models: CatalogModel[];
 	modes: Choice[];
@@ -26,7 +24,6 @@ export interface Catalog {
 	contextWindow: number;
 }
 
-/** Context window assumed until the agent reports its own. */
 const DEFAULT_CONTEXT_WINDOW = 1_048_576;
 /** Output tokens Pi may budget for one reply; the agent enforces its own limit. */
 const MAX_OUTPUT_TOKENS = 65_536;
@@ -54,7 +51,6 @@ function levelsByModel(variants: readonly string[]): ReadonlyMap<string, string[
 	return new Map([...grouped].map(([model, items]) => [model, items.map(({ level }) => level)]));
 }
 
-/** Folds what a live session reports into the catalog. */
 export function learn(catalog: Catalog, session: AcpSession): Catalog {
 	const current = session.current("model");
 	const efforts = session.choices("thought_level").map((c) => c.value);
@@ -102,12 +98,10 @@ export function piModels(catalog: Catalog): Model<typeof API>[] {
 	];
 }
 
-/** The agent's name for a Pi thinking level, when the model supports that level. */
 export function effortFor(model: Model<string>, level: ThinkingLevel | undefined): string | undefined {
 	return level === undefined ? undefined : (model.thinkingLevelMap?.[level] ?? undefined);
 }
 
-/** Text that may be absent; anything else in its place is read as absent. */
 const optionalText = z.string().optional().catch(undefined);
 
 const commandSchema = z

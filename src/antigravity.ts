@@ -24,7 +24,6 @@ export function noSuchMode(wanted: string, session: AcpSession): string {
 	return `Antigravity has no "${wanted}" mode.${available}`;
 }
 
-/** The extension's link to the Antigravity agent: its process, session and what it offers. */
 export class Antigravity {
 	#pi: ExtensionAPI;
 	#catalogFile: string;
@@ -32,7 +31,6 @@ export class Antigravity {
 	/** The catalog as last saved, kept to tell whether a session changed it without saving again. */
 	#savedCatalog: string;
 	#published = "";
-	/** Latest context Pi handed to this extension; dialogs and the status line go through it. */
 	#pane: ExtensionContext | undefined;
 	#running = false;
 	#wantedMode: string | undefined;
@@ -74,7 +72,6 @@ export class Antigravity {
 		this.#savedCatalog = JSON.stringify(this.#catalog);
 	}
 
-	/** The agent session in use, once the first message has started one. */
 	get live() {
 		return this.#live;
 	}
@@ -83,17 +80,14 @@ export class Antigravity {
 		return this.#catalog.modes;
 	}
 
-	/** The agent's own slash commands, from the live session or the last one. */
 	get commands() {
 		return this.#live?.session.commands ?? this.#catalog.commands;
 	}
 
-	/** Whether the model Pi uses now is one of this extension's. */
 	get selected() {
 		return selected(this.#pane);
 	}
 
-	/** The connected agent's name and version, if it has started. */
 	async agentInfo() {
 		return (await this.#client)?.agent;
 	}
@@ -154,7 +148,6 @@ export class Antigravity {
 		this.#forget();
 	}
 
-	/** Remembers a permission mode the agent confirmed, for this and later sessions. */
 	modeChosen(id: string) {
 		this.#wantedMode = id;
 		this.#showStatus();
@@ -185,7 +178,6 @@ export class Antigravity {
 		this.#showPlan(pane);
 	}
 
-	/** Shows the agent's plan above the editor until every step is done. */
 	#showPlan(pane: ExtensionContext) {
 		const lines = selected(pane) ? planLines(this.#live?.session.plan) : undefined;
 		const shown = JSON.stringify(lines ?? null);
@@ -194,7 +186,6 @@ export class Antigravity {
 		pane.ui.setWidget(PLAN, lines);
 	}
 
-	/** Keeps the mirror tool declared only while an Antigravity model is selected. */
 	#syncTool() {
 		const active = this.#pi.getActiveTools();
 		const declared = active.includes(TOOL_NAME);
@@ -217,7 +208,6 @@ export class Antigravity {
 		if (!this.#running) this.publish();
 	}
 
-	/** Runs a dialog after the previous one closes. */
 	#dialog<T>(show: () => Promise<T>): Promise<T> {
 		const shown = this.#asking.then(show);
 		this.#asking = shown.catch(() => {});
@@ -245,7 +235,6 @@ export class Antigravity {
 		},
 	};
 
-	/** Closes the connection, which also stops the commands the agent ran, and stops the agent. */
 	#forget() {
 		const connected = this.#client;
 		this.#live?.session.dispose();
@@ -260,7 +249,6 @@ export class Antigravity {
 		);
 	}
 
-	/** Drops a dead or stuck agent and clears what Pi showed for it. */
 	#lose() {
 		this.#forget();
 		this.#showStatus();
@@ -272,7 +260,6 @@ export class Antigravity {
 		this.#agent = started;
 		const identity = { name: "pi", title: "Pi", version: VERSION };
 		const connected = await AcpClient.connect(started.stream, identity, this.#hooks);
-		// When the agent exits, start over on the next message instead of talking to a dead process.
 		const ended = () => {
 			if (this.#agent === started) this.#lose();
 		};
@@ -280,14 +267,12 @@ export class Antigravity {
 		return connected;
 	}
 
-	/** Asks the agent to free a session nobody will prompt again; the agent keeps it saved. */
 	async #close(sessionId: string) {
 		const connected = await this.#client;
-		// Freeing memory is a courtesy: a session the agent keeps open costs nothing visible.
+		// Closing frees the live session; it does not delete the saved conversation.
 		await connected?.closeSession(sessionId).catch(() => {});
 	}
 
-	/** Reopens the agent session Pi's transcript left off in, if the agent is still at that point. */
 	async #reopen(connected: AcpClient, anchor: string, where: Workspace) {
 		const at = parseAnchor(anchor);
 		const session = at && (await connected.loadSession(at.sessionId, where));
@@ -308,7 +293,6 @@ export class Antigravity {
 		return this.#client;
 	}
 
-	/** Drops the agent process; the next message starts a new one. */
 	disconnect() {
 		this.#lose();
 	}

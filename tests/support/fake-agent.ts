@@ -30,13 +30,10 @@ export interface FakeAgentOptions {
 	models?: FakeModel[];
 	/** Config option id for the effort selector; the two Antigravity servers name it differently. */
 	effortId?: string;
-	/** Set false to leave out the per-level model list. */
 	variants?: boolean;
 	image?: boolean;
-	/** Report no quota tier, no settings and no context usage when a session starts. */
 	plain?: boolean;
 	commands?: AvailableCommand[];
-	/** Extra sessions session/list reports that the agent cannot load. */
 	ghosts?: string[];
 	/** Start signed out: session/new and session/load need authenticate first. */
 	signedOut?: boolean;
@@ -60,12 +57,9 @@ export interface AgentLog {
 	readonly cancels: number;
 	readonly outcomes: readonly RequestPermissionOutcome[];
 	readonly loads: readonly string[];
-	/** What the client answered to each question the agent asked. */
 	readonly answers: readonly CreateElicitationResponse[];
-	/** Auth method ids the client signed in with, and how often it logged out. */
 	readonly signIns: readonly string[];
 	readonly logouts: number;
-	/** The full session/load requests, in order. */
 	readonly loadRequests: readonly LoadSessionRequest[];
 	readonly closes: readonly string[];
 }
@@ -85,7 +79,6 @@ interface SessionState {
 	mode: string;
 }
 
-/** The fake agent's settings, with the defaults filled in. */
 interface Offer {
 	models: FakeModel[];
 	modes: string[];
@@ -211,7 +204,6 @@ const emptyLog = (): AgentLog => ({
 	closes: [],
 });
 
-/** A live view of the log: each field reads the agent's latest record. */
 function logView(read: () => AgentLog): AgentLog {
 	return {
 		get initialize() {
@@ -255,7 +247,6 @@ function logView(read: () => AgentLog): AgentLog {
 
 type Saved = Readonly<Record<string, readonly ContentBlock[][]>>;
 
-/** The scripted agent's state across requests; every change replaces a value. */
 class FakeAgent {
 	readonly log = logView(() => this.#log);
 	#log = emptyLog();
@@ -274,7 +265,6 @@ class FakeAgent {
 		this.#signedIn = options.signedOut !== true;
 	}
 
-	/** Saved conversations, including this process's. */
 	get history(): Saved {
 		return this.#history;
 	}
@@ -303,7 +293,6 @@ class FakeAgent {
 		return this.#open(sessionId, client);
 	}
 
-	/** The first session id from `n` on that no saved conversation uses. */
 	#freshId(n: number): string {
 		const id = `${this.#options.idPrefix ?? ""}s${n}`;
 		return Object.hasOwn(this.#history, id) ? this.#freshId(n + 1) : id;
@@ -356,7 +345,6 @@ class FakeAgent {
 		return { stopReason: (await play(pb, steps)) ?? "end_turn", usage: TURN_USAGE };
 	}
 
-	/** Every saved conversation, titled by its first prompt. */
 	list(cwd: string) {
 		const sessions = Object.entries(this.#history).map(([sessionId, prompts]) => ({
 			sessionId,
@@ -405,7 +393,6 @@ async function announce(client: AgentContext, sessionId: string, options: FakeAg
 	});
 }
 
-/** Serves a scripted ACP agent on `stream` and records what the client sent. */
 export function serveAgent(stream: Stream, options: FakeAgentOptions) {
 	const fake = new FakeAgent(options);
 	const connection = agent({ name: "fake-agent" })

@@ -1,4 +1,3 @@
-/** How the scripted agent plays back one prompt turn, step by step. */
 import {
 	type AgentContext,
 	type CreateElicitationRequest,
@@ -13,7 +12,6 @@ import {
 	type ToolCallUpdate,
 } from "@agentclientprotocol/sdk/unstable";
 
-/** One scripted action of the fake agent during a prompt turn. */
 export type Step =
 	| { say: string }
 	| { think: string }
@@ -47,9 +45,7 @@ interface Playback {
 	client: AgentContext;
 	sessionId: string;
 	cancelled: Promise<void>;
-	/** Records the client's answer to a permission request. */
 	answered: (outcome: RequestPermissionOutcome) => void;
-	/** Records the client's answer to a question. */
 	replied: (reply: CreateElicitationResponse) => void;
 }
 

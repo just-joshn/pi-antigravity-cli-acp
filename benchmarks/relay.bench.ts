@@ -1,4 +1,3 @@
-// Compare the bare ACP SDK and the Pi provider with the same in-process agent and no network.
 import { type ContentBlock, client, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk/unstable";
 import { normalizeContext } from "@earendil-works/pi-ai";
 import { expect, test } from "vitest";
@@ -84,7 +83,6 @@ async function extensionTurn(options: FakeAgentOptions) {
 	}
 	const message = await reply.result();
 	const text = message.content.map((block) => (block.type === "text" ? block.text : "")).join("");
-	// The agent's tool call as the extension holds it once the turn is over.
 	const tool = await conversation?.session.watchTool("t", undefined, () => {});
 	return { text, tool };
 }

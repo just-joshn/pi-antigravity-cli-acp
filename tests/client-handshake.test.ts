@@ -66,7 +66,6 @@ test("an agent that says little about itself still gets a working session", asyn
 		b
 			.onRequest(methods.agent.initialize, () => hello)
 			.onRequest(methods.agent.session.new, async ({ client: pi }) => {
-				// A permission request for a session that does not exist is cancelled.
 				const { outcome } = await pi.request(methods.client.session.requestPermission, {
 					sessionId: "unknown",
 					toolCall: { toolCallId: "t" },

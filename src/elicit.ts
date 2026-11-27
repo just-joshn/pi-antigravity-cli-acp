@@ -13,15 +13,12 @@ export type Dialogs = Pick<ExtensionUIContext, "select" | "input">;
 
 const FIELD_LIMIT = 20;
 const TRIES = 3;
-/** Whether no choice is picked twice. */
 const once = (chosen: readonly string[]) => new Set(chosen).size === chosen.length;
 
-/** The choice an optional field offers for leaving it unanswered. */
 const NO_ANSWER = "No answer";
 const CANCEL: CreateElicitationResponse = { action: "cancel" };
 const DECLINE: CreateElicitationResponse = { action: "decline" };
 
-/** A field's answer: a value, `skip` for an empty optional field, `cancel`, or `unsupported`. */
 type Answer = { value: ElicitationContentValue } | "skip" | "cancel" | "unsupported";
 
 interface Field {
@@ -76,7 +73,6 @@ async function fillForm(
 	return { action: "accept", content: Object.fromEntries(answers) };
 }
 
-/** The form's answers, one dialog at a time in its order; a cancel or an unsupported field ends it. */
 async function askAll(
 	fields: readonly (Field & { key: string })[],
 	dialogs: Dialogs,
@@ -156,7 +152,6 @@ async function selectOne(
 	return chosen ? { value: chosen.value } : "skip";
 }
 
-/** A value read from text, or why the text is not one. */
 type Parsed = { value: ElicitationContentValue } | { problem: string };
 
 /** Asks for text until it parses, at most three times. An empty optional field is skipped. */
@@ -191,7 +186,6 @@ function rangeHint(schema: Record<string, unknown>): string {
 
 const boundOf = (value: unknown) => (typeof value === "number" ? value : undefined);
 
-/** The answer zod reads from the text, or the first problem it found, worded for the user. */
 function parsedWith(schema: z.ZodType<ElicitationContentValue>, answer: unknown): Parsed {
 	const parsed = schema.safeParse(answer);
 	return parsed.success
@@ -211,7 +205,6 @@ function toNumber(text: string, schema: Record<string, unknown>, integer: boolea
 	return parsedWith(atMost, text);
 }
 
-/** The string formats of the ACP form schema, each with how a wrong answer is described. */
 const FORMATS: Readonly<Record<string, z.ZodType<string, string>>> = {
 	email: z.email({ error: "an email address" }),
 	uri: z.url({ error: "a URL" }),

@@ -4,7 +4,6 @@ import type { AcpClient, SignInMethod } from "./client.ts";
 import { uniqueLabels } from "./labels.ts";
 import { pick } from "./pick.ts";
 
-/** Asks the user how to sign in and has the agent do it. Undefined when nobody chose a method. */
 export async function signIn(
 	client: Pick<AcpClient, "signInMethods" | "signIn">,
 	pane: { hasUI: boolean; ui: Pick<ExtensionUIContext, "select"> } | undefined,

@@ -14,7 +14,6 @@ async function program(file: string) {
 	await chmod(file, 0o755);
 }
 
-/** Two registry copies of the agent under a scratch HOME, as Zed installs them on macOS. */
 async function installCopies() {
 	const home = await scratchDir("agent");
 	const root = registryRoot({ HOME: home }, "darwin");
@@ -25,7 +24,6 @@ async function installCopies() {
 	return { home, root, newer, env: { HOME: home, PATH: join(home, "bin") } };
 }
 
-/** Resolves when the agent's output ends: with the error that ended it, or undefined. */
 async function ended(stream: Stream): Promise<unknown> {
 	const reader = stream.readable.getReader();
 	try {

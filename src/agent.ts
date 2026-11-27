@@ -18,7 +18,6 @@ interface AgentLaunch {
 type Env = Record<string, string | undefined>;
 
 const REGISTRY_ID = "antigravity-acp";
-/** How long a stopped agent has to exit before it is killed. */
 const STOP_GRACE_MS = 1000;
 
 function executable(file: string): boolean {
@@ -26,7 +25,6 @@ function executable(file: string): boolean {
 		accessSync(file, constants.X_OK);
 		return true;
 	} catch {
-		// Missing, not executable or not reachable: in every case it cannot be run.
 		return false;
 	}
 }
@@ -76,7 +74,6 @@ function registryCommand(root: string, platform: string): { cmd: string; args: s
 
 type Version = readonly [number, number, number];
 
-/** The version in an installed agent's directory name, such as `v_1.5.17`. */
 function versionOf(directory: string): Version | undefined {
 	const match = /^v_(\d+)\.(\d+)\.(\d+)/.exec(directory);
 	return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : undefined;
@@ -92,13 +89,11 @@ function newer(a: Installed, b: Installed): Installed {
 	return (x[0] - y[0] || x[1] - y[1] || x[2] - y[2]) > 0 ? a : b;
 }
 
-/** The newest registry-installed Antigravity agent under `root`, if any. */
 export function findRegistryAgent(root: string, platform: string): AgentLaunch | undefined {
 	let installed: string[];
 	try {
 		installed = readdirSync(join(root, REGISTRY_ID));
 	} catch {
-		// A directory that is missing or cannot be read holds no copy the extension can run.
 		return undefined;
 	}
 	const listed = registryCommand(root, platform);
@@ -148,7 +143,6 @@ export interface RunningAgent {
 	stop(): void;
 }
 
-/** Starts the agent process and exposes its stdio as an ACP stream. */
 export function launch(agent: AgentLaunch, cwd: string, env: Env = process.env): RunningAgent {
 	const child = spawn(agent.command, agent.args, { cwd, env, stdio: ["pipe", "pipe", "ignore"] });
 	// A failed spawn also closes the pipes, which ends the ACP connection with an error.

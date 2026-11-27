@@ -32,10 +32,8 @@ export interface SignInMethod {
 	description: string | undefined;
 }
 
-/** Characters of an error's message shown to the user. */
 const REASON_LIMIT = 300;
 
-/** The start of an error's message, to show the user why something failed. */
 export function reasonOf(error: unknown, fallback: string): string {
 	return error instanceof Error ? error.message.slice(0, REASON_LIMIT) : fallback;
 }
@@ -50,7 +48,6 @@ const AUTH_REQUIRED = -32000;
 const RESOURCE_NOT_FOUND = -32002;
 const LIST_PAGES = 5;
 
-/** A conversation the agent keeps, as session/list reports it. */
 export interface SavedSession {
 	id: string;
 	title: string | undefined;
@@ -107,7 +104,6 @@ function sessionCwd(sessions: ReadonlyMap<string, AcpSession>, sessionId: string
 
 type ClientBuilder = ReturnType<typeof client>;
 
-/** Answers the agent's terminal requests; each names its session and terminal. */
 function serveTerminals(
 	builder: ClientBuilder,
 	sessions: ReadonlyMap<string, AcpSession>,
@@ -127,7 +123,6 @@ function serveTerminals(
 		);
 }
 
-/** What a client shares with the requests it serves: its sessions and what they need. */
 interface Wiring {
 	sessions: Map<string, AcpSession>;
 	inbox: Inbox;
@@ -169,7 +164,6 @@ function serve(
 		.connect(stream);
 }
 
-/** Where a session works: its directory, extra directories and the MCP servers it may use. */
 export interface Workspace {
 	cwd: string;
 	directories?: readonly string[];
@@ -178,7 +172,6 @@ export interface Workspace {
 
 type Introduced = Pick<AcpClient, "agent" | "accepts" | "offers" | "signInMethods">;
 
-/** What the agent said about itself in `initialize`, in the terms this client uses. */
 function introduced(hello: InitializeResponse): Introduced {
 	const capabilities = hello.agentCapabilities;
 	const sessionCapabilities = capabilities?.sessionCapabilities;
@@ -206,12 +199,9 @@ function introduced(hello: InitializeResponse): Introduced {
 	};
 }
 
-/** One connection to an ACP agent process. */
 export class AcpClient {
 	readonly agent: { name: string; version: string };
-	/** Prompt content the agent accepts besides text. */
 	readonly accepts: { image: boolean; embeddedContext: boolean };
-	/** Session lifecycle requests the agent offers besides session/new. */
 	readonly offers: {
 		load: boolean;
 		close: boolean;
@@ -280,7 +270,6 @@ export class AcpClient {
 		return this.offers.mcpHttp || !("type" in server);
 	}
 
-	/** The session/new and session/load fields for `where`, limited to what the agent accepts. */
 	#place(where: Workspace): NewSessionRequest {
 		const mcpServers = (where.mcpServers ?? []).filter((server) => this.takes(server));
 		const directories = where.directories ?? [];
@@ -307,7 +296,6 @@ export class AcpClient {
 		return (await this.#load(sessionId, where, false))?.session;
 	}
 
-	/** A saved conversation's text, read by loading it and closing it again. */
 	async readTranscript(sessionId: string, where: Workspace): Promise<readonly Exchange[] | undefined> {
 		const loaded = await this.#load(sessionId, where, true);
 		if (!loaded) return undefined;
@@ -357,7 +345,6 @@ export class AcpClient {
 		await this.#connection.agent.request(methods.agent.logout, {}).catch(explain("sign out"));
 	}
 
-	/** Lets the agent free a session this client no longer uses. */
 	async closeSession(sessionId: string): Promise<void> {
 		this.#terminals.releaseSession(sessionId);
 		this.#sessions.delete(sessionId);

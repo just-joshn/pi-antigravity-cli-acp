@@ -5,7 +5,6 @@ import { expect, onTestFinished, test } from "vitest";
 
 import { fakeUi, said, start } from "./support/pi.ts";
 
-/** Prepares a scratch HOME whose Pi configuration lists these MCP servers. */
 const withMcp = (servers: unknown) => async (dir: string) => {
 	await mkdir(join(dir, "pi"), { recursive: true });
 	await writeFile(join(dir, "pi", "mcp.json"), JSON.stringify({ mcpServers: servers }));
