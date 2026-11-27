@@ -76,6 +76,15 @@ jobs:
         with:
           node-version: ${{ steps.gate.outputs.node }}
           package-manager-cache: false
+      - name: Check release notes
+        if: steps.gate.outputs.stage == 'true'
+        run: |
+          node --input-type=module <<'JS'
+          import { readFileSync } from "node:fs";
+          import { changelogNotes } from "./scripts/release-notes.ts";
+          const { version } = JSON.parse(readFileSync("package.json", "utf8"));
+          changelogNotes(readFileSync("CHANGELOG.md", "utf8"), version);
+          JS
       - name: Pin npm
         if: steps.gate.outputs.stage == 'true'
         env:
@@ -119,9 +128,30 @@ jobs:
           path: ${{ runner.temp }}/release/package.tgz
           if-no-files-found: error
 
-  stage:
+  ci:
+    name: Wait for main CI
     needs: verify
     if: needs.verify.outputs.stage == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/wait-for-main-ci.sh
+          sparse-checkout-cone-mode: false
+      - name: Require CI on this commit
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/wait-for-main-ci.sh
+
+  stage:
+    needs: [verify, ci]
+    if: needs.verify.outputs.stage == 'true' && needs.ci.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: npm

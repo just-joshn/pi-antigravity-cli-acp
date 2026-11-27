@@ -92,5 +92,7 @@ describe("plan GitHub releases from npm", () => {
 			"### Fixed\n\n- Change\n\n[View on npm](https://www.npmjs.com/package/pi-antigravity-acp/v/0.2.1)",
 		);
 		expect(() => releaseNotes(changelog, "0.2.2")).toThrow("Missing changelog entry");
+		expect(() => releaseNotes("## 0.2.1\n\n## 0.1.0\nOlder\n", "0.2.1")).toThrow("Empty changelog entry");
+		expect(() => releaseNotes(`## 0.2.1\n${"é".repeat(4_001)}`, "0.2.1")).toThrow("exceeds 8 KB");
 	});
 });
