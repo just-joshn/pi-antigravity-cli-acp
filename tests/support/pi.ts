@@ -117,7 +117,7 @@ async function scratchHome(options: StartOptions) {
 	if (options.agy ?? true) await installAgy(dir);
 	// Keep real discovery and subprocess I/O without asking the OS to execute a shell script.
 	const launcher = vi.spyOn(agent, "launch").mockImplementation((spec, cwd, env) => {
-		expect(spec.command).toBe("agy");
+		expect(spec.command).toBe(join(bin, process.platform === "win32" ? "agy.exe" : "agy"));
 		return launchAgent({ command: process.execPath, args: [fakeAgy, ...spec.args] }, cwd, env);
 	});
 	onTestFinished(() => launcher.mockRestore());
