@@ -363,8 +363,8 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 ### PKG-1 Install through Pi's package mechanism
 
 - **Implementation:** the `pi-antigravity-acp` manifest declares its TypeScript entry point and the ACP SDK and Zod runtime dependencies.
-- **Verification:** `npm run test:package` installs the tarball in a clean directory and loads it with Pi. The tests in `tests/restore.test.ts` exercise conversation continuation from the source checkout.
-- **Status:** implemented_unverified. Tarball loading does not test installation from the npm registry or a conversation with a live agent.
+- **Verification:** `npm run test:package` installs the tarball into a clean Pi environment, sends a prompt to a scripted agent, resumes in a fresh Pi process without resending history, and checks that the agent exits.
+- **Status:** implemented_unverified. The smoke test does not install from the public npm registry or use a live agent.
 
 ### PERF-1 Measured extension overhead
 

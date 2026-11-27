@@ -74,6 +74,10 @@ export class Inbox {
 		this.#replays.set(sessionId, replay);
 	}
 
+	isReplaying(sessionId: string): boolean {
+		return this.#replays.has(sessionId);
+	}
+
 	endReplay(sessionId: string): Replay | undefined {
 		const replay = this.#replays.get(sessionId);
 		this.#replays.delete(sessionId);

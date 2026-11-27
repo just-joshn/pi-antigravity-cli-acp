@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { accessSync, constants, readdirSync, readFileSync } from "node:fs";
-import { delimiter, join } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import { Readable, Writable } from "node:stream";
 
 import { ndJsonStream, type Stream } from "@agentclientprotocol/sdk/unstable";
@@ -98,7 +98,7 @@ export function findRegistryAgent(root: string, platform: string): AgentLaunch |
 	}
 	const listed = registryCommand(root, platform);
 	const fallback = platform.startsWith("windows") ? "agy_acp_server.exe" : "agy_acp_server.par";
-	const commandIn = (directory: string) => join(root, REGISTRY_ID, directory, listed?.cmd ?? fallback);
+	const commandIn = (directory: string) => resolve(join(root, REGISTRY_ID, directory, listed?.cmd ?? fallback));
 	// A copy that cannot run, such as one still installing, leaves the next newest.
 	const [first, ...rest] = installed.flatMap((directory): Installed[] => {
 		const version = versionOf(directory);
@@ -109,11 +109,18 @@ export function findRegistryAgent(root: string, platform: string): AgentLaunch |
 	return { command, args: listed?.args ?? [] };
 }
 
-/** Whether `name` runs from a directory on PATH; on Windows, as `name.exe` too. */
-function onPath(name: string, env: Env, platform: string): boolean {
+/** Find the exact executable on PATH; on Windows, also try `name.exe`. */
+function onPath(name: string, env: Env, platform: string): string | undefined {
 	const names = platform === "win32" ? [name, `${name}.exe`] : [name];
 	const { PATH = "" } = env;
-	return PATH.split(delimiter).some((dir) => dir !== "" && names.some((file) => executable(join(dir, file))));
+	for (const dir of PATH.split(delimiter)) {
+		if (dir === "") continue;
+		for (const file of names) {
+			const candidate = resolve(dir, file);
+			if (executable(candidate)) return candidate;
+		}
+	}
+	return undefined;
 }
 
 /** Picks the agent to run. `auto` prefers the installed CLI over an editor's registry copy. */
@@ -123,8 +130,10 @@ export function resolveAgent(
 	platform: string = process.platform,
 	arch: string = process.arch,
 ): AgentLaunch {
-	const cli = (): AgentLaunch | undefined =>
-		onPath("agy", env, platform) ? { command: "agy", args: ["acp"] } : undefined;
+	const cli = (): AgentLaunch | undefined => {
+		const command = onPath("agy", env, platform);
+		return command ? { command, args: ["acp"] } : undefined;
+	};
 	const registry = () => findRegistryAgent(registryRoot(env, platform), platformKey(platform, arch));
 	let agent: AgentLaunch | undefined;
 	if (choice === "cli") agent = cli();

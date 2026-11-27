@@ -14,6 +14,7 @@ import { createStream, haltTurn, lastAnchor } from "./stream.ts";
 import { choiceLabels, TOOL_NAME, toolArguments } from "./tool.ts";
 import { workspaceFor } from "./workspace.ts";
 
+const STARTUP_TIMEOUT_MS = 30_000;
 const STATUS = "antigravity";
 const PLAN = "antigravity-plan";
 export const selected = (ctx: ExtensionContext | undefined) => ctx?.model?.provider === PROVIDER;
@@ -24,8 +25,10 @@ export function noSuchMode(wanted: string, session: AcpSession): string {
 	return `Antigravity has no "${wanted}" mode.${available}`;
 }
 
+type Host = Pick<ExtensionAPI, "getFlag" | "getActiveTools" | "setActiveTools" | "registerProvider">;
+
 export class Antigravity {
-	#pi: ExtensionAPI;
+	#pi: Host;
 	#catalogFile: string;
 	#catalog: Catalog;
 	/** The catalog as last saved, kept to tell whether a session changed it without saving again. */
@@ -37,6 +40,7 @@ export class Antigravity {
 	#agent: RunningAgent | undefined;
 	#client: Promise<AcpClient> | undefined;
 	#opening: Promise<Conversation> | undefined;
+	#openingAbort: AbortController | undefined;
 	#live: Conversation | undefined;
 	/** The plan widget's lines as last shown, to skip redrawing an unchanged plan. */
 	#shownPlan = "null";
@@ -45,15 +49,16 @@ export class Antigravity {
 	#stream = createStream({
 		conversing: (piSessionId) =>
 			this.#running && piSessionId !== undefined && piSessionId === this.#pane?.sessionManager.getSessionId(),
-		open: (_signal, anchor) => this.open(anchor),
-		restart: async (_signal, anchor) => {
+		open: (signal, anchor) => this.open(anchor, signal),
+		restart: async (signal, anchor) => {
 			const replaced = this.#live?.session.id;
+			this.#openingAbort?.abort(new Error("Antigravity session was replaced."));
 			this.#opening = undefined;
 			this.#live = undefined;
 			// Pi rewound inside the session being replaced, which went on past that point.
 			const reopen = anchor !== undefined && parseAnchor(anchor)?.sessionId === replaced ? undefined : anchor;
 			const [conversation] = await Promise.all([
-				this.open(reopen),
+				this.open(reopen, signal),
 				replaced === undefined ? undefined : this.#close(replaced),
 			]);
 			return conversation;
@@ -65,7 +70,7 @@ export class Antigravity {
 		},
 	});
 
-	constructor(pi: ExtensionAPI, catalogFile: string) {
+	constructor(pi: Host, catalogFile: string) {
 		this.#pi = pi;
 		this.#catalogFile = catalogFile;
 		this.#catalog = readCatalog(catalogFile);
@@ -162,12 +167,37 @@ export class Antigravity {
 	}
 
 	/** The agent session in use; the first call reopens the one at `anchor` when it is still there. */
-	open(anchor?: string): Promise<Conversation> {
-		this.#opening ??= this.#start(anchor).catch((error: unknown) => {
-			this.#lose();
-			throw error;
-		});
-		return this.#opening;
+	open(anchor?: string, signal?: AbortSignal): Promise<Conversation> {
+		if (signal?.aborted) return Promise.reject(signal.reason);
+		if (this.#opening) return this.#wait(this.#opening, signal);
+		const abort = new AbortController();
+		this.#openingAbort = abort;
+		const cancel = () => abort.abort(signal?.reason);
+		signal?.addEventListener("abort", cancel, { once: true });
+		const timer = setTimeout(() => abort.abort(new Error("Antigravity startup timed out.")), STARTUP_TIMEOUT_MS);
+		const opening = this.#wait(this.#start(anchor, abort.signal), abort.signal)
+			.catch((error: unknown) => {
+				if (this.#opening === opening) this.#lose();
+				throw error;
+			})
+			.finally(() => {
+				clearTimeout(timer);
+				signal?.removeEventListener("abort", cancel);
+				if (this.#openingAbort === abort) this.#openingAbort = undefined;
+			});
+		this.#opening = opening;
+		return opening;
+	}
+
+	#wait<T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+		if (!signal) return work;
+		if (signal.aborted) return Promise.reject(signal.reason);
+		let abort: () => void;
+		return new Promise<T>((resolve, reject) => {
+			abort = () => reject(signal.reason);
+			signal.addEventListener("abort", abort, { once: true });
+			void work.then(resolve, reject);
+		}).finally(() => signal.removeEventListener("abort", abort));
 	}
 
 	#showStatus() {
@@ -235,7 +265,9 @@ export class Antigravity {
 		},
 	};
 
-	#forget() {
+	#forget(abortOpening = true) {
+		if (abortOpening) this.#openingAbort?.abort(new Error("Antigravity connection closed."));
+		this.#openingAbort = undefined;
 		const connected = this.#client;
 		this.#live?.session.dispose();
 		this.#agent?.stop();
@@ -260,6 +292,10 @@ export class Antigravity {
 		this.#agent = started;
 		const identity = { name: "pi", title: "Pi", version: VERSION };
 		const connected = await AcpClient.connect(started.stream, identity, this.#hooks);
+		if (this.#agent !== started) {
+			connected.close();
+			throw new Error("Antigravity connection was replaced.");
+		}
 		const ended = () => {
 			if (this.#agent === started) this.#lose();
 		};
@@ -279,18 +315,23 @@ export class Antigravity {
 		if (!session) return undefined;
 		if (session.turns === at.turns) return new Conversation(session, connected.accepts, anchor);
 		// The agent has prompts this transcript never saw; continuing would mix the two conversations.
-		await this.#close(session.id);
+		await connected.closeSession(session.id).catch(() => {});
 		return undefined;
 	}
 
 	/** The connection to the agent, starting the agent if needed, without opening a session. */
 	connected(): Promise<AcpClient> {
-		this.#client ??= this.#connect().catch((error: unknown) => {
-			// A failed start is not kept: the next request tries again, for example once agy is installed.
-			this.#forget();
-			throw error;
-		});
-		return this.#client;
+		if (this.#client) return this.#client;
+		const deadline = new AbortController();
+		const timer = setTimeout(() => deadline.abort(new Error("Antigravity startup timed out.")), STARTUP_TIMEOUT_MS);
+		const connected = this.#wait(this.#connect(), deadline.signal)
+			.catch((error: unknown) => {
+				if (this.#client === connected) this.#forget(false);
+				throw error;
+			})
+			.finally(() => clearTimeout(timer));
+		this.#client = connected;
+		return connected;
 	}
 
 	disconnect() {
@@ -304,8 +345,9 @@ export class Antigravity {
 		);
 	}
 
-	async #start(anchor: string | undefined): Promise<Conversation> {
+	async #start(anchor: string | undefined, signal: AbortSignal): Promise<Conversation> {
 		const connected = await this.connected();
+		signal.throwIfAborted();
 		const pane = this.#pane;
 		const trusted = pane?.isProjectTrusted() ?? false;
 		const { where, notes } = workspaceFor(this.#pi, pane?.cwd ?? process.cwd(), trusted);
@@ -317,16 +359,26 @@ export class Antigravity {
 					"warning",
 				);
 		const conversation = await this.#begin(connected, anchor, where).catch(async (error: unknown) => {
+			signal.throwIfAborted();
 			const title = "Antigravity needs you to sign in";
-			if (error instanceof SignInRequired && (await signIn(connected, this.#pane, title)))
-				return this.#begin(connected, anchor, where);
-			throw error;
+			if (!(error instanceof SignInRequired) || !(await signIn(connected, this.#pane, title, signal))) throw error;
+			signal.throwIfAborted();
+			return this.#begin(connected, anchor, where);
 		});
 		const { session } = conversation;
-		const wanted = this.#wantedMode;
-		if (wanted !== undefined && (await session.select("mode", wanted)) === "unavailable") {
-			this.#pane?.ui.notify(noSuchMode(wanted, session), "warning");
-			this.#wantedMode = undefined;
+		try {
+			signal.throwIfAborted();
+			const wanted = this.#wantedMode;
+			const mode = wanted === undefined ? undefined : await session.select("mode", wanted);
+			signal.throwIfAborted();
+			if (wanted !== undefined && mode === "unavailable") {
+				this.#pane?.ui.notify(noSuchMode(wanted, session), "warning");
+				this.#wantedMode = undefined;
+			}
+		} catch (error) {
+			session.dispose();
+			void connected.closeSession(session.id).catch(() => {});
+			throw error;
 		}
 		this.#live = conversation;
 		this.#absorb(this.#live);

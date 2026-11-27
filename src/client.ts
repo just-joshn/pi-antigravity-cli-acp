@@ -158,7 +158,7 @@ function serve(
 		.onNotification(methods.client.session.update, ({ params }) => {
 			const session = sessions.get(params.sessionId);
 			// Agents report usage before session/new returns; keep it until the session exists.
-			if (session) session.receive(params.update);
+			if (session && !inbox.isReplaying(params.sessionId)) session.receive(params.update);
 			else inbox.hold(params.sessionId, params.update);
 		})
 		.connect(stream);
@@ -217,6 +217,7 @@ export class AcpClient {
 	#sessions: Map<string, AcpSession>;
 	#inbox: Inbox;
 	#hooks: SessionHooks;
+	#loadTails = new Map<string, Promise<void>>();
 
 	private constructor(connection: ClientConnection, wiring: Wiring, hello: Introduced) {
 		this.#connection = connection;
@@ -293,15 +294,18 @@ export class AcpClient {
 	 * Resolves with undefined when the agent cannot load sessions or no longer has this one.
 	 */
 	async loadSession(sessionId: string, where: Workspace): Promise<AcpSession | undefined> {
-		return (await this.#load(sessionId, where, false))?.session;
+		return this.#serializeLoad(sessionId, async () => (await this.#load(sessionId, where, false))?.session);
 	}
 
 	async readTranscript(sessionId: string, where: Workspace): Promise<readonly Exchange[] | undefined> {
-		const loaded = await this.#load(sessionId, where, true);
-		if (!loaded) return undefined;
-		// Closing frees the agent's memory; a session left open costs nothing visible.
-		await this.closeSession(sessionId).catch(() => undefined);
-		return loaded.exchanges;
+		return this.#serializeLoad(sessionId, async () => {
+			const alreadyOpen = this.#sessions.has(sessionId);
+			const loaded = await this.#load(sessionId, where, true);
+			if (!loaded) return undefined;
+			// Never close a session that was already in use before the preview.
+			if (!alreadyOpen) await this.closeSession(sessionId).catch(() => undefined);
+			return loaded.exchanges;
+		});
 	}
 
 	/** The agent's saved conversations for `cwd`, newest first as the agent lists them. */
@@ -319,6 +323,21 @@ export class AcpClient {
 		return next && pages > 1 ? [...found, ...(await this.#listPages(cwd, next, pages - 1))] : found;
 	}
 
+	async #serializeLoad<T>(sessionId: string, operation: () => Promise<T>): Promise<T> {
+		const previous = this.#loadTails.get(sessionId) ?? Promise.resolve();
+		const result = previous.then(operation);
+		const tail = result.then(
+			() => undefined,
+			() => undefined,
+		);
+		this.#loadTails.set(sessionId, tail);
+		try {
+			return await result;
+		} finally {
+			if (this.#loadTails.get(sessionId) === tail) this.#loadTails.delete(sessionId);
+		}
+	}
+
 	async #load(sessionId: string, where: Workspace, keepText: boolean) {
 		if (!this.offers.load) return undefined;
 		const placed = this.#place(where);
@@ -333,6 +352,11 @@ export class AcpClient {
 			});
 		if (!loaded) return undefined;
 		const replay = this.#inbox.endReplay(sessionId);
+		const existing = this.#sessions.get(sessionId);
+		if (keepText) {
+			for (const update of this.#inbox.take(sessionId)) existing?.receive(update);
+			return { session: existing, exchanges: replay?.exchanges ?? [] };
+		}
 		const session = this.#adopt(sessionId, loaded, placed, replay?.turns ?? 0);
 		return { session, exchanges: replay?.exchanges ?? [] };
 	}

@@ -63,7 +63,7 @@ The mirror tool is why the agent's tool calls look like Pi's own: Pi renders, co
 
 ## Cancellation
 
-Esc aborts Pi's request. The extension sends `session/cancel`, aborts any open permission dialog, and waits up to five seconds for the agent to end the turn. If the agent does not confirm, the extension stops that process rather than let it work unseen; the next message starts a new one. When Pi ends a run while mirrored tool calls are still open, the same cancel runs.
+Esc aborts Pi's request. If the request is still opening a session, the extension stops that startup attempt and its agent. Startup also has a 30-second deadline. Once a turn is running, the extension sends `session/cancel`, aborts any open permission dialog, and waits up to five seconds for the agent to end the turn. If the agent does not confirm, the extension stops that process rather than let it work unseen; the next message starts a new one. When Pi ends a run while mirrored tool calls are still open, the same cancel runs.
 
 ## Security
 
