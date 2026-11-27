@@ -2,7 +2,7 @@
 
 Use Google's Antigravity agent from Pi over the [Agent Client Protocol](https://agentclientprotocol.com/), the same protocol Zed uses. Pi sends your prompts, not its system instructions or tools. Antigravity runs the tools. Pi shows the agent's replies, tool activity, and permission requests.
 
-See the [architecture](ARCHITECTURE.md) and [ACP feature coverage](PARITY.md) for details.
+See the [architecture](https://github.com/just-joshn/pi-antigravity-cli-acp/blob/main/ARCHITECTURE.md) and [ACP feature coverage](https://github.com/just-joshn/pi-antigravity-cli-acp/blob/main/PARITY.md) for details.
 
 ## What you need
 
@@ -222,7 +222,7 @@ If you signed in to an HTTP server with `/mcp`, Antigravity gets that server wit
 - **Old chats come back as text.** `/agy sessions` brings back the words of an old chat, not its tool steps.
 - **Google decides the rest.** Quota, which models you can use and your account rules come from Antigravity and Google.
 
-[PARITY.md](PARITY.md) lists every feature, if it works, and how it was checked.
+[PARITY.md](https://github.com/just-joshn/pi-antigravity-cli-acp/blob/main/PARITY.md) lists every feature, if it works, and how it was checked.
 
 ## For people who change the code
 
@@ -250,9 +250,9 @@ python3 tests/live-probe.py          # finds out which ACP features agy uses
 
 ## How checks and new versions work
 
-[CI](.github/workflows/ci.yml) runs on pull requests and pushes to `main`. It checks format, lint, types, tests, coverage, dependencies, package installation, and repository history for secrets. CI does not run the live Antigravity checks or publish to npm.
+[CI](https://github.com/just-joshn/pi-antigravity-cli-acp/blob/main/.github/workflows/ci.yml) runs on pull requests and pushes to `main`. It checks format, lint, types, tests, coverage, dependencies, package installation, and repository history for secrets. CI does not run the live Antigravity checks or publish to npm.
 
-The [Stage npm package workflow](.github/workflows/stage-npm.yml) stages a release when a push to `main` increases the `package.json` version. It tests one tarball with Pi 1.6.0 and 1.6.1 before staging it. Pushes that leave the version unchanged skip staging.
+The [Stage npm package workflow](https://github.com/just-joshn/pi-antigravity-cli-acp/blob/main/.github/workflows/stage-npm.yml) stages a release when a push to `main` increases the `package.json` version. It tests one tarball with Pi 1.6.0 and 1.6.1 before staging it. Pushes that leave the version unchanged skip staging.
 
 ### Configure trusted publishing
 
@@ -273,11 +273,11 @@ An npm package maintainer must complete this setup once before running the stagi
 
 If a run fails, check the workflow logs and **Staged Packages** before retrying. If the version is already staged, review that entry. If the version is already published, no action is needed.
 
-To stage 0.2.1 for the first time, open **Actions → Stage npm package → Run workflow** on GitHub and select `main`. The workflow verifies and stages the current version even if it has not changed. To retry a specific release commit, rerun its failed workflow instead.
+To stage the current version, open **Actions → Stage npm package → Run workflow** on GitHub and select `main`. The workflow verifies and stages the current version even if it has not changed. To retry a specific release commit, rerun its failed workflow instead.
 
 ### Sync GitHub releases
 
-After npm publishes an approved package, the [Sync GitHub releases workflow](.github/workflows/sync-github-releases.yml) checks for missing releases once an hour. It verifies npm provenance, tags the exact source commit on `main`, and uses that commit's changelog for the GitHub release. It never republishes anything to npm or moves a tag. Keep [immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases) enabled.
+After npm publishes an approved package, the [Sync GitHub releases workflow](https://github.com/just-joshn/pi-antigravity-cli-acp/blob/main/.github/workflows/sync-github-releases.yml) checks for missing releases once an hour. It verifies npm provenance, tags the exact source commit on `main`, and uses that commit's changelog for the GitHub release. It never republishes anything to npm or moves a tag. Keep [immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases) enabled.
 
 To sync without waiting, select **Actions → Sync GitHub releases → Run workflow** on `main`. Select **Preview** to verify without writing a tag or release. The sync starts at 0.2.1 and ignores versions that npm has not published. GitHub can delay scheduled runs or disable them after 60 days of repository inactivity.
 
