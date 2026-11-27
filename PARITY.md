@@ -140,7 +140,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 - **Applies:** yes; `agy` advertises `loadSession`. **ACP:** `session/load`. **Pi:** saved sessions, `session_start`, `responseId`.
 - **Implementation:** each assistant message carries `<agent session>/<turn>.<part>`. When Pi reopens a session, the extension loads the named agent session, counts the prompts the agent replays and continues only if the count matches. Otherwise it closes the loaded session and starts a new one with the visible history. Nothing is resent.
 - **Acceptance:** after restarting Pi, `--continue` reaches the same agent conversation without resending history; a mismatch never mixes conversations.
-- **Verification:** `tests/restore.test.ts` (reopen, missing, diverged, no load support, reload, fresh session); `tests/client-handshake.test.ts`; live `restore()` step in `tests/live-acp.py`; `bun run verify:package`.
+- **Verification:** `tests/restore.test.ts` (reopen, missing, diverged, no load support, reload, fresh session); `tests/client-handshake.test.ts`; live `restore()` step in `tests/live-acp.py`.
 - **Status:** verified. **Evidence:** live run reopened agent session `32087d80…` and recalled the code word; a manual `pi -p` then `pi -c -p` run stamped turns 1 and 2 on the same agent session. **Limits:** the check compares turn counts, not prompt text. Two Pi processes continuing the same saved agent session at the same time could both pass it and interleave their prompts there.
 
 ### SESS-3 `session/resume`
@@ -350,7 +350,7 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 ### LIFE-1 Process lifecycle, reload and shutdown
 
 - **Implementation:** start on need, reuse, restart after exit, stop on `session_shutdown` with SIGKILL after 1 s; reload continues the conversation through `session/load`.
-- **Verification:** `tests/agent.test.ts`, `tests/restore.test.ts` (reload), `bun run verify:package` (no agent process outlives Pi); live runs.
+- **Verification:** `tests/agent.test.ts`, `tests/restore.test.ts` (reload); live runs.
 - **Status:** verified.
 
 ### LIFE-2 No repeated turns after a failure
@@ -362,12 +362,12 @@ Each entry gives the reference behavior and its source, whether it applies, the 
 
 ### PKG-1 Install through Pi's package mechanism
 
-- **Implementation:** package `pi-antigravity-acp` with a `pi.extensions` manifest; `zod`, a required peer of the ACP SDK, is a dependency because Pi does not install peers.
-- **Verification:** `bun run verify:package` packs, installs with `pi install`, prompts, restarts and continues, and shuts down, with the scripted agent.
-- **Status:** implemented_unverified: the installed package was driven by the scripted agent, not the real one. **Limits:** not published to npm, so `pi install npm:pi-antigravity-acp` is untested; Pi installs `npm:` sources by registry name, so a tarball path cannot stand in for the published package.
+- **Implementation:** the `pi-antigravity-acp` manifest declares its TypeScript entry point and the ACP SDK and Zod runtime dependencies.
+- **Verification:** `npm run test:package` installs the tarball in a clean directory and loads it with Pi. The tests in `tests/restore.test.ts` exercise conversation continuation from the source checkout.
+- **Status:** implemented_unverified. Tarball loading does not test installation from the npm registry or a conversation with a live agent.
 
 ### PERF-1 Measured extension overhead
 
-- **Implementation:** `bun run bench` compares the bare SDK with the extension on the same exchange.
+- **Implementation:** `npm run bench` compares the bare SDK with the extension on the same exchange.
 - **Evidence:** about 1 µs per streamed chunk and 10 to 22 µs to receive a tool call carrying 200 KB of output (not mirrored into a tool row), from two local runs; see [ARCHITECTURE.md](ARCHITECTURE.md#performance). Not compared with Zed, and not measured against the real agent.
 - **Status:** implemented_unverified.

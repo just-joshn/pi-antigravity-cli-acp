@@ -6,24 +6,22 @@ import { recorder } from "./support/record.ts";
 const method = (id: string) => ({ id, name: "Google", description: "Sign in" });
 
 test("the second of two sign-in methods with the same label can be chosen", async () => {
-  const used = recorder<string>();
-  const client = {
-    signInMethods: [method("first"), method("second")],
-    signIn: (id: string) => Promise.resolve(used.record(id)),
-  };
-  const pane = {
-    hasUI: true,
-    ui: { select: (_title: string, labels: string[]) => Promise.resolve(labels[1]) },
-  };
-  expect((await signIn(client, pane, "Sign in"))?.id).toBe("second");
-  expect(used.all()).toStrictEqual(["second"]);
+	const used = recorder<string>();
+	const client = {
+		signInMethods: [method("first"), method("second")],
+		signIn: (id: string) => Promise.resolve(used.record(id)),
+	};
+	const pane = {
+		hasUI: true,
+		ui: { select: (_title: string, labels: string[]) => Promise.resolve(labels[1]) },
+	};
+	expect((await signIn(client, pane, "Sign in"))?.id).toBe("second");
+	expect(used.all()).toStrictEqual(["second"]);
 });
 
 test("without a UI or a method, nobody signs in", async () => {
-  const client = { signInMethods: [], signIn: () => Promise.reject(new Error("not called")) };
-  const pane = { hasUI: true, ui: { select: () => Promise.resolve(undefined) } };
-  expect(await signIn(client, pane, "Sign in")).toBeUndefined();
-  expect(
-    await signIn({ ...client, signInMethods: [method("m")] }, undefined, "Sign in"),
-  ).toBeUndefined();
+	const client = { signInMethods: [], signIn: () => Promise.reject(new Error("not called")) };
+	const pane = { hasUI: true, ui: { select: () => Promise.resolve(undefined) } };
+	expect(await signIn(client, pane, "Sign in")).toBeUndefined();
+	expect(await signIn({ ...client, signInMethods: [method("m")] }, undefined, "Sign in")).toBeUndefined();
 });
