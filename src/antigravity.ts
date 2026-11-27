@@ -174,8 +174,19 @@ export class Antigravity {
 		this.#openingAbort = abort;
 		const cancel = () => abort.abort(signal?.reason);
 		signal?.addEventListener("abort", cancel, { once: true });
-		const timer = setTimeout(() => abort.abort(new Error("Antigravity startup timed out.")), STARTUP_TIMEOUT_MS);
-		const opening = this.#wait(this.#start(anchor, abort.signal), abort.signal)
+		const timeOut = () => abort.abort(new Error("Antigravity startup timed out."));
+		const started = performance.now();
+		let timer = setTimeout(timeOut, STARTUP_TIMEOUT_MS);
+		const authenticate = async (work: () => ReturnType<typeof signIn>) => {
+			clearTimeout(timer);
+			const remaining = Math.max(0, STARTUP_TIMEOUT_MS - (performance.now() - started));
+			try {
+				return await work();
+			} finally {
+				if (!abort.signal.aborted) timer = setTimeout(timeOut, remaining);
+			}
+		};
+		const opening = this.#wait(this.#start(anchor, abort.signal, authenticate), abort.signal)
 			.catch((error: unknown) => {
 				if (this.#opening === opening) this.#lose();
 				throw error;
@@ -345,7 +356,11 @@ export class Antigravity {
 		);
 	}
 
-	async #start(anchor: string | undefined, signal: AbortSignal): Promise<Conversation> {
+	async #start(
+		anchor: string | undefined,
+		signal: AbortSignal,
+		authenticate: (work: () => ReturnType<typeof signIn>) => ReturnType<typeof signIn>,
+	): Promise<Conversation> {
 		const connected = await this.connected();
 		signal.throwIfAborted();
 		const pane = this.#pane;
@@ -361,7 +376,11 @@ export class Antigravity {
 		const conversation = await this.#begin(connected, anchor, where).catch(async (error: unknown) => {
 			signal.throwIfAborted();
 			const title = "Antigravity needs you to sign in";
-			if (!(error instanceof SignInRequired) || !(await signIn(connected, this.#pane, title, signal))) throw error;
+			if (
+				!(error instanceof SignInRequired) ||
+				!(await authenticate(() => signIn(connected, this.#pane, title, signal)))
+			)
+				throw error;
 			signal.throwIfAborted();
 			return this.#begin(connected, anchor, where);
 		});
