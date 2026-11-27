@@ -6,7 +6,7 @@ See the [architecture](ARCHITECTURE.md) and [ACP feature coverage](PARITY.md) fo
 
 ## What you need
 
-- Pi 1.6.1 is the tested host version.
+- Pi 1.6.0 and 1.6.1 are the tested host versions.
 - Node.js 22.23.5 or later in the 22 series, 24.22.3 or later in the 24 series, or 26.13.1 or later in the 26 series.
 - Either the Antigravity CLI (`agy`) or the Antigravity agent installed through Zed.
 - See [Where it was tested](#where-it-was-tested) for platform coverage.
@@ -251,6 +251,29 @@ python3 tests/live-probe.py          # finds out which ACP features agy uses
 ## How checks and new versions work
 
 [CI](.github/workflows/ci.yml) runs on pull requests and pushes to `main`. It checks format, lint, types, tests, coverage, dependencies, package installation, and repository history for secrets. CI does not run the live Antigravity checks or publish to npm.
+
+The [Stage npm package workflow](.github/workflows/stage-npm.yml) stages a release when a push to `main` increases the `package.json` version. It tests one tarball with Pi 1.6.0 and 1.6.1 before staging it. Pushes that leave the version unchanged skip staging.
+
+### Configure trusted publishing
+
+An npm package maintainer must complete this setup once before running the staging workflow.
+
+1. In the `pi-antigravity-acp` package settings on npmjs.com, add or update the GitHub Actions trusted publisher.
+2. Set the owner to `just-joshn`, the repository to `pi-antigravity-cli-acp`, the workflow filename to `stage-npm.yml`, and the environment to `npm`.
+3. Allow staging only. Leave direct publishing and dist-tag access unchecked.
+4. Keep GitHub's `npm` environment restricted to the `main` branch. See the [npm trusted publishing setup guide](https://docs.npmjs.com/trusted-publishers/).
+
+### Review and approve a staged package
+
+1. Sign in to npmjs.com and open **Staged Packages** in your account settings.
+2. Review the version and package contents for `pi-antigravity-acp`.
+3. Select **Approve** and complete two-factor authentication. npm publishes the approved version. See [npm staged publishing](https://docs.npmjs.com/staged-publishing/).
+
+### Recover a staging run
+
+If a run fails, check the workflow logs and **Staged Packages** before retrying. If the version is already staged, review that entry. If the version is already published, no action is needed.
+
+To stage 0.2.1 for the first time, open **Actions → Stage npm package → Run workflow** on GitHub and select `main`. The workflow verifies and stages the current version even if it has not changed. To retry a specific release commit, rerun its failed workflow instead.
 
 Before 1.0, a patch release keeps the public interface compatible. A minor release may break it. Record breaking changes and migration steps in [CHANGELOG.md](CHANGELOG.md).
 

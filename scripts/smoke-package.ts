@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	copyFileSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -9,36 +18,42 @@ import manifest from "../package.json" with { type: "json" };
 const { npm_execpath: npm, PATH, SystemRoot } = process.env;
 assert.ok(npm, "Run this script through npm run test:package");
 const cwd = process.cwd();
+const args = process.argv.slice(2);
+assert.ok(args.length === 0 || args.length === 2, "Pass a tarball path and an exact Pi version, or no arguments");
+const piVersion = args[1] ?? manifest.devDependencies["@earendil-works/pi-coding-agent"];
+assert.match(piVersion, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/, "Pi version must be exact");
+const host = `@earendil-works/pi-coding-agent@${piVersion}`;
 const temp = mkdtempSync(join(tmpdir(), "pi-package-"));
-const host = `@earendil-works/pi-coding-agent@${manifest.devDependencies["@earendil-works/pi-coding-agent"]}`;
 
 try {
-	execFileSync(process.execPath, [npm, "pack", "--ignore-scripts", "--pack-destination", temp], {
-		cwd,
-		stdio: "inherit",
-		timeout: 60_000,
-	});
-	const tarballs = readdirSync(temp).filter((file) => file.endsWith(".tgz"));
-	assert.equal(tarballs.length, 1, "Expected exactly one packed tarball");
-	const tarball = tarballs[0];
-	assert.ok(tarball);
+	let tarball: string;
+	if (args.length === 0) {
+		execFileSync(process.execPath, [npm, "pack", "--ignore-scripts", "--pack-destination", temp], {
+			cwd,
+			stdio: "inherit",
+			timeout: 60_000,
+		});
+		const tarballs = readdirSync(temp).filter((file) => file.endsWith(".tgz"));
+		assert.equal(tarballs.length, 1, "Expected exactly one packed tarball");
+		assert.ok(tarballs[0]);
+		tarball = join(temp, tarballs[0]);
+	} else {
+		assert.ok(args[0]);
+		tarball = resolve(cwd, args[0]);
+		assert.ok(
+			tarball.endsWith(".tgz") && statSync(tarball, { throwIfNoEntry: false })?.isFile(),
+			"Expected a .tgz file",
+		);
+	}
 	writeFileSync(join(temp, "package.json"), '{"private":true,"type":"module"}\n', { mode: 0o600 });
 	execFileSync(
 		process.execPath,
-		[
-			npm,
-			"install",
-			"--ignore-scripts",
-			"--omit=dev",
-			"--no-audit",
-			"--no-fund",
-			"--save-exact",
-			host,
-			join(temp, tarball),
-		],
+		[npm, "install", "--ignore-scripts", "--omit=dev", "--no-audit", "--no-fund", "--save-exact", host, tarball],
 		{ cwd: temp, stdio: "inherit", timeout: 180_000 },
 	);
-	const pi = join(temp, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "bundle", "cli.js");
+	const piPackage = join(temp, "node_modules", "@earendil-works", "pi-coding-agent");
+	assert.equal(JSON.parse(readFileSync(join(piPackage, "package.json"), "utf8")).version, piVersion);
+	const pi = join(piPackage, "dist", "bundle", "cli.js");
 	const work = join(temp, "work");
 	const agentDir = join(temp, ".pi-agent");
 	const data = process.platform === "darwin" ? join(temp, "Library", "Application Support") : join(temp, "data");
