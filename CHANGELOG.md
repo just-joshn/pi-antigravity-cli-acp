@@ -1,18 +1,12 @@
 # Changelog
 
-## 0.2.1 (Unreleased)
+## 0.2.1 (2026-11-27)
 
 ### Fixed
 
 - Stop the agent when startup is cancelled or exceeds its 30-second deadline.
 - Keep overlapping loads of the same saved conversation from consuming each other's replay.
 - Launch the exact executable found during discovery, including when `PATH` contains relative entries.
-
-### Changed
-
-- Test prompting, resuming without resending history, and agent shutdown with the tarball installed in a clean Pi environment.
-
-## 0.2.0 (Unreleased)
 
 ### Breaking changes
 
@@ -21,8 +15,8 @@
 
 ### Changed
 
-- Use Biome, TypeScript, and Vitest for local and CI checks. The package smoke test installs the tarball in a clean directory and loads the extension with Pi 1.6.1.
-- CI checks pull requests and `main` for secrets and no longer publishes automatically to npm.
+- Use Biome, TypeScript, and Vitest for local and CI checks. The package smoke test installs the tarball in a clean directory and tests prompting, resuming without resending history, and agent shutdown with Pi 1.6.0 and 1.6.1.
+- CI checks pull requests and `main` for secrets. Version changes stage a package for npm maintainer approval, and a separate workflow syncs published versions to GitHub releases.
 - Reuse session lookup tables and early-update queues without changing their limits, eviction order, or replay results.
 - On Windows, give the agent a chance to exit when its input closes before forcing termination. Refuse device paths in the Windows device namespace before opening them.
 
