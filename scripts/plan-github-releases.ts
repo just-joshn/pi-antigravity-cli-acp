@@ -5,6 +5,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { changelogNotes } from "./release-notes.ts";
 
 const name = "pi-antigravity-acp";
 const repository = "https://github.com/just-joshn/pi-antigravity-cli-acp";
@@ -98,13 +99,7 @@ export function provenCommit(audit: unknown, version: string): string {
 }
 
 export function releaseNotes(changelog: string, version: string): string {
-	const sections = changelog.split(/^## /m).slice(1);
-	const section = sections.find((entry) => entry.split(/\s/, 1)[0] === version);
-	assert.ok(section, `Missing changelog entry for ${version}`);
-	const notes = section.slice(section.indexOf("\n") + 1).trim();
-	assert.ok(notes && section.includes("\n"), `Empty changelog entry for ${version}`);
-	assert.ok(Buffer.byteLength(notes) <= 8_000, `Changelog entry for ${version} exceeds 8 KB`);
-	return `${notes}\n\n[View on npm](https://www.npmjs.com/package/${name}/v/${version})`;
+	return `${changelogNotes(changelog, version)}\n\n[View on npm](https://www.npmjs.com/package/${name}/v/${version})`;
 }
 
 function git(args: string[]): string {

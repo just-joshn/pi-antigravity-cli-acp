@@ -10,8 +10,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   validate:
@@ -60,7 +60,12 @@ jobs:
       - name: Inspect package
         if: matrix.primary == true
         run: npm run pack:check
+      - name: Test the release CI gate
+        if: matrix.primary == true
+        run: bash tests/wait-for-main-ci.test.sh
       - name: Install and load packed extension
+        env:
+          NPM_CONFIG_OFFLINE: 'true'
         run: npm run test:package
 
   secrets:
@@ -79,5 +84,21 @@ jobs:
             -e GIT_CONFIG_KEY_0=safe.directory \
             -e GIT_CONFIG_VALUE_0=/path \
             -v "$PWD:/path:ro" \
-            ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
             git --redact --ignore-gitleaks-allow --log-opts="--all" /path
+
+  required:
+    name: CI required
+    needs: [validate, secrets]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Require all CI jobs to pass
+        env:
+          VALIDATE: ${{ needs.validate.result }}
+          SECRETS: ${{ needs.secrets.result }}
+        run: |
+          test "$VALIDATE" = success
+          test "$SECRETS" = success
