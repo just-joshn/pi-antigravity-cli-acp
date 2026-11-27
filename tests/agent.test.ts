@@ -1,5 +1,5 @@
-import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { delimiter, join, relative } from "node:path";
 
 import type { Stream } from "@agentclientprotocol/sdk/unstable";
 import { expect, onTestFinished, test, vi } from "vitest";
@@ -100,6 +100,26 @@ test("auto prefers agy on PATH, and a registry copy must be executable", async (
 	if (process.platform === "win32") await rm(older);
 	else await chmod(older, 0o644);
 	expect(findRegistryAgent(root, "darwin-aarch64"), "no copy can run").toBe(undefined);
+});
+
+test("discovery skips directories named like executables", async () => {
+	const { home, root, newer } = await installCopies();
+	const first = join(home, "first");
+	const second = join(home, "second");
+	await mkdir(join(first, "agy"), { recursive: true });
+	await program(join(second, "agy"));
+	expect(resolveAgent("cli", { PATH: [first, second].join(delimiter) }, "linux").command).toBe(join(second, "agy"));
+	await rm(newer);
+	await mkdir(newer);
+	expect(findRegistryAgent(root, "darwin-aarch64")?.command).toContain("v_1.5.2_aaaa");
+});
+
+test("discovery follows a symlink to an executable", async () => {
+	const home = await scratchDir("agent");
+	const target = join(home, "target");
+	await program(target);
+	await symlink(target, join(home, "agy"), "file");
+	expect(resolveAgent("cli", { PATH: home }, "linux").command).toBe(join(home, "agy"));
 });
 
 test("a CLI discovered on a relative PATH runs in another directory", async () => {

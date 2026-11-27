@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { accessSync, constants, readdirSync, readFileSync } from "node:fs";
+import { accessSync, constants, readdirSync, readFileSync, statSync } from "node:fs";
 import { delimiter, join, resolve } from "node:path";
 import { Readable, Writable } from "node:stream";
 
@@ -23,7 +23,7 @@ const STOP_GRACE_MS = 1000;
 function executable(file: string): boolean {
 	try {
 		accessSync(file, constants.X_OK);
-		return true;
+		return statSync(file).isFile();
 	} catch {
 		return false;
 	}
