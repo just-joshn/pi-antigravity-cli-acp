@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.1 (Unreleased)
+
+### Fixed
+
+- Stop the agent when startup is cancelled or exceeds its 30-second deadline.
+- Keep overlapping loads of the same saved conversation from consuming each other's replay.
+- Launch the exact executable found during discovery, including when `PATH` contains relative entries.
+
+### Changed
+
+- Test prompting, resuming without resending history, and agent shutdown with the tarball installed in a clean Pi environment.
+
 ## 0.2.0 (Unreleased)
 
 ### Breaking changes
